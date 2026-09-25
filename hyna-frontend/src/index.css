@@ -1,0 +1,234 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Hyna Studio Management - Design System
+   ============================================================ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---- CSS Custom Properties ---- */
+:root {
+  /* Brand accent - easily configurable */
+  --accent-hue: 239;
+  --accent-sat: 84%;
+  
+  /* Accent palette */
+  --accent-50: hsl(var(--accent-hue) var(--accent-sat) 97%);
+  --accent-100: hsl(var(--accent-hue) var(--accent-sat) 93%);
+  --accent-200: hsl(var(--accent-hue) var(--accent-sat) 86%);
+  --accent-300: hsl(var(--accent-hue) var(--accent-sat) 76%);
+  --accent-400: hsl(var(--accent-hue) var(--accent-sat) 66%);
+  --accent-500: hsl(var(--accent-hue) var(--accent-sat) 57%);
+  --accent-600: hsl(var(--accent-hue) var(--accent-sat) 50%);
+  --accent-700: hsl(var(--accent-hue) var(--accent-sat) 44%);
+  --accent-800: hsl(var(--accent-hue) var(--accent-sat) 36%);
+  --accent-900: hsl(var(--accent-hue) var(--accent-sat) 30%);
+  
+  /* Semantic colors */
+  --color-background: #ffffff;
+  --color-foreground: #09090b;
+  --color-card: #ffffff;
+  --color-card-foreground: #09090b;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #09090b;
+  --color-primary: var(--accent-500);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f4f4f5;
+  --color-secondary-foreground: #18181b;
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #71717a;
+  --color-accent-bg: #f4f4f5;
+  --color-accent-fg: #18181b;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e4e4e7;
+  --color-input: #e4e4e7;
+  --color-ring: var(--accent-500);
+  --color-sidebar-bg: #fafafa;
+  --color-sidebar-border: #e4e4e7;
+  
+  /* Radii */
+  --radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+}
+
+.dark {
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+  --color-card: #111113;
+  --color-card-foreground: #fafafa;
+  --color-popover: #111113;
+  --color-popover-foreground: #fafafa;
+  --color-primary: var(--accent-400);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #1c1c1f;
+  --color-secondary-foreground: #fafafa;
+  --color-muted: #1c1c1f;
+  --color-muted-foreground: #a1a1aa;
+  --color-accent-bg: #1c1c1f;
+  --color-accent-fg: #fafafa;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #27272a;
+  --color-input: #27272a;
+  --color-ring: var(--accent-400);
+  --color-sidebar-bg: #0c0c0e;
+  --color-sidebar-border: #27272a;
+  
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.2);
+}
+
+/* ---- Base styles ---- */
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}
+
+/* ---- Focus ring utility ---- */
+.focus-ring {
+  @apply outline-none ring-2 ring-offset-2 ring-offset-[var(--color-background)] ring-[var(--color-ring)];
+}
+
+/* ---- Animations ---- */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+.animate-slide-down { animation: slide-down 0.3s ease-out; }
+.animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
+.animate-scale-in { animation: scale-in 0.2s ease-out; }
+.animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+
+/* Staggered animation helper */
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
+.stagger-5 { animation-delay: 250ms; }
+
+/* ---- Transition utilities ---- */
+.transition-default {
+  transition: all 0.15s ease;
+}
+
+/* ---- Page layout ---- */
+.page-container {
+  @apply px-4 py-6 sm:px-6 lg:px-8 max-w-[1600px] mx-auto;
+}
+
+.page-header {
+  @apply mb-6 sm:mb-8;
+}
+
+.page-title {
+  @apply text-2xl sm:text-3xl font-semibold tracking-tight;
+}
+
+.page-description {
+  @apply text-sm sm:text-base text-[var(--color-muted-foreground)] mt-1;
+}
+
+/* ---- Card utility ---- */
+.card {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-hover {
+  transition: all 0.15s ease;
+}
+
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-muted-foreground);
+}
+
+/* ---- Badge variants ---- */
+.badge {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+/* ---- Mobile bottom nav ---- */
+@media (max-width: 768px) {
+  .main-content {
+    padding-bottom: 72px;
+  }
+}
+
+/* ---- Sonner toast overrides ---- */
+[data-sonner-toaster] {
+  font-family: 'Inter', sans-serif !important;
+}
