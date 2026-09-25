@@ -1,4 +1,4 @@
-import type { User, Project, Module, Task, Meeting, AttendanceRecord, DailyReport, Notification as AppNotification, ChatChannel, ChatMessage, FileItem, Folder, LeaveRequest, Announcement } from '../types';
+import type { User, Project, Module, Task, Meeting, AttendanceRecord, AttendanceStatus, DailyReport, Notification as AppNotification, ChatChannel, ChatMessage, FileItem, Folder, LeaveRequest, Announcement } from '../types';
 
 // ============================================================
 // USERS / MEMBERS
