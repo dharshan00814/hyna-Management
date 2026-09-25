@@ -4,11 +4,11 @@ import { Button, Badge, Avatar, Modal, Input, Textarea, Select, EmptyState, Load
 import { cn, getStatusColor, getPriorityColor, getPriorityDot, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import {
-  getTasks, createTask, submitTask, reviewTask,
+  getTasks, createTask, updateTask, submitTask, reviewTask,
   getProjects, getModules, getUsers, getUserById,
 } from '@/services/api';
 import { toast } from 'sonner';
-import type { Task, TaskStatus, TaskPriority, Project, Module } from '@/types';
+import type { Task, TaskStatus, TaskPriority, Project, Module, User } from '@/types';
 
 const statusColumns: { status: TaskStatus; label: string; color: string }[] = [
   { status: 'backlog', label: 'Backlog', color: 'bg-zinc-400' },
@@ -20,10 +20,13 @@ const statusColumns: { status: TaskStatus; label: string; color: string }[] = [
 ];
 
 export function TasksPage() {
-  const { currentRole, currentUser } = useAuthStore();
+  const { currentRole, currentUser, effectiveRole } = useAuthStore();
+  const isAdminOrManager = effectiveRole === 'admin' || effectiveRole === 'manager';
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [view, setView] = useState<'list' | 'board'>('list');
@@ -54,15 +57,20 @@ export function TasksPage() {
 
   const loadData = async () => {
     try {
-      await getUsers();
-      const [fetchedTasks, fetchedProjects] = await Promise.all([
-        getTasks(),
+      const [fetchedTasks, fetchedProjects, fetchedUsers] = await Promise.all([
+        isAdminOrManager ? getTasks() : getTasks({ assigneeId: currentUser?.id }),
         getProjects(),
+        getUsers(),
       ]);
       setTasks(fetchedTasks);
       setProjects(fetchedProjects);
+      setUsers(fetchedUsers);
       if (fetchedProjects.length > 0) {
-        setNewTask(prev => ({ ...prev, projectId: fetchedProjects[0].id }));
+        setNewTask(prev => ({
+          ...prev,
+          projectId: fetchedProjects[0].id,
+          assigneeId: fetchedUsers.length > 0 ? fetchedUsers[0].id : '',
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -73,11 +81,11 @@ export function TasksPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [isAdminOrManager, currentUser?.id]);
 
   const handleCreateTask = async () => {
-    if (!newTask.title.trim() || !newTask.projectId) {
-      toast.error('Please enter a task title and select a project');
+    if (!newTask.title.trim() || !newTask.projectId || !newTask.assigneeId) {
+      toast.error('Please enter task title, select a project, and allocate a team member');
       return;
     }
     try {
@@ -88,7 +96,7 @@ export function TasksPage() {
         status: newTask.status,
         deadline: newTask.deadline,
         projectId: newTask.projectId,
-        assigneeId: newTask.assigneeId || currentUser?.id || 'u2',
+        assigneeId: newTask.assigneeId,
       });
       setTasks(prev => [created, ...prev]);
       setShowCreate(false);
@@ -99,9 +107,10 @@ export function TasksPage() {
         status: 'todo',
         deadline: '',
         projectId: projects[0]?.id || '',
-        assigneeId: '',
+        assigneeId: users[0]?.id || '',
       });
-      toast.success('Task created successfully!');
+      const allocatedMember = users.find(u => u.id === newTask.assigneeId);
+      toast.success(`Task created and allocated to ${allocatedMember?.name || 'Member'}!`);
     } catch (err) {
       toast.error('Failed to create task');
     }
@@ -131,7 +140,7 @@ export function TasksPage() {
 
   const handleReview = async (taskId: string, action: 'approve' | 'request-changes') => {
     try {
-      const updated = await reviewTask(taskId, action, currentUser?.id || 'u1');
+      const updated = await reviewTask(taskId, action, currentUser?.id || '');
       setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
       setShowDetail(null);
       toast.success(action === 'approve' ? 'Task approved!' : 'Changes requested');
@@ -140,9 +149,10 @@ export function TasksPage() {
     }
   };
 
-  const allTasks = currentRole === 'member'
-    ? tasks.filter(t => t.assigneeId === currentUser?.id)
-    : tasks;
+  // Rule: Members only view tasks assigned to them; Admin/Managers view all tasks
+  const allTasks = isAdminOrManager
+    ? tasks
+    : tasks.filter(t => t.assigneeId === currentUser?.id);
 
   const filtered = allTasks.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
@@ -159,8 +169,12 @@ export function TasksPage() {
     <div className="page-container">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="page-title">Tasks</h1>
-          <p className="page-description">{filtered.length} tasks</p>
+          <h1 className="page-title">{isAdminOrManager ? 'Tasks & Team Allocation' : 'My Assigned Tasks'}</h1>
+          <p className="page-description">
+            {isAdminOrManager
+              ? `${filtered.length} total tasks across team`
+              : `${filtered.length} deliverables assigned to you`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1 p-1 rounded-lg bg-[var(--color-muted)]">
@@ -171,9 +185,12 @@ export function TasksPage() {
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-1" /> New Task
-          </Button>
+          {/* Admin and Managers allocate tasks; regular members only view and work on assigned tasks */}
+          {isAdminOrManager && (
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Allocate Task
+            </Button>
+          )}
         </div>
       </div>
 
@@ -288,12 +305,25 @@ export function TasksPage() {
         title={detailTask?.title || 'Task'}
         size="lg"
         footer={
-          currentRole === 'member' && detailTask?.assigneeId === currentUser?.id && detailTask?.status === 'in-progress' ? (
-            <Button onClick={() => { setShowDetail(null); setShowSubmit(detailTask?.id || null); }}>Submit for Review</Button>
-          ) : currentRole !== 'member' && detailTask?.submission?.reviewStatus === 'pending' ? (
+          effectiveRole === 'member' && detailTask?.assigneeId === currentUser?.id ? (
+            detailTask.status === 'todo' ? (
+              <Button onClick={async () => {
+                const updated = await updateTask(detailTask.id, { status: 'in-progress' });
+                setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+                setShowDetail(null);
+                toast.success('Task started! Status moved to In Progress.');
+              }}>
+                Start Task
+              </Button>
+            ) : detailTask.status === 'in-progress' ? (
+              <Button onClick={() => { setShowDetail(null); setShowSubmit(detailTask?.id || null); }}>
+                Submit for Review
+              </Button>
+            ) : undefined
+          ) : isAdminOrManager && detailTask?.submission?.reviewStatus === 'pending' ? (
             <>
               <Button variant="outline" onClick={() => handleReview(detailTask.id, 'request-changes')}>Request Changes</Button>
-              <Button onClick={() => handleReview(detailTask.id, 'approve')}>Approve</Button>
+              <Button onClick={() => handleReview(detailTask.id, 'approve')}>Approve Deliverable</Button>
             </>
           ) : undefined
         }
@@ -301,10 +331,46 @@ export function TasksPage() {
         {detailTask && (
           <div className="space-y-4">
             <p className="text-sm text-[var(--color-muted-foreground)]">{detailTask.description}</p>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div><span className="text-[var(--color-muted-foreground)]">Status</span><br /><Badge className={getStatusColor(detailTask.status)}>{detailTask.status.replace(/-/g, ' ')}</Badge></div>
               <div><span className="text-[var(--color-muted-foreground)]">Priority</span><br /><Badge className={getPriorityColor(detailTask.priority)}>{detailTask.priority}</Badge></div>
-              <div><span className="text-[var(--color-muted-foreground)]">Assignee</span><br /><div className="flex items-center gap-2 mt-1"><Avatar name={getUserById(detailTask.assigneeId)?.name || ''} size="xs" /><span>{getUserById(detailTask.assigneeId)?.name || 'Unassigned'}</span></div></div>
+              <div className="sm:col-span-2">
+                <span className="text-[var(--color-muted-foreground)] font-medium">Allocated Member</span>
+                {isAdminOrManager ? (
+                  <div className="mt-1">
+                    <select
+                      value={detailTask.assigneeId || ''}
+                      onChange={async (e) => {
+                        const newAssigneeId = e.target.value;
+                        try {
+                          const updated = await updateTask(detailTask.id, { assigneeId: newAssigneeId });
+                          setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+                          const allocatedUser = users.find(u => u.id === newAssigneeId);
+                          toast.success(`Task re-allocated to ${allocatedUser?.name || 'Member'}`);
+                        } catch {
+                          toast.error('Failed to re-allocate task');
+                        }
+                      }}
+                      className="w-full h-10 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} — {u.designation} ({u.department || 'Engineering'}) [{u.employeeId || 'EMP'}]
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-[var(--color-muted-foreground)] mt-1">Admin can re-allocate this task to any team member.</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Avatar name={getUserById(detailTask.assigneeId)?.name || currentUser?.name || ''} size="xs" />
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      {getUserById(detailTask.assigneeId)?.name || 'Assigned to you'}
+                    </span>
+                  </div>
+                )}
+              </div>
               <div><span className="text-[var(--color-muted-foreground)]">Deadline</span><br /><span className="font-medium">{formatDate(detailTask.deadline)}</span></div>
               <div><span className="text-[var(--color-muted-foreground)]">Project</span><br /><span className="font-medium">{projects.find(p => p.id === detailTask.projectId)?.name || 'Project'}</span></div>
             </div>
@@ -323,7 +389,7 @@ export function TasksPage() {
             )}
             {detailTask.submission && (
               <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-muted)]/50">
-                <p className="text-sm font-semibold mb-2">Submission</p>
+                <p className="text-sm font-semibold mb-2">Submission Deliverable</p>
                 <p className="text-sm text-[var(--color-muted-foreground)] mb-2">{detailTask.submission.description}</p>
                 <div className="flex flex-wrap gap-2">
                   {detailTask.submission.githubUrl && (
@@ -392,28 +458,45 @@ export function TasksPage() {
       <Modal
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
-        title="Create New Task"
+        title="Allocate New Task to Team"
         footer={
           <>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreateTask}>Create Task</Button>
+            <Button onClick={handleCreateTask}>Allocate Task</Button>
           </>
         }
       >
         <div className="space-y-4">
           <Input
-            label="Task Title"
+            label="Task Title *"
             placeholder="Enter task title"
             value={newTask.title}
             onChange={(e) => setNewTask(t => ({ ...t, title: e.target.value }))}
           />
           <Textarea
             label="Description"
-            placeholder="Task description..."
+            placeholder="Task description and requirements..."
             rows={3}
             value={newTask.description}
             onChange={(e) => setNewTask(t => ({ ...t, description: e.target.value }))}
           />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium">Allocate Team Member *</label>
+            <select
+              value={newTask.assigneeId}
+              onChange={(e) => setNewTask(t => ({ ...t, assigneeId: e.target.value }))}
+              className="w-full h-10 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            >
+              <option value="">Select team member to complete task...</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.name} — {u.designation || 'Software Engineer'} ({u.department || 'Engineering'}) [{u.employeeId || 'EMP'}]
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <Select
               label="Priority"
@@ -444,7 +527,7 @@ export function TasksPage() {
             onChange={(e) => setNewTask(t => ({ ...t, deadline: e.target.value }))}
           />
           <Select
-            label="Project"
+            label="Project *"
             value={newTask.projectId}
             onChange={(val) => setNewTask(t => ({ ...t, projectId: val }))}
             options={projects.map(p => ({ value: p.id, label: p.name }))}

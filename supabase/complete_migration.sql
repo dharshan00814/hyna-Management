@@ -234,6 +234,8 @@ CREATE TABLE IF NOT EXISTS public.attendance_records (
   check_out TEXT,
   status attendance_status DEFAULT 'present',
   hours_worked NUMERIC(4, 2) DEFAULT 0,
+  working_hours TEXT,
+  notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT unique_user_attendance_date UNIQUE(user_id, date)
@@ -707,39 +709,26 @@ CREATE POLICY "modules_write" ON public.modules FOR ALL TO authenticated USING (
 );
 
 -- Tasks:
--- Executives: full access
--- Managers: full access in their managed projects
--- Members: view tasks in assigned projects/tasks; update assigned tasks (status/submissions)
+-- Executives: full access across all tasks
+-- Managers: full access across tasks
+-- Members: ONLY view their own assigned task (assignee_id = auth.uid()) and update their own task status/submission
 CREATE POLICY "tasks_select" ON public.tasks FOR SELECT TO authenticated USING (
   public.is_executive()
+  OR public.is_manager()
   OR assignee_id = auth.uid()
-  OR EXISTS (
-    SELECT 1 FROM public.projects p
-    WHERE p.id = tasks.project_id
-      AND (p.manager_id = auth.uid() OR auth.uid()::text = ANY(p.member_ids))
-  )
 );
 CREATE POLICY "tasks_insert" ON public.tasks FOR INSERT TO authenticated WITH CHECK (
   public.is_executive()
-  OR EXISTS (
-    SELECT 1 FROM public.projects p
-    WHERE p.id = tasks.project_id AND p.manager_id = auth.uid()
-  )
+  OR public.is_manager()
 );
 CREATE POLICY "tasks_update" ON public.tasks FOR UPDATE TO authenticated USING (
   public.is_executive()
+  OR public.is_manager()
   OR assignee_id = auth.uid()
-  OR EXISTS (
-    SELECT 1 FROM public.projects p
-    WHERE p.id = tasks.project_id AND p.manager_id = auth.uid()
-  )
 );
 CREATE POLICY "tasks_delete" ON public.tasks FOR DELETE TO authenticated USING (
   public.is_executive()
-  OR EXISTS (
-    SELECT 1 FROM public.projects p
-    WHERE p.id = tasks.project_id AND p.manager_id = auth.uid()
-  )
+  OR public.is_manager()
 );
 
 -- Task Checklists & Submissions

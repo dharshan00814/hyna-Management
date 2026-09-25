@@ -21,15 +21,16 @@ export function MemberDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [isCheckedIn, setIsCheckedIn] = useState(true);
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const userId = currentUser?.id || 'u2';
+  const userId = currentUser?.id || '';
   const todayStr = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
+      if (!userId) return;
       try {
         await getUsers();
         const [t, m, a] = await Promise.all([
@@ -42,8 +43,10 @@ export function MemberDashboard() {
           setMeetings(m);
           setAttendance(a);
           const todayRecord = a.find(record => record.date === todayStr);
-          if (todayRecord && todayRecord.status === 'present' && !todayRecord.checkOut) {
+          if (todayRecord && todayRecord.checkIn && !todayRecord.checkOut) {
             setIsCheckedIn(true);
+          } else {
+            setIsCheckedIn(false);
           }
         }
       } catch (err) {
@@ -207,16 +210,35 @@ export function MemberDashboard() {
               {isCheckedIn ? (
                 <>
                   <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center mx-auto mb-3">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 animate-pulse" />
                   </div>
-                  <p className="text-lg font-semibold">{todayAttendance?.checkIn || '09:12'} AM</p>
-                  <p className="text-sm text-[var(--color-muted-foreground)]">Checked In</p>
+                  <p className="text-lg font-bold text-[var(--color-foreground)]">{todayAttendance?.checkIn}</p>
+                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">Active Shift</p>
                   <div className="flex items-center justify-center gap-2 mt-3 text-sm">
                     <Clock className="w-4 h-4 text-[var(--color-muted-foreground)]" />
-                    <span className="font-medium">Working: {todayAttendance?.workingHours || '6h 24m'}</span>
+                    <span className="font-medium text-xs">Tracking active work hours</span>
                   </div>
                   <Button variant="outline" className="mt-4 w-full" onClick={handleCheckOut}>
                     Check Out
+                  </Button>
+                </>
+              ) : todayAttendance?.checkOut ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="w-8 h-8 text-blue-500" />
+                  </div>
+                  <p className="text-base font-bold text-[var(--color-foreground)]">Shift Completed</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+                    {todayAttendance.checkIn} — {todayAttendance.checkOut}
+                  </p>
+                  <div className="flex items-center justify-center gap-2 mt-3 text-sm">
+                    <Clock className="w-4 h-4 text-blue-500" />
+                    <span className="font-semibold text-xs text-[var(--color-foreground)]">
+                      Total: {todayAttendance.workingHours || 'Logged'}
+                    </span>
+                  </div>
+                  <Button variant="ghost" size="sm" className="mt-3 w-full text-xs text-[var(--color-primary)]" onClick={() => navigate('/member/attendance')}>
+                    View Attendance History
                   </Button>
                 </>
               ) : (
@@ -224,8 +246,10 @@ export function MemberDashboard() {
                   <div className="w-16 h-16 rounded-full bg-[var(--color-muted)] flex items-center justify-center mx-auto mb-3">
                     <Clock className="w-8 h-8 text-[var(--color-muted-foreground)]" />
                   </div>
-                  <p className="text-sm text-[var(--color-muted-foreground)]">You haven't checked in yet</p>
-                  <Button className="mt-4 w-full" onClick={handleCheckIn}>Check In</Button>
+                  <p className="text-sm font-medium text-[var(--color-muted-foreground)]">You haven't checked in yet today</p>
+                  <Button className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCheckIn}>
+                    Check In
+                  </Button>
                 </>
               )}
             </div>

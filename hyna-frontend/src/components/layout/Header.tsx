@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, Menu, ChevronDown, Sun, Moon, Monitor } from 'lucide-react';
+import { Bell, Search, Menu, ChevronDown, Sun, Moon, Monitor, Clock, CheckCircle2 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore, useSidebarStore, useThemeStore } from '@/stores';
-import { getNotifications, markNotificationRead } from '@/services/api';
-import type { UserRole, Notification } from '@/types';
+import { getNotifications, markNotificationRead, getTodayAttendance } from '@/services/api';
+import type { UserRole, Notification, AttendanceRecord } from '@/types';
 
 export function Header() {
   const { currentUser, currentRole, effectiveRole } = useAuthStore();
@@ -15,14 +15,20 @@ export function Header() {
   const [showProfile, setShowProfile] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let isMounted = true;
-    getNotifications(currentUser?.id).then((data) => {
-      if (isMounted) setNotifications(data);
-    });
+    if (currentUser?.id) {
+      getNotifications(currentUser.id).then((data) => {
+        if (isMounted) setNotifications(data);
+      });
+      getTodayAttendance(currentUser.id).then((att) => {
+        if (isMounted) setTodayAttendance(att);
+      });
+    }
     return () => { isMounted = false; };
   }, [currentUser?.id]);
 
@@ -98,10 +104,46 @@ export function Header() {
 
       {/* Role switcher (dev mode) */}
       {currentUser && (
-        <div className="hidden sm:flex items-center gap-2 mr-3 px-2.5 py-1 rounded-lg bg-[var(--color-muted)] text-xs">
+        <div className="hidden sm:flex items-center gap-2 mr-2 px-2.5 py-1 rounded-lg bg-[var(--color-muted)] text-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-500" />
           <span className="font-medium text-[var(--color-foreground)]">{currentUser.designation || currentRole}</span>
         </div>
+      )}
+
+      {/* Attendance Quick Indicator */}
+      {currentUser && (
+        <button
+          onClick={() => {
+            const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
+            navigate(`${prefix}/attendance`);
+          }}
+          className={cn(
+            'hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold mr-2 transition-all border cursor-pointer',
+            todayAttendance?.checkIn && !todayAttendance?.checkOut
+              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+              : todayAttendance?.checkOut
+              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+          )}
+          title="Open Attendance"
+        >
+          {todayAttendance?.checkIn && !todayAttendance?.checkOut ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>In: {todayAttendance.checkIn}</span>
+            </>
+          ) : todayAttendance?.checkOut ? (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+              <span>{todayAttendance.workingHours || 'Shift Done'}</span>
+            </>
+          ) : (
+            <>
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
+              <span>Clock In</span>
+            </>
+          )}
+        </button>
       )}
 
       {/* Theme toggle */}

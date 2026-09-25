@@ -51,6 +51,62 @@ export function computeEffectiveRole(user: { role?: string; designation?: string
   return 'member';
 }
 
+export function getOrgMemberDetails(rawId: string, email?: string) {
+  const idUpper = rawId.trim().toUpperCase();
+  const idLower = rawId.trim().toLowerCase();
+  const emailLower = (email || '').trim().toLowerCase();
+
+  if (idUpper === 'EMP-001' || idLower.includes('vignesh') || emailLower.includes('vignesh')) {
+    return { name: 'Vignesh', role: 'admin' as UserRole, designation: 'CEO', department: 'Executive', employeeId: 'EMP-001', email: 'vignesh@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-002' || idLower.includes('jashwin') || emailLower.includes('jashwin')) {
+    return { name: 'Jashwin', role: 'admin' as UserRole, designation: 'COO', department: 'Executive', employeeId: 'EMP-002', email: 'jashwin@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-003' || idLower.includes('dharshan') || emailLower.includes('dharshan')) {
+    return { name: 'Dharshan', role: 'admin' as UserRole, designation: 'Admin', department: 'Executive', employeeId: 'EMP-003', email: 'dharshan@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-004' || idLower.includes('asthamil') || emailLower.includes('asthamil')) {
+    return { name: 'Asthamil', role: 'manager' as UserRole, designation: 'Engineering Manager', department: 'Engineering', employeeId: 'EMP-004', email: 'asthamil@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-005' || idLower.includes('zarif') || emailLower.includes('zarif')) {
+    return { name: 'Zarif', role: 'member' as UserRole, designation: 'Lead Developer', department: 'Engineering', employeeId: 'EMP-005', email: 'zarif@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-006' || idLower.includes('hajira') || emailLower.includes('hajira')) {
+    return { name: 'Hajira Mufliha', role: 'member' as UserRole, designation: 'UI/UX Designer', department: 'Design', employeeId: 'EMP-006', email: 'hajiramufliha@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-007' || idLower.includes('linciya') || emailLower.includes('linciya')) {
+    return { name: 'Linciya', role: 'member' as UserRole, designation: 'Senior QA Engineer', department: 'Quality Assurance', employeeId: 'EMP-007', email: 'linciya@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-008' || idLower.includes('arshiya') || emailLower.includes('arshiya')) {
+    return { name: 'Arshiya', role: 'member' as UserRole, designation: 'Product Manager', department: 'Product', employeeId: 'EMP-008', email: 'arshiya@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-009' || idLower.includes('akshaya') || emailLower.includes('akshaya')) {
+    return { name: 'Akshaya', role: 'member' as UserRole, designation: 'Frontend Developer', department: 'Engineering', employeeId: 'EMP-009', email: 'akshaya@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-010' || idLower.includes('thivan') || emailLower.includes('thivan')) {
+    return { name: 'Thivan', role: 'member' as UserRole, designation: 'Backend Developer', department: 'Engineering', employeeId: 'EMP-010', email: 'thivan@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-011' || idLower.includes('rohit') || emailLower.includes('rohit')) {
+    return { name: 'Rohit', role: 'member' as UserRole, designation: 'DevOps Engineer', department: 'Operations', employeeId: 'EMP-011', email: 'rohit@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-012' || idLower.includes('tharun') || emailLower.includes('tharun')) {
+    return { name: 'Tharun Krishna', role: 'member' as UserRole, designation: 'Mobile Developer', department: 'Engineering', employeeId: 'EMP-012', email: 'tharunkrishna@hynastudio.com' };
+  }
+  if (idUpper === 'EMP-013' || idLower.includes('anzar') || emailLower.includes('anzar')) {
+    return { name: 'Anzar', role: 'member' as UserRole, designation: 'Marketing Lead', department: 'Marketing', employeeId: 'EMP-013', email: 'anzar@hynastudio.com' };
+  }
+
+  const defaultName = rawId.includes('@') ? rawId.split('@')[0] : rawId;
+  return {
+    name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
+    role: 'member' as UserRole,
+    designation: 'Software Engineer',
+    department: 'Engineering',
+    employeeId: undefined as string | undefined,
+    email: rawId.includes('@') ? rawId : `${idLower}@hynastudio.com`,
+  };
+}
+
 function mapDatabaseProfile(row: any): User {
   return {
     id: row.id,
@@ -110,46 +166,74 @@ export const useAuthStore = create<AuthState>()(
             if (matchedProfile?.email) {
               emailToUse = matchedProfile.email;
             } else {
-              const idUpper = rawId.toUpperCase();
-              const idLower = rawId.toLowerCase();
-              if (idUpper === 'EMP-001' || idLower.includes('vignesh')) {
-                emailToUse = 'vignesh@hynastudio.com';
-              } else if (idUpper === 'EMP-002' || idLower.includes('jashwin')) {
-                emailToUse = 'jashwin@hynastudio.com';
-              } else if (idUpper === 'EMP-003' || idLower.includes('dharshan')) {
-                emailToUse = 'dharshan@hynastudio.com';
-              } else if (idUpper === 'EMP-004' || idLower.includes('asthamil')) {
-                emailToUse = 'asthamil@hynastudio.com';
-              } else if (idUpper === 'EMP-005' || idLower.includes('zarif')) {
-                emailToUse = 'zarif@hynastudio.com';
-              } else if (idUpper === 'EMP-006' || idLower.includes('hajira')) {
-                emailToUse = 'hajiramufliha@hynastudio.com';
-              } else if (idUpper === 'EMP-007' || idLower.includes('linciya')) {
-                emailToUse = 'linciya@hynastudio.com';
-              } else if (idUpper === 'EMP-008' || idLower.includes('arshiya')) {
-                emailToUse = 'arshiya@hynastudio.com';
-              } else if (idUpper === 'EMP-009' || idLower.includes('akshaya')) {
-                emailToUse = 'akshaya@hynastudio.com';
-              } else if (idUpper === 'EMP-010' || idLower.includes('thivan')) {
-                emailToUse = 'thivan@hynastudio.com';
-              } else if (idUpper === 'EMP-011' || idLower.includes('rohit')) {
-                emailToUse = 'rohit@hynastudio.com';
-              } else if (idUpper === 'EMP-012' || idLower.includes('tharun')) {
-                emailToUse = 'tharunkrishna@hynastudio.com';
-              } else if (idUpper === 'EMP-013' || idLower.includes('anzar')) {
-                emailToUse = 'anzar@hynastudio.com';
-              } else {
-                emailToUse = `${idLower}@hynastudio.com`;
-              }
+              const details = getOrgMemberDetails(rawId);
+              emailToUse = details.email;
             }
           }
 
-          const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+          let { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
             email: emailToUse,
             password,
           });
 
-          if (signInError || !authData.user) {
+          // If signIn failed with invalid credentials, check if the account simply does not exist in Supabase Auth yet!
+          // Auto-provision initial account with the credentials chosen by the user:
+          if (signInError && (signInError.message.toLowerCase().includes('invalid') || signInError.message.toLowerCase().includes('credentials'))) {
+            const memberInfo = getOrgMemberDetails(rawId, emailToUse);
+
+            const { data: signUpData, error: autoSignUpError } = await supabase.auth.signUp({
+              email: emailToUse,
+              password,
+              options: {
+                data: {
+                  name: memberInfo.name,
+                  department: memberInfo.department,
+                  designation: memberInfo.designation,
+                  role: memberInfo.role,
+                  employee_id: memberInfo.employeeId,
+                },
+              },
+            });
+
+            if (signUpData?.user) {
+              const identities = signUpData.user.identities;
+              // If identities is an empty array, it means this email was ALREADY registered with another password in Supabase
+              if (identities && identities.length === 0) {
+                set({ isLoading: false });
+                return {
+                  success: false,
+                  error: 'Incorrect password for this account. Please check your password and try again.',
+                };
+              }
+
+              // Fresh account created! Authenticate now with the newly established password:
+              const retrySignIn = await supabase.auth.signInWithPassword({
+                email: emailToUse,
+                password,
+              });
+
+              if (retrySignIn.data?.user) {
+                authData = retrySignIn.data;
+                signInError = null;
+              } else if (signUpData.session) {
+                authData = { user: signUpData.user, session: signUpData.session };
+                signInError = null;
+              } else if (retrySignIn.error) {
+                signInError = retrySignIn.error;
+              }
+            } else if (autoSignUpError) {
+              const lowerSignErr = autoSignUpError.message.toLowerCase();
+              if (lowerSignErr.includes('already registered')) {
+                set({ isLoading: false });
+                return {
+                  success: false,
+                  error: 'Incorrect password for this account. Please check your password and try again.',
+                };
+              }
+            }
+          }
+
+          if (signInError || !authData?.user) {
             set({ isLoading: false });
             let msg = signInError?.message || 'Authentication failed';
             const lowerMsg = msg.toLowerCase();

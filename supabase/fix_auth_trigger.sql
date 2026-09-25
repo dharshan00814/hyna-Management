@@ -300,3 +300,69 @@ WHERE LOWER(name) LIKE '%jashwin%' OR LOWER(email) LIKE '%jashwin%';
 UPDATE public.profiles 
 SET role = 'manager', designation = 'Engineering Manager', department = 'Engineering', employee_id = COALESCE(employee_id, 'EMP-004')
 WHERE LOWER(name) LIKE '%asthamil%' OR LOWER(email) LIKE '%asthamil%';
+
+-- ============================================================
+-- 8. TASKS PERMISSIONS & ACCESS CONTROL
+-- Rule: Members ONLY view their own assigned task (assignee_id = auth.uid())
+-- Rule: Admin (and Managers) allocate and assign tasks to team members
+-- ============================================================
+ALTER TABLE IF EXISTS public.tasks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "tasks_select" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_insert" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_update" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_delete" ON public.tasks;
+
+CREATE POLICY "tasks_select" ON public.tasks FOR SELECT TO authenticated USING (
+  public.is_executive()
+  OR public.is_manager()
+  OR assignee_id = auth.uid()
+);
+
+CREATE POLICY "tasks_insert" ON public.tasks FOR INSERT TO authenticated WITH CHECK (
+  public.is_executive()
+  OR public.is_manager()
+);
+
+CREATE POLICY "tasks_update" ON public.tasks FOR UPDATE TO authenticated USING (
+  public.is_executive()
+  OR public.is_manager()
+  OR assignee_id = auth.uid()
+);
+
+CREATE POLICY "tasks_delete" ON public.tasks FOR DELETE TO authenticated USING (
+  public.is_executive()
+  OR public.is_manager()
+);
+
+-- ============================================================
+-- 9. ATTENDANCE & CHECK-IN / CHECK-OUT FOR ALL MEMBERS
+-- Rule: All members can check in and check out their own attendance
+-- Rule: Executives can view and manage all attendance
+-- ============================================================
+ALTER TABLE IF EXISTS public.attendance_records 
+  ADD COLUMN IF NOT EXISTS working_hours TEXT,
+  ADD COLUMN IF NOT EXISTS notes TEXT;
+
+ALTER TABLE IF EXISTS public.attendance_records ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "attendance_select" ON public.attendance_records;
+DROP POLICY IF EXISTS "attendance_insert_self" ON public.attendance_records;
+DROP POLICY IF EXISTS "attendance_update_self" ON public.attendance_records;
+
+CREATE POLICY "attendance_select" ON public.attendance_records FOR SELECT TO authenticated USING (
+  public.is_executive()
+  OR public.is_manager()
+  OR user_id = auth.uid()
+);
+
+CREATE POLICY "attendance_insert_self" ON public.attendance_records FOR INSERT TO authenticated WITH CHECK (
+  user_id = auth.uid() OR public.is_executive()
+);
+
+CREATE POLICY "attendance_update_self" ON public.attendance_records FOR UPDATE TO authenticated USING (
+  user_id = auth.uid() OR public.is_executive()
+) WITH CHECK (
+  user_id = auth.uid() OR public.is_executive()
+);
+

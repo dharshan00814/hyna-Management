@@ -828,62 +828,112 @@ export async function getDateAttendance(date: string): Promise<AttendanceRecord[
   return (data || []).map(mapAttendance);
 }
 
-export async function checkIn(userId: string = 'u2'): Promise<AttendanceRecord> {
-  const today = new Date().toISOString().split('T')[0];
-  const timeNow = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+function calculateDuration(checkInStr?: string, checkOutStr?: string): { formatted: string; numeric: number } {
+  if (!checkInStr || !checkOutStr) return { formatted: '0h 00m', numeric: 0 };
 
-  if (isSupabaseConfigured()) {
-    const { data, error } = await supabase
-      .from('attendance_records')
-      .upsert({
-        user_id: userId,
-        date: today,
-        status: 'present',
-        check_in: timeNow,
-      })
-      .select()
-      .single();
+  const parseToMinutes = (val: string) => {
+    const cleaned = val.trim();
+    const isPM = /pm/i.test(cleaned);
+    const isAM = /am/i.test(cleaned);
+    const timeDigits = cleaned.replace(/[^0-9:]/g, '');
+    const [hRaw, mRaw] = timeDigits.split(':');
+    let h = parseInt(hRaw || '0', 10);
+    const m = parseInt(mRaw || '0', 10);
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return h * 60 + m;
+  };
 
-    if (!error && data) return mapAttendance(data);
-  }
+  const startMin = parseToMinutes(checkInStr);
+  const endMin = parseToMinutes(checkOutStr);
+  const diffMinutes = Math.max(0, endMin - startMin);
 
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  const numeric = parseFloat((diffMinutes / 60).toFixed(2));
   return {
-    id: `att-${Date.now()}`,
-    userId,
-    date: today,
-    status: 'present',
-    checkIn: timeNow,
+    formatted: `${hours}h ${minutes.toString().padStart(2, '0')}m`,
+    numeric,
   };
 }
 
-export async function checkOut(userId: string = 'u2'): Promise<AttendanceRecord> {
+export async function getTodayAttendance(userId: string): Promise<AttendanceRecord | null> {
+  if (!userId) return null;
   const today = new Date().toISOString().split('T')[0];
-  const timeNow = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .maybeSingle();
 
-  if (isSupabaseConfigured()) {
-    const { data, error } = await supabase
-      .from('attendance_records')
-      .update({
-        check_out: timeNow,
-        working_hours: '8h 00m',
-      })
-      .eq('user_id', userId)
-      .eq('date', today)
-      .select()
-      .single();
+  if (error || !data) return null;
+  return mapAttendance(data);
+}
 
-    if (!error && data) return mapAttendance(data);
-  }
+export async function checkIn(userId: string): Promise<AttendanceRecord> {
+  if (!userId) throw new Error('User ID is required to check in.');
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const isLate = now.getHours() > 10 || (now.getHours() === 10 && now.getMinutes() > 15);
 
-  return {
-    id: `att-${Date.now()}`,
-    userId,
+  const payload: any = {
+    user_id: userId,
     date: today,
-    status: 'present',
-    checkIn: '09:00',
-    checkOut: timeNow,
-    workingHours: '8h 00m',
+    status: isLate ? 'late' : 'present',
+    check_in: timeNow,
+    hours_worked: 0,
   };
+
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .upsert(payload, { onConflict: 'user_id,date' })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Check-in error from Supabase:', error);
+    throw error;
+  }
+  return mapAttendance(data);
+}
+
+export async function checkOut(userId: string): Promise<AttendanceRecord> {
+  if (!userId) throw new Error('User ID is required to check out.');
+  const today = new Date().toISOString().split('T')[0];
+  const timeNow = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  // Get existing check_in time to calculate exact working hours
+  const { data: existing } = await supabase
+    .from('attendance_records')
+    .select('check_in')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .maybeSingle();
+
+  const { formatted, numeric } = calculateDuration(existing?.check_in, timeNow);
+
+  const updatePayload: any = {
+    check_out: timeNow,
+    hours_worked: numeric,
+  };
+
+  const { data, error } = await supabase
+    .from('attendance_records')
+    .update(updatePayload)
+    .eq('user_id', userId)
+    .eq('date', today)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Check-out error from Supabase:', error);
+    throw error;
+  }
+  const result = mapAttendance(data);
+  result.workingHours = formatted;
+  return result;
 }
 
 // ============================================================
