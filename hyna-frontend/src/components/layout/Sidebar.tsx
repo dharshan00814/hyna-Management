@@ -35,11 +35,11 @@ const bottomNavItems: NavItem[] = [
 
 export function Sidebar() {
   const { isCollapsed, isMobileOpen, toggle, setMobileOpen } = useSidebarStore();
-  const { currentUser, currentRole } = useAuthStore();
+  const { currentUser, effectiveRole } = useAuthStore();
   const location = useLocation();
 
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
-  const navItems = getNavItems(prefix).filter(item => item.roles.includes(currentRole));
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
+  const navItems = getNavItems(prefix).filter(item => item.roles.includes(effectiveRole));
 
   return (
     <>
@@ -163,7 +163,9 @@ export function Sidebar() {
               {!isCollapsed && (
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{currentUser.name}</p>
-                  <p className="text-xs text-[var(--color-muted-foreground)] truncate capitalize">{currentRole}</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] truncate">
+                    {currentUser.designation || effectiveRole}
+                  </p>
                 </div>
               )}
             </div>

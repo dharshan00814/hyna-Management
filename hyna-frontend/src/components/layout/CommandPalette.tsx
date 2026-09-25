@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Search, FolderKanban, CheckSquare, Users, Video, FileText, MessageCircle, Settings, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockProjects, mockTasks, mockUsers, mockMeetings } from '@/mock/data';
+import { getProjects, getTasks, getUsers, getMeetings } from '@/services/api';
+import type { Project, Task, User, Meeting } from '@/types';
 
 interface SearchResult {
   id: string;
@@ -18,10 +19,23 @@ export function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { currentRole } = useAuthStore();
   const prefix = currentRole === 'member' ? '/member' : '/admin';
+
+  useEffect(() => {
+    if (isOpen) {
+      getProjects().then(setProjects);
+      getTasks().then(setTasks);
+      getUsers().then(setUsers);
+      getMeetings().then(setMeetings);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const handler = () => setIsOpen(true);
@@ -53,14 +67,14 @@ export function CommandPalette() {
     const q = query.toLowerCase();
     const results: SearchResult[] = [];
 
-    mockProjects
+    projects
       .filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q))
       .slice(0, 5)
       .forEach(p => results.push({
         id: `project-${p.id}`, title: p.name, subtitle: p.description.slice(0, 60), icon: FolderKanban, path: `${prefix}/projects/${p.id}`, category: 'Projects',
       }));
 
-    mockTasks
+    tasks
       .filter(t => t.title.toLowerCase().includes(q))
       .slice(0, 5)
       .forEach(t => results.push({
@@ -68,7 +82,7 @@ export function CommandPalette() {
       }));
 
     if (currentRole !== 'member') {
-      mockUsers
+      users
         .filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
         .slice(0, 5)
         .forEach(u => results.push({
@@ -76,7 +90,7 @@ export function CommandPalette() {
         }));
     }
 
-    mockMeetings
+    meetings
       .filter(m => m.title.toLowerCase().includes(q))
       .slice(0, 3)
       .forEach(m => results.push({

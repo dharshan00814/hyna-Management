@@ -1,13 +1,16 @@
-import { useState } from 'react';
-import { Avatar, Badge, Button, Textarea, Input, EmptyState } from '@/components/ui';
+import { useState, useEffect } from 'react';
+import { Avatar, Badge, Button, Textarea, Input, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockDailyReports, getUserById } from '@/mock/data';
+import { getDailyReports, submitDailyReport, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
+import type { DailyReport } from '@/types';
 
 export function ReportsPage() {
   const { currentRole, currentUser } = useAuthStore();
   const isAdmin = currentRole !== 'member';
+  const [reports, setReports] = useState<DailyReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [content, setContent] = useState('');
   const [achievements, setAchievements] = useState('');
@@ -15,21 +18,59 @@ export function ReportsPage() {
   const [tomorrowPlan, setTomorrowPlan] = useState('');
   const [hours, setHours] = useState('');
 
-  const reports = isAdmin ? mockDailyReports : mockDailyReports.filter(r => r.userId === currentUser?.id);
-
-  const handleSubmit = () => {
-    if (!content.trim()) { toast.error('Please describe your work.'); return; }
-    toast.success('Report submitted successfully!');
-    setShowForm(false);
-    setContent(''); setAchievements(''); setChallenges(''); setTomorrowPlan(''); setHours('');
+  const loadData = async () => {
+    try {
+      await getUsers();
+      const reps = await getDailyReports();
+      setReports(reps);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!content.trim()) {
+      toast.error('Please describe your work.');
+      return;
+    }
+    try {
+      const created = await submitDailyReport({
+        userId: currentUser?.id || 'u2',
+        content,
+        achievements,
+        challenges,
+        tomorrowPlan,
+        hoursWorked: Number(hours) || 8,
+      });
+      setReports(prev => [created, ...prev]);
+      toast.success('Report submitted successfully!');
+      setShowForm(false);
+      setContent('');
+      setAchievements('');
+      setChallenges('');
+      setTomorrowPlan('');
+      setHours('');
+    } catch (err) {
+      toast.error('Failed to submit report');
+    }
+  };
+
+  const userReports = isAdmin ? reports : reports.filter(r => r.userId === currentUser?.id);
+
+  if (isLoading) return <LoadingState />;
 
   return (
     <div className="page-container">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="page-title">{isAdmin ? 'Daily Reports' : 'My Reports'}</h1>
-          <p className="page-description">{reports.length} reports</p>
+          <p className="page-description">{userReports.length} reports</p>
         </div>
         {!isAdmin && <Button onClick={() => setShowForm(!showForm)}>Write Report</Button>}
       </div>
@@ -51,11 +92,11 @@ export function ReportsPage() {
         </div>
       )}
 
-      {reports.length === 0 ? (
+      {userReports.length === 0 ? (
         <EmptyState title="No reports yet" description={isAdmin ? 'Team reports will appear here.' : 'Submit your first daily report.'} />
       ) : (
         <div className="space-y-4">
-          {reports.map((report, idx) => {
+          {userReports.map((report, idx) => {
             const user = getUserById(report.userId);
             return (
               <div key={report.id} className={cn('card p-5 animate-slide-up', `stagger-${Math.min(idx + 1, 5)}`)}>
@@ -64,7 +105,7 @@ export function ReportsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold">{user?.name}</p>
+                        <p className="text-sm font-semibold">{user?.name || 'Member'}</p>
                         <span className="text-xs text-[var(--color-muted-foreground)]">{formatDate(report.date)}</span>
                       </div>
                       <Badge className="bg-[var(--color-muted)] text-[var(--color-foreground)]">{report.hoursWorked}h</Badge>

@@ -1,23 +1,81 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, SortAsc, MoreHorizontal } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Button, Badge, ProgressBar, Avatar, AvatarGroup, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, getStatusColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockProjects, getUserById } from '@/mock/data';
+import { getProjects, createProject, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
-import type { ProjectStatus } from '@/types';
+import type { Project, ProjectStatus } from '@/types';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const { currentRole } = useAuthStore();
+  const { currentRole, currentUser } = useAuthStore();
   const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filtered = mockProjects.filter(p => {
+  // New project form state
+  const [newProject, setNewProject] = useState({
+    name: '',
+    description: '',
+    startDate: new Date().toISOString().split('T')[0],
+    deadline: '',
+    status: 'planning' as ProjectStatus,
+  });
+
+  const loadData = async () => {
+    try {
+      await getUsers(); // populates user cache
+      const projs = await getProjects();
+      setProjects(projs);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleCreateProject = async () => {
+    if (!newProject.name.trim()) {
+      toast.error('Please enter a project name');
+      return;
+    }
+
+    try {
+      const created = await createProject({
+        name: newProject.name,
+        description: newProject.description,
+        startDate: newProject.startDate,
+        deadline: newProject.deadline,
+        status: newProject.status,
+        managerId: currentUser?.id || 'u1',
+        memberIds: [currentUser?.id || 'u1'],
+      });
+      setProjects(prev => [created, ...prev]);
+      setShowCreate(false);
+      setNewProject({
+        name: '',
+        description: '',
+        startDate: new Date().toISOString().split('T')[0],
+        deadline: '',
+        status: 'planning',
+      });
+      toast.success('Project created successfully!');
+    } catch (err) {
+      toast.error('Failed to create project');
+      console.error(err);
+    }
+  };
+
+  const filtered = projects.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.description.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -30,7 +88,7 @@ export function ProjectsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="page-title">Projects</h1>
-          <p className="page-description">{mockProjects.length} total projects</p>
+          <p className="page-description">{projects.length} total projects</p>
         </div>
         {currentRole !== 'member' && (
           <Button onClick={() => setShowCreate(true)}>
@@ -51,7 +109,7 @@ export function ProjectsPage() {
             className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {['all', 'active', 'planning', 'on-hold', 'completed'].map(status => (
             <button
               key={status}
@@ -96,7 +154,7 @@ export function ProjectsPage() {
                 <div className="flex items-center justify-between text-xs text-[var(--color-muted-foreground)]">
                   <div className="flex items-center gap-2">
                     {manager && <Avatar name={manager.name} size="xs" />}
-                    <span>{manager?.name}</span>
+                    <span>{manager?.name || 'Unassigned'}</span>
                   </div>
                   <span>Due {formatDate(project.deadline)}</span>
                 </div>
@@ -124,19 +182,42 @@ export function ProjectsPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={() => { setShowCreate(false); toast.success('Project created successfully!'); }}>Create Project</Button>
+            <Button onClick={handleCreateProject}>Create Project</Button>
           </>
         }
       >
         <div className="space-y-4">
-          <Input label="Project Name" placeholder="Enter project name" />
-          <Textarea label="Description" placeholder="Project description..." rows={3} />
+          <Input
+            label="Project Name"
+            placeholder="Enter project name"
+            value={newProject.name}
+            onChange={(e) => setNewProject(p => ({ ...p, name: e.target.value }))}
+          />
+          <Textarea
+            label="Description"
+            placeholder="Project description..."
+            rows={3}
+            value={newProject.description}
+            onChange={(e) => setNewProject(p => ({ ...p, description: e.target.value }))}
+          />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Start Date" type="date" />
-            <Input label="Deadline" type="date" />
+            <Input
+              label="Start Date"
+              type="date"
+              value={newProject.startDate}
+              onChange={(e) => setNewProject(p => ({ ...p, startDate: e.target.value }))}
+            />
+            <Input
+              label="Deadline"
+              type="date"
+              value={newProject.deadline}
+              onChange={(e) => setNewProject(p => ({ ...p, deadline: e.target.value }))}
+            />
           </div>
           <Select
             label="Status"
+            value={newProject.status}
+            onChange={(val) => setNewProject(p => ({ ...p, status: val as ProjectStatus }))}
             options={[
               { value: 'planning', label: 'Planning' },
               { value: 'active', label: 'Active' },

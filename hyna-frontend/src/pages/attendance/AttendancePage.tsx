@@ -1,23 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button, Avatar, Badge, EmptyState } from '@/components/ui';
-import { cn, getStatusColor, formatDate } from '@/lib/utils';
+import { Avatar, Badge, LoadingState } from '@/components/ui';
+import { getStatusColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockUsers, mockAttendance } from '@/mock/data';
+import { getUsers, getAttendance, getUserById } from '@/services/api';
+import type { AttendanceRecord } from '@/types';
 
 export function AttendancePage() {
   const { currentRole, currentUser } = useAuthStore();
-  const [selectedDate, setSelectedDate] = useState('2026-09-25');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const isAdmin = currentRole !== 'member';
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        await getUsers();
+        const records = await getAttendance();
+        if (isMounted) setAttendance(records);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+
   const records = isAdmin
-    ? mockAttendance.filter(a => a.date === selectedDate)
-    : mockAttendance.filter(a => a.userId === currentUser?.id);
+    ? attendance.filter(a => a.date === selectedDate)
+    : attendance.filter(a => a.userId === currentUser?.id);
 
   const filteredRecords = isAdmin ? records.filter(r => {
-    const user = mockUsers.find(u => u.id === r.userId);
-    return !search || user?.name.toLowerCase().includes(search.toLowerCase());
+    const user = getUserById(r.userId);
+    return !search || (user?.name.toLowerCase().includes(search.toLowerCase()) ?? false);
   }) : records;
 
   const presentCount = records.filter(r => r.status === 'present').length;
@@ -26,7 +49,7 @@ export function AttendancePage() {
   const leaveCount = records.filter(r => r.status === 'leave').length;
 
   // Member stats
-  const memberRecords = isAdmin ? [] : mockAttendance.filter(a => a.userId === currentUser?.id && a.date.startsWith('2026-09'));
+  const memberRecords = isAdmin ? [] : attendance.filter(a => a.userId === currentUser?.id);
   const memberPresent = memberRecords.filter(r => r.status === 'present').length;
   const memberLate = memberRecords.filter(r => r.status === 'late').length;
   const memberLeave = memberRecords.filter(r => r.status === 'leave').length;
@@ -35,7 +58,7 @@ export function AttendancePage() {
     <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">{isAdmin ? 'Attendance' : 'My Attendance'}</h1>
-        <p className="page-description">{isAdmin ? 'Track team attendance' : 'September 2026'}</p>
+        <p className="page-description">{isAdmin ? 'Track team attendance' : 'Live attendance tracking'}</p>
       </div>
 
       {/* Stats */}
@@ -52,7 +75,7 @@ export function AttendancePage() {
             <div className="card p-4 text-center animate-slide-up"><p className="text-2xl font-semibold text-emerald-500">{memberPresent}</p><p className="text-xs text-[var(--color-muted-foreground)]">Present</p></div>
             <div className="card p-4 text-center animate-slide-up stagger-1"><p className="text-2xl font-semibold text-amber-500">{memberLate}</p><p className="text-xs text-[var(--color-muted-foreground)]">Late</p></div>
             <div className="card p-4 text-center animate-slide-up stagger-2"><p className="text-2xl font-semibold text-blue-500">{memberLeave}</p><p className="text-xs text-[var(--color-muted-foreground)]">Leave</p></div>
-            <div className="card p-4 text-center animate-slide-up stagger-3"><p className="text-2xl font-semibold">7h 42m</p><p className="text-xs text-[var(--color-muted-foreground)]">Avg. Working</p></div>
+            <div className="card p-4 text-center animate-slide-up stagger-3"><p className="text-2xl font-semibold">8h 00m</p><p className="text-xs text-[var(--color-muted-foreground)]">Avg. Working</p></div>
           </>
         )}
       </div>
@@ -60,17 +83,34 @@ export function AttendancePage() {
       {isAdmin && (
         <div className="flex flex-wrap gap-3 mb-6">
           <div className="flex items-center gap-2">
-            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d.toISOString().split('T')[0]); }}
-              className="p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
-              className="h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm" />
-            <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d.toISOString().split('T')[0]); }}
-              className="p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors"><ChevronRight className="w-4 h-4" /></button>
+            <button
+              onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d.toISOString().split('T')[0]); }}
+              className="p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm"
+            />
+            <button
+              onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d.toISOString().split('T')[0]); }}
+              className="p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-            <input type="text" placeholder="Search members..." value={search} onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
+            <input
+              type="text"
+              placeholder="Search members..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+            />
           </div>
         </div>
       )}
@@ -91,14 +131,14 @@ export function AttendancePage() {
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
               {filteredRecords.slice(0, 25).map(record => {
-                const user = mockUsers.find(u => u.id === record.userId);
+                const user = getUserById(record.userId);
                 return (
                   <tr key={record.id} className="hover:bg-[var(--color-muted)] transition-colors">
                     {isAdmin && (
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <Avatar name={user?.name || ''} size="xs" />
-                          <span className="font-medium truncate max-w-[120px]">{user?.name}</span>
+                          <span className="font-medium truncate max-w-[120px]">{user?.name || 'Member'}</span>
                         </div>
                       </td>
                     )}

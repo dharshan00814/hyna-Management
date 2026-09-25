@@ -1,0 +1,11 @@
+{
+  "name": "hyna-management",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Hyna Studio Enterprise Management System",
+  "scripts": {
+    "dev": "npm --prefix hyna-frontend run dev",
+    "build": "npm --prefix hyna-frontend run build",
+    "preview": "npm --prefix hyna-frontend run preview"
+  }
+}

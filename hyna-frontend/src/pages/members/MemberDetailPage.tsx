@@ -1,10 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Clock } from 'lucide-react';
-import { Button, Avatar, Badge, Tabs, ProgressBar, EmptyState } from '@/components/ui';
+import { ArrowLeft, Mail, Phone, Calendar } from 'lucide-react';
+import { Button, Avatar, Badge, Tabs, ProgressBar, EmptyState, LoadingState } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getUserById, mockTasks, mockProjects, mockAttendance } from '@/mock/data';
-import { useState } from 'react';
+import { getUser, getUserTasks, getProjects } from '@/services/api';
+import { useState, useEffect } from 'react';
+import type { User, Task, Project } from '@/types';
 
 export function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -12,12 +13,45 @@ export function MemberDetailPage() {
   const { currentRole } = useAuthStore();
   const prefix = currentRole === 'member' ? '/member' : '/admin';
   const [activeTab, setActiveTab] = useState('profile');
+  const [member, setMember] = useState<User | null>(null);
+  const [memberTasks, setMemberTasks] = useState<Task[]>([]);
+  const [memberProjects, setMemberProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const member = getUserById(id || '');
-  if (!member) return <div className="page-container"><EmptyState title="Member not found" action={<Button onClick={() => navigate(`${prefix}/members`)}>Go Back</Button>} /></div>;
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      if (!id) return;
+      try {
+        const [u, ts, ps] = await Promise.all([
+          getUser(id),
+          getUserTasks(id),
+          getProjects(),
+        ]);
+        if (isMounted) {
+          if (u) setMember(u);
+          setMemberTasks(ts);
+          setMemberProjects(ps.filter(p => p.memberIds.includes(id)));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, [id]);
 
-  const memberTasks = mockTasks.filter(t => t.assigneeId === id);
-  const memberProjects = mockProjects.filter(p => p.memberIds.includes(id || ''));
+  if (isLoading) return <LoadingState />;
+
+  if (!member) {
+    return (
+      <div className="page-container">
+        <EmptyState title="Member not found" action={<Button onClick={() => navigate(`${prefix}/members`)}>Go Back</Button>} />
+      </div>
+    );
+  }
 
   const tabs = [
     { value: 'profile', label: 'Profile' },
@@ -46,7 +80,7 @@ export function MemberDetailPage() {
               <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{member.phone}</span>
               <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Joined {formatDate(member.joinDate)}</span>
             </div>
-            {member.skills && (
+            {member.skills && member.skills.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {member.skills.map(skill => <Badge key={skill} className="bg-[var(--color-muted)] text-[var(--color-foreground)]">{skill}</Badge>)}
               </div>

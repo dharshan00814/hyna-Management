@@ -1,37 +1,68 @@
 import { useState, useRef, useEffect } from 'react';
-import { Hash, FolderOpen, User, Send, Smile, Paperclip } from 'lucide-react';
-import { Avatar, Badge, EmptyState } from '@/components/ui';
-import { cn, formatRelativeTime, getInitials, getAvatarColor } from '@/lib/utils';
+import { Hash, FolderOpen, User as UserIcon, Send, Smile, Paperclip } from 'lucide-react';
+import { Avatar, LoadingState } from '@/components/ui';
+import { cn, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockChannels, mockMessages, getUserById } from '@/mock/data';
+import { getChannels, getChannelMessages, sendMessage, getUsers, getUserById } from '@/services/api';
+import type { ChatChannel, ChatMessage } from '@/types';
 
 export function MessagesPage() {
   const { currentUser } = useAuthStore();
-  const [selectedChannel, setSelectedChannel] = useState('ch1');
+  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState('');
   const [newMessage, setNewMessage] = useState('');
-  const [messages, setMessages] = useState(mockMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const channel = mockChannels.find(c => c.id === selectedChannel);
-  const channelMessages = messages.filter(m => m.channelId === selectedChannel);
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        await getUsers();
+        const chs = await getChannels();
+        if (isMounted) {
+          setChannels(chs);
+          if (chs.length > 0) {
+            setSelectedChannel(chs[0].id);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!selectedChannel) return;
+    getChannelMessages(selectedChannel).then((msgs) => {
+      if (isMounted) setMessages(msgs);
+    });
+    return () => { isMounted = false; };
+  }, [selectedChannel]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [channelMessages.length, selectedChannel]);
+  }, [messages.length, selectedChannel]);
 
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
-    const msg = {
-      id: `msg-${Date.now()}`,
-      channelId: selectedChannel,
-      senderId: currentUser?.id || 'u2',
-      content: newMessage,
-      timestamp: new Date().toISOString(),
-      type: 'text' as const,
-    };
-    setMessages([...messages, msg]);
+  const handleSend = async () => {
+    if (!newMessage.trim() || !selectedChannel) return;
+    const text = newMessage.trim();
     setNewMessage('');
+    try {
+      const sent = await sendMessage(selectedChannel, text, currentUser?.id || 'u2');
+      setMessages(prev => [...prev, sent]);
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    }
   };
+
+  const channel = channels.find(c => c.id === selectedChannel);
 
   const channelIcons: Record<string, React.ComponentType<{ className?: string }>> = {
     hash: Hash,
@@ -39,8 +70,10 @@ export function MessagesPage() {
     palette: Hash,
     megaphone: Hash,
     folder: FolderOpen,
-    user: User,
+    user: UserIcon,
   };
+
+  if (isLoading) return <LoadingState />;
 
   return (
     <div className="page-container !p-0 sm:!p-6">
@@ -52,7 +85,7 @@ export function MessagesPage() {
           </div>
           <div className="flex-1 overflow-y-auto py-2">
             <div className="px-3 py-1 text-[11px] font-medium text-[var(--color-muted-foreground)] uppercase tracking-wider">Channels</div>
-            {mockChannels.filter(c => c.type !== 'direct').map(ch => {
+            {channels.filter(c => c.type !== 'direct').map(ch => {
               const Icon = channelIcons[ch.icon || 'hash'] || Hash;
               return (
                 <button
@@ -73,7 +106,7 @@ export function MessagesPage() {
               );
             })}
             <div className="px-3 py-1 mt-3 text-[11px] font-medium text-[var(--color-muted-foreground)] uppercase tracking-wider">Direct Messages</div>
-            {mockChannels.filter(c => c.type === 'direct').map(ch => (
+            {channels.filter(c => c.type === 'direct').map(ch => (
               <button
                 key={ch.id}
                 onClick={() => setSelectedChannel(ch.id)}
@@ -103,37 +136,43 @@ export function MessagesPage() {
               onChange={(e) => setSelectedChannel(e.target.value)}
               className="md:hidden h-8 px-2 rounded border border-[var(--color-input)] bg-[var(--color-background)] text-sm"
             >
-              {mockChannels.map(ch => <option key={ch.id} value={ch.id}>{ch.type === 'direct' ? '💬 ' : '# '}{ch.name}</option>)}
+              {channels.map(ch => <option key={ch.id} value={ch.id}>{ch.type === 'direct' ? '💬 ' : '# '}{ch.name}</option>)}
             </select>
             <div className="hidden md:block">
-              <h3 className="text-sm font-semibold"># {channel?.name}</h3>
-              <p className="text-xs text-[var(--color-muted-foreground)]">{channel?.memberIds.length} members</p>
+              <h3 className="text-sm font-semibold"># {channel?.name || 'Channel'}</h3>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{channel?.memberIds.length || 0} members</p>
             </div>
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-            {channelMessages.map(msg => {
-              const sender = getUserById(msg.senderId);
-              const isOwn = msg.senderId === currentUser?.id;
-              return (
-                <div key={msg.id} className={cn('flex gap-3', isOwn && 'flex-row-reverse')}>
-                  <Avatar name={sender?.name || ''} size="sm" />
-                  <div className={cn('max-w-[70%]', isOwn && 'text-right')}>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-medium">{sender?.name}</span>
-                      <span className="text-[11px] text-[var(--color-muted-foreground)]">{formatRelativeTime(msg.timestamp)}</span>
-                    </div>
-                    <div className={cn(
-                      'inline-block px-3 py-2 rounded-xl text-sm',
-                      isOwn ? 'bg-[var(--color-primary)] text-white rounded-tr-sm' : 'bg-[var(--color-muted)] rounded-tl-sm',
-                    )}>
-                      {msg.content}
+            {messages.length === 0 ? (
+              <div className="text-center py-12 text-sm text-[var(--color-muted-foreground)]">
+                No messages in this channel yet. Say hello! 👋
+              </div>
+            ) : (
+              messages.map(msg => {
+                const sender = getUserById(msg.senderId);
+                const isOwn = msg.senderId === currentUser?.id;
+                return (
+                  <div key={msg.id} className={cn('flex gap-3', isOwn && 'flex-row-reverse')}>
+                    <Avatar name={sender?.name || ''} size="sm" />
+                    <div className={cn('max-w-[70%]', isOwn && 'text-right')}>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-medium">{sender?.name || 'User'}</span>
+                        <span className="text-[11px] text-[var(--color-muted-foreground)]">{formatRelativeTime(msg.timestamp)}</span>
+                      </div>
+                      <div className={cn(
+                        'inline-block px-3 py-2 rounded-xl text-sm text-left',
+                        isOwn ? 'bg-[var(--color-primary)] text-white rounded-tr-sm' : 'bg-[var(--color-muted)] rounded-tl-sm',
+                      )}>
+                        {msg.content}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
             <div ref={messagesEndRef} />
           </div>
 

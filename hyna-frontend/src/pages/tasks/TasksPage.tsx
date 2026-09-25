@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { Plus, Search, List, LayoutGrid, Calendar as CalendarIcon, Filter, MoreHorizontal, Paperclip, MessageSquare, ExternalLink, Clock } from 'lucide-react';
-import { Button, Badge, Avatar, Tabs, Modal, Input, Textarea, Select, EmptyState } from '@/components/ui';
+import { useState, useEffect } from 'react';
+import { Plus, Search, List, LayoutGrid, Paperclip, MessageSquare, ExternalLink } from 'lucide-react';
+import { Button, Badge, Avatar, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, getPriorityDot, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockTasks, mockProjects, mockModules, getUserById } from '@/mock/data';
+import {
+  getTasks, createTask, submitTask, reviewTask,
+  getProjects, getModules, getUsers, getUserById,
+} from '@/services/api';
 import { toast } from 'sonner';
-import type { TaskStatus, TaskPriority } from '@/types';
+import type { Task, TaskStatus, TaskPriority, Project, Module } from '@/types';
 
 const statusColumns: { status: TaskStatus; label: string; color: string }[] = [
   { status: 'backlog', label: 'Backlog', color: 'bg-zinc-400' },
@@ -18,6 +21,11 @@ const statusColumns: { status: TaskStatus; label: string; color: string }[] = [
 
 export function TasksPage() {
   const { currentRole, currentUser } = useAuthStore();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [modules, setModules] = useState<Module[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [view, setView] = useState<'list' | 'board'>('list');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -26,9 +34,115 @@ export function TasksPage() {
   const [showDetail, setShowDetail] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState<string | null>(null);
 
+  // Form states
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    priority: 'medium' as TaskPriority,
+    status: 'todo' as TaskStatus,
+    deadline: '',
+    projectId: '',
+    assigneeId: '',
+  });
+
+  const [submitForm, setSubmitForm] = useState({
+    description: '',
+    githubUrl: '',
+    deploymentUrl: '',
+    notes: '',
+  });
+
+  const loadData = async () => {
+    try {
+      await getUsers();
+      const [fetchedTasks, fetchedProjects] = await Promise.all([
+        getTasks(),
+        getProjects(),
+      ]);
+      setTasks(fetchedTasks);
+      setProjects(fetchedProjects);
+      if (fetchedProjects.length > 0) {
+        setNewTask(prev => ({ ...prev, projectId: fetchedProjects[0].id }));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleCreateTask = async () => {
+    if (!newTask.title.trim() || !newTask.projectId) {
+      toast.error('Please enter a task title and select a project');
+      return;
+    }
+    try {
+      const created = await createTask({
+        title: newTask.title,
+        description: newTask.description,
+        priority: newTask.priority,
+        status: newTask.status,
+        deadline: newTask.deadline,
+        projectId: newTask.projectId,
+        assigneeId: newTask.assigneeId || currentUser?.id || 'u2',
+      });
+      setTasks(prev => [created, ...prev]);
+      setShowCreate(false);
+      setNewTask({
+        title: '',
+        description: '',
+        priority: 'medium',
+        status: 'todo',
+        deadline: '',
+        projectId: projects[0]?.id || '',
+        assigneeId: '',
+      });
+      toast.success('Task created successfully!');
+    } catch (err) {
+      toast.error('Failed to create task');
+    }
+  };
+
+  const handleSubmitTask = async () => {
+    if (!showSubmit || !submitForm.description.trim()) {
+      toast.error('Please enter a description for your submission');
+      return;
+    }
+    try {
+      const updated = await submitTask(showSubmit, {
+        description: submitForm.description,
+        githubUrl: submitForm.githubUrl,
+        deploymentUrl: submitForm.deploymentUrl,
+        notes: submitForm.notes,
+        submittedBy: currentUser?.id,
+      });
+      setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+      setShowSubmit(null);
+      setSubmitForm({ description: '', githubUrl: '', deploymentUrl: '', notes: '' });
+      toast.success('Task submitted for review!');
+    } catch (err) {
+      toast.error('Failed to submit task');
+    }
+  };
+
+  const handleReview = async (taskId: string, action: 'approve' | 'request-changes') => {
+    try {
+      const updated = await reviewTask(taskId, action, currentUser?.id || 'u1');
+      setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+      setShowDetail(null);
+      toast.success(action === 'approve' ? 'Task approved!' : 'Changes requested');
+    } catch (err) {
+      toast.error('Failed to process review');
+    }
+  };
+
   const allTasks = currentRole === 'member'
-    ? mockTasks.filter(t => t.assigneeId === currentUser?.id)
-    : mockTasks;
+    ? tasks.filter(t => t.assigneeId === currentUser?.id)
+    : tasks;
 
   const filtered = allTasks.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
@@ -37,7 +151,9 @@ export function TasksPage() {
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
-  const detailTask = showDetail ? mockTasks.find(t => t.id === showDetail) : null;
+  const detailTask = showDetail ? tasks.find(t => t.id === showDetail) : null;
+
+  if (isLoading) return <LoadingState />;
 
   return (
     <div className="page-container">
@@ -65,16 +181,27 @@ export function TasksPage() {
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-          <input type="text" placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
+          <input
+            type="text"
+            placeholder="Search tasks..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+          />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm"
+        >
           <option value="all">All Status</option>
           {statusColumns.map(s => <option key={s.status} value={s.status}>{s.label}</option>)}
         </select>
-        <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}
-          className="h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm">
+        <select
+          value={priorityFilter}
+          onChange={(e) => setPriorityFilter(e.target.value)}
+          className="h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm"
+        >
           <option value="all">All Priority</option>
           <option value="urgent">Urgent</option>
           <option value="high">High</option>
@@ -91,9 +218,13 @@ export function TasksPage() {
           ) : (
             filtered.map(task => {
               const assignee = getUserById(task.assigneeId);
-              const project = mockProjects.find(p => p.id === task.projectId);
+              const project = projects.find(p => p.id === task.projectId);
               return (
-                <div key={task.id} className="card p-3 sm:p-4 card-hover flex items-center gap-3 sm:gap-4 cursor-pointer" onClick={() => setShowDetail(task.id)}>
+                <div
+                  key={task.id}
+                  className="card p-3 sm:p-4 card-hover flex items-center gap-3 sm:gap-4 cursor-pointer"
+                  onClick={() => setShowDetail(task.id)}
+                >
                   <div className={cn('w-2 h-2 rounded-full shrink-0', getPriorityDot(task.priority))} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{task.title}</p>
@@ -151,27 +282,31 @@ export function TasksPage() {
       )}
 
       {/* Task detail modal */}
-      <Modal isOpen={!!showDetail} onClose={() => setShowDetail(null)} title={detailTask?.title || 'Task'} size="lg"
+      <Modal
+        isOpen={!!showDetail}
+        onClose={() => setShowDetail(null)}
+        title={detailTask?.title || 'Task'}
+        size="lg"
         footer={
           currentRole === 'member' && detailTask?.assigneeId === currentUser?.id && detailTask?.status === 'in-progress' ? (
             <Button onClick={() => { setShowDetail(null); setShowSubmit(detailTask?.id || null); }}>Submit for Review</Button>
           ) : currentRole !== 'member' && detailTask?.submission?.reviewStatus === 'pending' ? (
             <>
-              <Button variant="outline" onClick={() => { toast.info('Changes requested'); setShowDetail(null); }}>Request Changes</Button>
-              <Button onClick={() => { toast.success('Task approved!'); setShowDetail(null); }}>Approve</Button>
+              <Button variant="outline" onClick={() => handleReview(detailTask.id, 'request-changes')}>Request Changes</Button>
+              <Button onClick={() => handleReview(detailTask.id, 'approve')}>Approve</Button>
             </>
           ) : undefined
-        }>
+        }
+      >
         {detailTask && (
           <div className="space-y-4">
             <p className="text-sm text-[var(--color-muted-foreground)]">{detailTask.description}</p>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-[var(--color-muted-foreground)]">Status</span><br /><Badge className={getStatusColor(detailTask.status)}>{detailTask.status.replace(/-/g, ' ')}</Badge></div>
               <div><span className="text-[var(--color-muted-foreground)]">Priority</span><br /><Badge className={getPriorityColor(detailTask.priority)}>{detailTask.priority}</Badge></div>
-              <div><span className="text-[var(--color-muted-foreground)]">Assignee</span><br /><div className="flex items-center gap-2 mt-1"><Avatar name={getUserById(detailTask.assigneeId)?.name || ''} size="xs" /><span>{getUserById(detailTask.assigneeId)?.name}</span></div></div>
+              <div><span className="text-[var(--color-muted-foreground)]">Assignee</span><br /><div className="flex items-center gap-2 mt-1"><Avatar name={getUserById(detailTask.assigneeId)?.name || ''} size="xs" /><span>{getUserById(detailTask.assigneeId)?.name || 'Unassigned'}</span></div></div>
               <div><span className="text-[var(--color-muted-foreground)]">Deadline</span><br /><span className="font-medium">{formatDate(detailTask.deadline)}</span></div>
-              <div><span className="text-[var(--color-muted-foreground)]">Project</span><br /><span className="font-medium">{mockProjects.find(p => p.id === detailTask.projectId)?.name}</span></div>
-              <div><span className="text-[var(--color-muted-foreground)]">Module</span><br /><span className="font-medium">{mockModules.find(m => m.id === detailTask.moduleId)?.name}</span></div>
+              <div><span className="text-[var(--color-muted-foreground)]">Project</span><br /><span className="font-medium">{projects.find(p => p.id === detailTask.projectId)?.name || 'Project'}</span></div>
             </div>
             {detailTask.checklist && detailTask.checklist.length > 0 && (
               <div>
@@ -212,28 +347,108 @@ export function TasksPage() {
       </Modal>
 
       {/* Submit task modal */}
-      <Modal isOpen={!!showSubmit} onClose={() => setShowSubmit(null)} title="Submit Task for Review"
-        footer={<><Button variant="outline" onClick={() => setShowSubmit(null)}>Cancel</Button><Button onClick={() => { setShowSubmit(null); toast.success('Task submitted for review!'); }}>Submit for Review</Button></>}>
+      <Modal
+        isOpen={!!showSubmit}
+        onClose={() => setShowSubmit(null)}
+        title="Submit Task for Review"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowSubmit(null)}>Cancel</Button>
+            <Button onClick={handleSubmitTask}>Submit for Review</Button>
+          </>
+        }
+      >
         <div className="space-y-4">
-          <Textarea label="Description" placeholder="Describe what you've completed..." rows={3} />
-          <Input label="GitHub URL" placeholder="https://github.com/..." />
-          <Input label="Deployment URL" placeholder="https://staging..." />
-          <Textarea label="Notes" placeholder="Any additional notes..." rows={2} />
+          <Textarea
+            label="Description"
+            placeholder="Describe what you've completed..."
+            rows={3}
+            value={submitForm.description}
+            onChange={(e) => setSubmitForm(f => ({ ...f, description: e.target.value }))}
+          />
+          <Input
+            label="GitHub URL"
+            placeholder="https://github.com/..."
+            value={submitForm.githubUrl}
+            onChange={(e) => setSubmitForm(f => ({ ...f, githubUrl: e.target.value }))}
+          />
+          <Input
+            label="Deployment URL"
+            placeholder="https://staging..."
+            value={submitForm.deploymentUrl}
+            onChange={(e) => setSubmitForm(f => ({ ...f, deploymentUrl: e.target.value }))}
+          />
+          <Textarea
+            label="Notes"
+            placeholder="Any additional notes..."
+            rows={2}
+            value={submitForm.notes}
+            onChange={(e) => setSubmitForm(f => ({ ...f, notes: e.target.value }))}
+          />
         </div>
       </Modal>
 
       {/* Create task modal */}
-      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Create New Task"
-        footer={<><Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button><Button onClick={() => { setShowCreate(false); toast.success('Task created successfully!'); }}>Create Task</Button></>}>
+      <Modal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="Create New Task"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button onClick={handleCreateTask}>Create Task</Button>
+          </>
+        }
+      >
         <div className="space-y-4">
-          <Input label="Task Title" placeholder="Enter task title" />
-          <Textarea label="Description" placeholder="Task description..." rows={3} />
+          <Input
+            label="Task Title"
+            placeholder="Enter task title"
+            value={newTask.title}
+            onChange={(e) => setNewTask(t => ({ ...t, title: e.target.value }))}
+          />
+          <Textarea
+            label="Description"
+            placeholder="Task description..."
+            rows={3}
+            value={newTask.description}
+            onChange={(e) => setNewTask(t => ({ ...t, description: e.target.value }))}
+          />
           <div className="grid grid-cols-2 gap-4">
-            <Select label="Priority" options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} />
-            <Select label="Status" options={[{ value: 'backlog', label: 'Backlog' }, { value: 'todo', label: 'To Do' }, { value: 'in-progress', label: 'In Progress' }]} />
+            <Select
+              label="Priority"
+              value={newTask.priority}
+              onChange={(val) => setNewTask(t => ({ ...t, priority: val as TaskPriority }))}
+              options={[
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+                { value: 'urgent', label: 'Urgent' },
+              ]}
+            />
+            <Select
+              label="Status"
+              value={newTask.status}
+              onChange={(val) => setNewTask(t => ({ ...t, status: val as TaskStatus }))}
+              options={[
+                { value: 'backlog', label: 'Backlog' },
+                { value: 'todo', label: 'To Do' },
+                { value: 'in-progress', label: 'In Progress' },
+              ]}
+            />
           </div>
-          <Input label="Deadline" type="date" />
-          <Select label="Project" options={mockProjects.map(p => ({ value: p.id, label: p.name }))} />
+          <Input
+            label="Deadline"
+            type="date"
+            value={newTask.deadline}
+            onChange={(e) => setNewTask(t => ({ ...t, deadline: e.target.value }))}
+          />
+          <Select
+            label="Project"
+            value={newTask.projectId}
+            onChange={(val) => setNewTask(t => ({ ...t, projectId: val }))}
+            options={projects.map(p => ({ value: p.id, label: p.name }))}
+          />
         </div>
       </Modal>
     </div>

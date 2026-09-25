@@ -128,7 +128,7 @@ interface ProgressBarProps {
   value: number;
   className?: string;
   color?: string;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
 }
 
@@ -136,7 +136,7 @@ export function ProgressBar({ value, className, color, size = 'sm', showLabel = 
   const clampedValue = Math.min(100, Math.max(0, value));
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <div className={cn('flex-1 rounded-full bg-[var(--color-muted)] overflow-hidden', size === 'sm' ? 'h-1.5' : 'h-2.5')}>
+      <div className={cn('flex-1 rounded-full bg-[var(--color-muted)] overflow-hidden', size === 'sm' ? 'h-1.5' : size === 'lg' ? 'h-3.5' : 'h-2.5')}>
         <div
           className={cn('h-full rounded-full transition-all duration-500', color || 'bg-[var(--color-primary)]')}
           style={{ width: `${clampedValue}%` }}

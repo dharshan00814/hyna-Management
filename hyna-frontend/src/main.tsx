@@ -15,6 +15,17 @@ const queryClient = new QueryClient({
   },
 });
 
+// In development, clear any legacy or conflicting service workers registered on localhost
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+    }
+  }).catch(() => {
+    // Ignore SW unregister errors
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

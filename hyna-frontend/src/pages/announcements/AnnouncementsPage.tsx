@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Megaphone,
   Plus,
@@ -16,23 +16,41 @@ import { toast } from 'sonner';
 import { Button, Badge, Modal, EmptyState, Avatar } from '@/components/ui';
 import { cn, formatDate, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockAnnouncements, getUserById } from '@/mock/data';
+import { getAnnouncements, createAnnouncement, getUsers, getUserById } from '@/services/api';
 import type { Announcement, AnnouncementPriority } from '@/types';
 
 export function AnnouncementsPage() {
   const { currentRole, currentUser } = useAuthStore();
   const isAdmin = currentRole !== 'member';
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>(mockAnnouncements);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // New announcement form state
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newPriority, setNewPriority] = useState<AnnouncementPriority>('normal');
   const [newAudience, setNewAudience] = useState<'all' | 'admin' | 'manager' | 'member'>('all');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        await getUsers();
+        const anns = await getAnnouncements();
+        if (isMounted) setAnnouncements(anns);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, []);
 
   const filteredAnnouncements = announcements.filter((item) => {
     // Audience filter
@@ -54,31 +72,32 @@ export function AnnouncementsPage() {
     return true;
   });
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newContent.trim()) {
       toast.error('Please enter a title and content.');
       return;
     }
 
-    const created: Announcement = {
-      id: `ann-${Date.now()}`,
-      title: newTitle.trim(),
-      content: newContent.trim(),
-      priority: newPriority,
-      createdBy: currentUser?.id || 'u1',
-      createdAt: new Date().toISOString(),
-      audience: newAudience,
-      isPublished: true,
-    };
+    try {
+      const created = await createAnnouncement({
+        title: newTitle.trim(),
+        content: newContent.trim(),
+        priority: newPriority,
+        createdBy: currentUser?.id || 'u1',
+        audience: newAudience,
+      });
 
-    setAnnouncements([created, ...announcements]);
-    toast.success('Announcement broadcasted successfully!');
-    setIsCreateOpen(false);
-    setNewTitle('');
-    setNewContent('');
-    setNewPriority('normal');
-    setNewAudience('all');
+      setAnnouncements(prev => [created, ...prev]);
+      toast.success('Announcement broadcasted successfully!');
+      setIsCreateOpen(false);
+      setNewTitle('');
+      setNewContent('');
+      setNewPriority('normal');
+      setNewAudience('all');
+    } catch (err) {
+      toast.error('Failed to create announcement');
+    }
   };
 
   const getPriorityBadge = (priority: AnnouncementPriority) => {

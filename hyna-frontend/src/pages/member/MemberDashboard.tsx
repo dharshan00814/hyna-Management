@@ -1,55 +1,125 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckSquare, Clock, CheckCircle2, Send, Video, ArrowRight,
-  Circle, Check, Edit3, Calendar,
+  Check, Edit3, Calendar,
 } from 'lucide-react';
-import { StatCard, Avatar, AvatarGroup, Badge, ProgressBar, Button, Textarea } from '@/components/ui';
-import { cn, getGreeting, formatDate, formatTime, getStatusColor, getPriorityColor, getPriorityDot } from '@/lib/utils';
+import { StatCard, AvatarGroup, Badge, Button, Textarea, LoadingState } from '@/components/ui';
+import { cn, getGreeting, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockTasks, mockMeetings, mockAttendance, getUserById } from '@/mock/data';
+import {
+  getUserTasks, getUserMeetings, getUserAttendance,
+  submitDailyReport, checkIn, checkOut, getUserById, getUsers,
+} from '@/services/api';
 import { toast } from 'sonner';
+import type { Task, Meeting, AttendanceRecord } from '@/types';
 
 export function MemberDashboard() {
   const { currentUser } = useAuthStore();
   const navigate = useNavigate();
   const [dailyReport, setDailyReport] = useState('');
-  const [isCheckedIn] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [isCheckedIn, setIsCheckedIn] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   const userId = currentUser?.id || 'u2';
-  const myTasks = mockTasks.filter(t => t.assigneeId === userId);
-  const completedTasks = myTasks.filter(t => t.status === 'completed');
-  const inReviewTasks = myTasks.filter(t => t.status === 'in-review');
-  const todayTasks = myTasks.filter(t => t.status !== 'completed' && t.status !== 'backlog');
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  const todayStr = '2026-09-25';
-  const todayAttendance = mockAttendance.find(a => a.userId === userId && a.date === todayStr);
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        await getUsers();
+        const [t, m, a] = await Promise.all([
+          getUserTasks(userId),
+          getUserMeetings(userId),
+          getUserAttendance(userId),
+        ]);
+        if (isMounted) {
+          setTasks(t);
+          setMeetings(m);
+          setAttendance(a);
+          const todayRecord = a.find(record => record.date === todayStr);
+          if (todayRecord && todayRecord.status === 'present' && !todayRecord.checkOut) {
+            setIsCheckedIn(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading member dashboard data:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, [userId, todayStr]);
 
-  const upcomingMeetings = mockMeetings
-    .filter(m => m.participantIds.includes(userId) && m.status === 'scheduled' && m.date >= todayStr)
+  const completedTasks = tasks.filter(t => t.status === 'completed');
+  const inReviewTasks = tasks.filter(t => t.status === 'in-review');
+  const todayTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'backlog');
+  const todayAttendance = attendance.find(a => a.date === todayStr);
+
+  const upcomingMeetings = meetings
+    .filter(m => m.status === 'scheduled')
     .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
     .slice(0, 2);
 
-  const handleSubmitReport = () => {
+  const handleSubmitReport = async () => {
     if (!dailyReport.trim()) {
       toast.error('Please write your daily report before submitting.');
       return;
     }
-    toast.success('Daily report submitted successfully!');
-    setDailyReport('');
+    try {
+      await submitDailyReport({
+        userId,
+        date: todayStr,
+        content: dailyReport,
+        hoursWorked: 8,
+      });
+      toast.success('Daily report submitted successfully!');
+      setDailyReport('');
+    } catch (err) {
+      toast.error('Failed to submit report');
+    }
   };
+
+  const handleCheckIn = async () => {
+    try {
+      const record = await checkIn(userId);
+      setAttendance(prev => [record, ...prev.filter(a => a.date !== todayStr)]);
+      setIsCheckedIn(true);
+      toast.success('Checked in successfully!');
+    } catch (err) {
+      toast.error('Check in failed');
+    }
+  };
+
+  const handleCheckOut = async () => {
+    try {
+      const record = await checkOut(userId);
+      setAttendance(prev => [record, ...prev.filter(a => a.date !== todayStr)]);
+      setIsCheckedIn(false);
+      toast.success('Checked out successfully!');
+    } catch (err) {
+      toast.error('Check out failed');
+    }
+  };
+
+  if (isLoading) return <LoadingState />;
 
   return (
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name.split(' ')[0]} 👋</h1>
+        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'} 👋</h1>
         <p className="page-description">Here's your work overview for today.</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="My Tasks" value={myTasks.length} change={5} icon={CheckSquare} iconColor="text-blue-500" />
+        <StatCard label="My Tasks" value={tasks.length} change={5} icon={CheckSquare} iconColor="text-blue-500" />
         <StatCard label="Completed" value={completedTasks.length} change={15} icon={CheckCircle2} iconColor="text-emerald-500" className="stagger-1" />
         <StatCard label="In Review" value={inReviewTasks.length} icon={Send} iconColor="text-violet-500" className="stagger-2" />
         <StatCard label="Working Hours" value={todayAttendance?.workingHours || '0h 0m'} icon={Clock} iconColor="text-amber-500" className="stagger-3" />
@@ -145,7 +215,7 @@ export function MemberDashboard() {
                     <Clock className="w-4 h-4 text-[var(--color-muted-foreground)]" />
                     <span className="font-medium">Working: {todayAttendance?.workingHours || '6h 24m'}</span>
                   </div>
-                  <Button variant="outline" className="mt-4 w-full">
+                  <Button variant="outline" className="mt-4 w-full" onClick={handleCheckOut}>
                     Check Out
                   </Button>
                 </>
@@ -155,7 +225,7 @@ export function MemberDashboard() {
                     <Clock className="w-8 h-8 text-[var(--color-muted-foreground)]" />
                   </div>
                   <p className="text-sm text-[var(--color-muted-foreground)]">You haven't checked in yet</p>
-                  <Button className="mt-4 w-full">Check In</Button>
+                  <Button className="mt-4 w-full" onClick={handleCheckIn}>Check In</Button>
                 </>
               )}
             </div>
@@ -167,55 +237,51 @@ export function MemberDashboard() {
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
             </div>
             <div className="space-y-3">
-              {upcomingMeetings.map(meeting => (
-                <div key={meeting.id} className="p-3 rounded-xl border border-[var(--color-border)]">
-                  <p className="text-sm font-medium">{meeting.title}</p>
-                  <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--color-muted-foreground)]">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{formatDate(meeting.date)} • {formatTime(meeting.startTime)}</span>
+              {upcomingMeetings.length === 0 ? (
+                <p className="text-sm text-[var(--color-muted-foreground)] text-center py-4">No upcoming meetings</p>
+              ) : (
+                upcomingMeetings.map(meeting => (
+                  <div key={meeting.id} className="p-3 rounded-xl border border-[var(--color-border)]">
+                    <p className="text-sm font-medium">{meeting.title}</p>
+                    <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--color-muted-foreground)]">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{formatDate(meeting.date)} • {formatTime(meeting.startTime)}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      <AvatarGroup
+                        names={meeting.participantIds.slice(0, 4).map(id => getUserById(id)?.name || '').filter(Boolean)}
+                        max={3}
+                      />
+                      <span className="text-xs text-[var(--color-muted-foreground)]">
+                        {meeting.participantIds.length} participants
+                      </span>
+                    </div>
+                    {meeting.meetingLink && (
+                      <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => window.open(meeting.meetingLink, '_blank')}>
+                        <Video className="w-3.5 h-3.5 mr-1" /> Join Meeting
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <AvatarGroup
-                      names={meeting.participantIds.slice(0, 4).map(id => getUserById(id)?.name || '').filter(Boolean)}
-                      max={3}
-                    />
-                    <span className="text-xs text-[var(--color-muted-foreground)]">
-                      {meeting.participantIds.length} participants
-                    </span>
-                  </div>
-                  {meeting.meetingLink && (
-                    <Button variant="outline" size="sm" className="w-full mt-3">
-                      <Video className="w-3.5 h-3.5 mr-1" /> Join Meeting
-                    </Button>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
           {/* My activity summary */}
           <div className="card p-6 animate-slide-in-right stagger-2">
-            <h2 className="text-base font-semibold mb-4">This Week</h2>
+            <h2 className="text-base font-semibold mb-4">Activity Summary</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[var(--color-muted-foreground)]">Tasks completed</span>
-                <span className="text-sm font-semibold">7</span>
+                <span className="text-sm font-semibold">{completedTasks.length}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[var(--color-muted-foreground)]">Tasks in review</span>
-                <span className="text-sm font-semibold">2</span>
+                <span className="text-sm font-semibold">{inReviewTasks.length}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[var(--color-muted-foreground)]">Avg. working hours</span>
-                <span className="text-sm font-semibold">7h 42m</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[var(--color-muted-foreground)]">Reports submitted</span>
-                <span className="text-sm font-semibold">4/5</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[var(--color-muted-foreground)]">Attendance</span>
-                <span className="text-sm font-semibold text-emerald-500">100%</span>
+                <span className="text-sm text-[var(--color-muted-foreground)]">Total assigned</span>
+                <span className="text-sm font-semibold">{tasks.length}</span>
               </div>
             </div>
           </div>

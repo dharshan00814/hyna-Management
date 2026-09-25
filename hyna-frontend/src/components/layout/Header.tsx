@@ -3,21 +3,30 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Search, Menu, ChevronDown, Sun, Moon, Monitor } from 'lucide-react';
 import { cn, getInitials, getAvatarColor, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore, useSidebarStore, useThemeStore } from '@/stores';
-import { mockNotifications } from '@/mock/data';
-import type { UserRole } from '@/types';
+import { getNotifications, markNotificationRead } from '@/services/api';
+import type { UserRole, Notification } from '@/types';
 
 export function Header() {
-  const { currentUser, currentRole, setRole } = useAuthStore();
+  const { currentUser, currentRole } = useAuthStore();
   const { setMobileOpen } = useSidebarStore();
   const { mode, setMode } = useThemeStore();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const userNotifications = mockNotifications
+  useEffect(() => {
+    let isMounted = true;
+    getNotifications(currentUser?.id).then((data) => {
+      if (isMounted) setNotifications(data);
+    });
+    return () => { isMounted = false; };
+  }, [currentUser?.id]);
+
+  const userNotifications = notifications
     .filter(n => n.userId === currentUser?.id || n.userId === 'all')
     .slice(0, 8);
   const unreadCount = userNotifications.filter(n => !n.read).length;
@@ -44,13 +53,6 @@ export function Header() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const handleRoleSwitch = (role: UserRole) => {
-    setRole(role);
-    const prefix = role === 'member' ? '/member' : '/admin';
-    navigate(`${prefix}/dashboard`);
-    setShowProfile(false);
-  };
 
   const themeIcons = { light: Sun, dark: Moon, system: Monitor };
   const ThemeIcon = themeIcons[mode];
@@ -95,23 +97,12 @@ export function Header() {
       <div className="flex-1" />
 
       {/* Role switcher (dev mode) */}
-      <div className="hidden sm:flex items-center gap-1 mr-3 px-2 py-1 rounded-lg bg-[var(--color-muted)] text-xs">
-        <span className="text-[var(--color-muted-foreground)] mr-1">Preview:</span>
-        {(['admin', 'manager', 'member'] as UserRole[]).map((role) => (
-          <button
-            key={role}
-            onClick={() => handleRoleSwitch(role)}
-            className={cn(
-              'px-2 py-1 rounded-md capitalize transition-colors font-medium',
-              currentRole === role
-                ? 'bg-[var(--color-primary)] text-white'
-                : 'hover:bg-[var(--color-background)] text-[var(--color-muted-foreground)]',
-            )}
-          >
-            {role}
-          </button>
-        ))}
-      </div>
+      {currentUser && (
+        <div className="hidden sm:flex items-center gap-2 mr-3 px-2.5 py-1 rounded-lg bg-[var(--color-muted)] text-xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="font-medium text-[var(--color-foreground)]">{currentUser.designation || currentRole}</span>
+        </div>
+      )}
 
       {/* Theme toggle */}
       <button
@@ -207,33 +198,35 @@ export function Header() {
           <div className="absolute right-0 top-full mt-2 w-56 card rounded-xl shadow-lg animate-scale-in overflow-hidden">
             {currentUser && (
               <div className="px-4 py-3 border-b border-[var(--color-border)]">
-                <p className="text-sm font-medium">{currentUser.name}</p>
-                <p className="text-xs text-[var(--color-muted-foreground)]">{currentUser.email}</p>
+                <p className="text-sm font-semibold truncate">{currentUser.name}</p>
+                <p className="text-xs text-[var(--color-muted-foreground)] truncate">{currentUser.email}</p>
+                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+                  {currentUser.designation || currentRole}
+                </span>
               </div>
             )}
             <div className="py-1">
               <button
-                onClick={() => { navigate(`/${currentRole === 'member' ? 'member' : 'admin'}/settings`); setShowProfile(false); }}
+                onClick={() => {
+                  const prefix = currentRole === 'member' ? '/member' : currentRole === 'manager' ? '/manager' : '/admin';
+                  navigate(`${prefix}/settings`);
+                  setShowProfile(false);
+                }}
                 className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--color-muted)] transition-colors"
               >
-                Settings
+                Account Settings
               </button>
-              {/* Mobile role switcher */}
-              <div className="sm:hidden border-t border-[var(--color-border)] mt-1 pt-1">
-                <p className="px-4 py-1 text-xs text-[var(--color-muted-foreground)]">Switch Role</p>
-                {(['admin', 'manager', 'member'] as UserRole[]).map((role) => (
-                  <button
-                    key={role}
-                    onClick={() => handleRoleSwitch(role)}
-                    className={cn(
-                      'w-full text-left px-4 py-2 text-sm capitalize hover:bg-[var(--color-muted)] transition-colors',
-                      currentRole === role && 'text-[var(--color-primary)] font-medium',
-                    )}
-                  >
-                    {role}
-                  </button>
-                ))}
-              </div>
+              <div className="border-t border-[var(--color-border)] my-1" />
+              <button
+                onClick={async () => {
+                  setShowProfile(false);
+                  await useAuthStore.getState().logout();
+                  navigate('/login', { replace: true });
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors font-medium"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         )}

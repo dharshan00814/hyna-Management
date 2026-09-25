@@ -1,22 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Users, Video, Mic, MicOff, VideoOff, Monitor, Phone, MessageSquare } from 'lucide-react';
-import { Button, Avatar, AvatarGroup, Badge, EmptyState } from '@/components/ui';
+import { ArrowLeft, Clock, Video, Mic, MicOff, VideoOff, Monitor, Phone, MessageSquare } from 'lucide-react';
+import { Button, Avatar, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockMeetings, getUserById } from '@/mock/data';
+import { getMeeting, getUsers, getUserById } from '@/services/api';
+import type { Meeting } from '@/types';
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentRole } = useAuthStore();
   const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
 
-  const meeting = mockMeetings.find(m => m.id === id);
-  if (!meeting) return <div className="page-container"><EmptyState title="Meeting not found" action={<Button onClick={() => navigate(`${prefix}/meetings`)}>Go Back</Button>} /></div>;
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      if (!id) return;
+      try {
+        await getUsers();
+        const m = await getMeeting(id);
+        if (isMounted && m) setMeeting(m);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, [id]);
+
+  if (isLoading) return <LoadingState />;
+
+  if (!meeting) {
+    return (
+      <div className="page-container">
+        <EmptyState title="Meeting not found" action={<Button onClick={() => navigate(`${prefix}/meetings`)}>Go Back</Button>} />
+      </div>
+    );
+  }
 
   const host = getUserById(meeting.hostId);
 
@@ -30,17 +58,17 @@ export function MeetingDetailPage() {
           </div>
           <div className="flex items-center gap-2 text-zinc-400 text-sm">
             <Clock className="w-4 h-4" />
-            <span>7:42</span>
+            <span>07:42</span>
           </div>
         </div>
         <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-2 p-4">
-          {meeting.participantIds.slice(0, 6).map((pId, idx) => {
+          {meeting.participantIds.slice(0, 6).map((pId) => {
             const participant = getUserById(pId);
             return (
               <div key={pId} className="relative rounded-xl bg-zinc-800 flex items-center justify-center overflow-hidden">
                 <Avatar name={participant?.name || ''} size="xl" />
                 <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md">
-                  {participant?.name?.split(' ')[0]}
+                  {participant?.name?.split(' ')[0] || 'Member'}
                 </div>
               </div>
             );
@@ -81,7 +109,7 @@ export function MeetingDetailPage() {
             <div className="grid grid-cols-2 gap-4 text-sm mb-4">
               <div><span className="text-[var(--color-muted-foreground)]">Date</span><br /><span className="font-medium">{formatDate(meeting.date)}</span></div>
               <div><span className="text-[var(--color-muted-foreground)]">Time</span><br /><span className="font-medium">{formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}</span></div>
-              <div><span className="text-[var(--color-muted-foreground)]">Host</span><br /><div className="flex items-center gap-2 mt-1">{host && <Avatar name={host.name} size="xs" />}<span className="font-medium">{host?.name}</span></div></div>
+              <div><span className="text-[var(--color-muted-foreground)]">Host</span><br /><div className="flex items-center gap-2 mt-1">{host && <Avatar name={host.name} size="xs" />}<span className="font-medium">{host?.name || 'Host'}</span></div></div>
               <div><span className="text-[var(--color-muted-foreground)]">Type</span><br /><span className="font-medium capitalize">{meeting.type}</span></div>
             </div>
             {meeting.meetingLink && (

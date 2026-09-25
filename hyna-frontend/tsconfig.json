@@ -5,6 +5,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "types": ["vite/client"],
+    "skipLibCheck": true,
     "allowArbitraryExtensions": true,
 
     /* Bundler mode */
@@ -16,8 +17,6 @@
     "jsx": "react-jsx",
 
     /* Path aliases */
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },

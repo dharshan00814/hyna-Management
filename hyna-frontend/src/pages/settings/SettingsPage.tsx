@@ -18,6 +18,8 @@ import {
 import { toast } from 'sonner';
 import { Button, Avatar } from '@/components/ui';
 import { useAuthStore, useThemeStore } from '@/stores';
+import { updateUserProfile } from '@/services/api';
+import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
 export function SettingsPage() {
@@ -46,32 +48,44 @@ export function SettingsPage() {
   const [confirmPassword, setNewConfirmPassword] = useState('');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser?.id) return;
 
-    setUser({
-      ...currentUser,
-      name,
-      email,
-      phone,
-      designation,
-      department,
-      bio,
-    });
-    toast.success('Profile updated successfully!');
+    try {
+      const updated = await updateUserProfile(currentUser.id, {
+        name,
+        phone,
+        bio,
+      });
+      setUser(updated);
+      toast.success('Profile updated in Supabase database!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update profile');
+    }
   };
 
-  const handleSaveSecurity = (e: React.FormEvent) => {
+  const handleSaveSecurity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword && newPassword !== confirmPassword) {
       toast.error('New passwords do not match.');
       return;
     }
-    toast.success('Security settings updated successfully!');
-    setCurrentPassword('');
-    setNewPassword('');
-    setNewConfirmPassword('');
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success('Security settings updated in Supabase Auth!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setNewConfirmPassword('');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update password');
+    }
   };
 
   return (

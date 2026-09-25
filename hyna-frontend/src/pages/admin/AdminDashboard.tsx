@@ -1,26 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, FolderKanban, CheckSquare, CalendarClock, Clock, Video,
-  ArrowRight, Eye, MoreHorizontal,
+  ArrowRight, Eye,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { StatCard, Avatar, AvatarGroup, Badge, ProgressBar, Button } from '@/components/ui';
-import { cn, getGreeting, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
+import { StatCard, Avatar, AvatarGroup, Badge, ProgressBar, Button, LoadingState } from '@/components/ui';
+import { cn, getGreeting, formatDate, formatTime, getStatusColor } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { mockProjects, mockTasks, mockMeetings, mockUsers, mockAttendance, getUserById } from '@/mock/data';
-
-const taskStatusData = [
-  { name: 'Completed', value: 14, color: '#10b981' },
-  { name: 'In Progress', value: 10, color: '#6366f1' },
-  { name: 'In Review', value: 5, color: '#8b5cf6' },
-  { name: 'Blocked', value: 3, color: '#ef4444' },
-  { name: 'Todo', value: 8, color: '#3b82f6' },
-  { name: 'Backlog', value: 10, color: '#a1a1aa' },
-];
+import {
+  getProjects, getTasks, getMeetings, getUsers, getAttendance, getUserById,
+} from '@/services/api';
+import type { Project, Task, Meeting, User, AttendanceRecord } from '@/types';
 
 const weeklyTaskData = [
   { day: 'Mon', completed: 8, created: 5 },
@@ -34,37 +28,83 @@ export function AdminDashboard() {
   const { currentUser } = useAuthStore();
   const navigate = useNavigate();
 
-  const todayStr = '2026-09-25';
-  const todayAttendance = mockAttendance.filter(a => a.date === todayStr);
+  const [isLoading, setIsLoading] = useState(true);
+  const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        const [u, p, t, m, a] = await Promise.all([
+          getUsers(),
+          getProjects(),
+          getTasks(),
+          getMeetings(),
+          getAttendance(),
+        ]);
+        if (isMounted) {
+          setUsers(u);
+          setProjects(p);
+          setTasks(t);
+          setMeetings(m);
+          setAttendance(a);
+        }
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, []);
+
+  if (isLoading) return <LoadingState />;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayAttendance = attendance.filter(a => a.date === todayStr);
   const presentCount = todayAttendance.filter(a => a.status === 'present' || a.status === 'late').length;
   const lateCount = todayAttendance.filter(a => a.status === 'late').length;
   const absentCount = todayAttendance.filter(a => a.status === 'absent').length;
   const leaveCount = todayAttendance.filter(a => a.status === 'leave').length;
 
-  const pendingTasks = mockTasks.filter(t => t.status !== 'completed' && t.status !== 'backlog').length;
-  const activeProjects = mockProjects.filter(p => p.status === 'active').length;
+  const pendingTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'backlog').length;
+  const activeProjects = projects.filter(p => p.status === 'active').length;
 
-  const upcomingMeetings = mockMeetings
-    .filter(m => m.status === 'scheduled' && m.date >= todayStr)
+  const upcomingMeetings = meetings
+    .filter(m => m.status === 'scheduled')
     .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
     .slice(0, 3);
 
-  const pendingReviews = mockTasks.filter(t => t.status === 'in-review' && t.submission?.reviewStatus === 'pending');
+  const pendingReviews = tasks.filter(t => t.status === 'in-review' && t.submission?.reviewStatus === 'pending');
+
+  const taskStatusData = [
+    { name: 'Completed', value: tasks.filter(t => t.status === 'completed').length || 1, color: '#10b981' },
+    { name: 'In Progress', value: tasks.filter(t => t.status === 'in-progress').length || 1, color: '#6366f1' },
+    { name: 'In Review', value: tasks.filter(t => t.status === 'in-review').length || 1, color: '#8b5cf6' },
+    { name: 'Blocked', value: tasks.filter(t => t.status === 'blocked').length || 1, color: '#ef4444' },
+    { name: 'Todo', value: tasks.filter(t => t.status === 'todo').length || 1, color: '#3b82f6' },
+    { name: 'Backlog', value: tasks.filter(t => t.status === 'backlog').length || 1, color: '#a1a1aa' },
+  ];
 
   return (
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name.split(' ')[0]} 👋</h1>
+        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Lead'} 👋</h1>
         <p className="page-description">Here's what's happening at Hyna Studio today.</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total Members" value={mockUsers.filter(u => u.status === 'active').length} change={8} icon={Users} iconColor="text-blue-500" />
+        <StatCard label="Total Members" value={users.filter(u => u.status === 'active').length} change={8} icon={Users} iconColor="text-blue-500" />
         <StatCard label="Active Projects" value={activeProjects} change={12} icon={FolderKanban} iconColor="text-violet-500" className="stagger-1" />
         <StatCard label="Pending Tasks" value={pendingTasks} change={-5} icon={CheckSquare} iconColor="text-amber-500" className="stagger-2" />
-        <StatCard label="Today's Attendance" value={`${presentCount}/${mockUsers.filter(u => u.status === 'active').length}`} change={2} icon={CalendarClock} iconColor="text-emerald-500" className="stagger-3" />
+        <StatCard label="Today's Attendance" value={`${presentCount}/${users.filter(u => u.status === 'active').length || 1}`} change={2} icon={CalendarClock} iconColor="text-emerald-500" className="stagger-3" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -79,7 +119,7 @@ export function AdminDashboard() {
               </Button>
             </div>
             <div className="space-y-4">
-              {mockProjects.filter(p => p.status === 'active').map((project) => (
+              {projects.filter(p => p.status === 'active').map((project) => (
                 <div
                   key={project.id}
                   className="flex items-center gap-4 p-3 rounded-lg hover:bg-[var(--color-muted)] transition-colors cursor-pointer group"
@@ -201,7 +241,7 @@ export function AdminDashboard() {
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {pendingReviews.map(task => {
                       const member = getUserById(task.assigneeId);
-                      const project = mockProjects.find(p => p.id === task.projectId);
+                      const project = projects.find(p => p.id === task.projectId);
                       return (
                         <tr key={task.id} className="hover:bg-[var(--color-muted)] transition-colors">
                           <td className="py-3 pr-4">
@@ -216,7 +256,7 @@ export function AdminDashboard() {
                           <td className="py-3 pr-4 hidden md:table-cell text-[var(--color-muted-foreground)]">{project?.name}</td>
                           <td className="py-3 pr-4 text-[var(--color-muted-foreground)]">{task.submission ? formatDate(task.submission.submittedAt) : '-'}</td>
                           <td className="py-3 text-right">
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" onClick={() => navigate('/admin/tasks')}>
                               <Eye className="w-3.5 h-3.5 mr-1" /> Review
                             </Button>
                           </td>
@@ -276,7 +316,7 @@ export function AdminDashboard() {
                     </span>
                   </div>
                   {meeting.meetingLink && (
-                    <Button variant="outline" size="sm" className="w-full mt-3">
+                    <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => window.open(meeting.meetingLink, '_blank')}>
                       <Video className="w-3.5 h-3.5 mr-1" /> Join Meeting
                     </Button>
                   )}
@@ -294,7 +334,7 @@ export function AdminDashboard() {
               </Button>
             </div>
             <div className="space-y-2">
-              {mockUsers.slice(0, 6).map(user => (
+              {users.slice(0, 6).map(user => (
                 <div
                   key={user.id}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
