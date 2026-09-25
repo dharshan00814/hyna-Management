@@ -9,8 +9,8 @@ import type { User, Task } from '@/types';
 
 export function MembersPage() {
   const navigate = useNavigate();
-  const { currentRole } = useAuthStore();
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const { currentRole, effectiveRole } = useAuthStore();
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [search, setSearch] = useState('');

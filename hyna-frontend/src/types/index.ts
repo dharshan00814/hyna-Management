@@ -18,6 +18,7 @@ export type FileType = 'document' | 'image' | 'video' | 'code' | 'archive' | 'sp
 // --- User ---
 export interface User {
   id: string;
+  employeeId?: string;
   name: string;
   email: string;
   avatar: string;

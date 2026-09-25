@@ -110,7 +110,8 @@ $$ LANGUAGE plpgsql;
 -- Profiles Table (Linked to Supabase Auth auth.users)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
+  employee_id TEXT UNIQUE,
+  name TEXT NOT NULL DEFAULT 'Team Member',
   email TEXT NOT NULL UNIQUE,
   avatar TEXT DEFAULT '',
   role user_role NOT NULL DEFAULT 'member',
@@ -365,8 +366,12 @@ AS $$
     SELECT 1 FROM public.profiles
     WHERE id = auth.uid()
       AND (
-        UPPER(TRIM(designation)) IN ('CEO', 'CTO', 'CPO', 'COO')
-        OR (role = 'admin' AND UPPER(TRIM(designation)) IN ('CEO', 'CTO', 'CPO', 'COO'))
+        role = 'admin'
+        OR UPPER(TRIM(designation)) IN ('CEO', 'CTO', 'CPO', 'COO', 'ADMIN', 'EXECUTIVE ADMIN')
+        OR LOWER(TRIM(name)) IN ('dharshan', 'vignesh', 'jashwin')
+        OR LOWER(TRIM(email)) LIKE '%dharshan%'
+        OR LOWER(TRIM(email)) LIKE '%vignesh%'
+        OR LOWER(TRIM(email)) LIKE '%jashwin%'
       )
   );
 $$;
@@ -382,7 +387,12 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
     WHERE id = auth.uid()
-      AND (role = 'manager' OR UPPER(TRIM(designation)) LIKE '%MANAGER%')
+      AND (
+        role = 'manager'
+        OR UPPER(TRIM(designation)) LIKE '%MANAGER%'
+        OR LOWER(TRIM(name)) LIKE '%asthamil%'
+        OR LOWER(TRIM(email)) LIKE '%asthamil%'
+      )
   );
 $$;
 
@@ -412,27 +422,72 @@ DECLARE
   v_role public.user_role := 'member';
   v_designation TEXT;
   v_department TEXT;
+  v_employee_id TEXT;
   v_is_first BOOLEAN := FALSE;
+  v_email_prefix TEXT;
 BEGIN
-  v_name := COALESCE(NULLIF(new.raw_user_meta_data->>'name', ''), NULLIF(split_part(new.email, '@', 1), ''), 'Team Member');
+  v_email_prefix := LOWER(split_part(new.email, '@', 1));
+  v_name := COALESCE(NULLIF(new.raw_user_meta_data->>'name', ''), initcap(v_email_prefix), 'Team Member');
   v_designation := COALESCE(NULLIF(new.raw_user_meta_data->>'designation', ''), 'Software Engineer');
   v_department := COALESCE(NULLIF(new.raw_user_meta_data->>'department', ''), 'Engineering');
+  v_employee_id := NULLIF(new.raw_user_meta_data->>'employee_id', '');
 
-  -- If this is the very first user in the database, automatically designate as CEO (admin)
   SELECT NOT EXISTS (SELECT 1 FROM public.profiles LIMIT 1) INTO v_is_first;
 
-  IF v_is_first THEN
+  -- Executive Admin Auto-Mapping:
+  -- Dharshan -> Admin (Full Access), EMP-003
+  IF v_email_prefix ILIKE '%dharshan%' OR v_name ILIKE '%dharshan%' THEN
+    v_role := 'admin';
+    v_designation := 'Admin';
+    v_department := 'Executive';
+    v_employee_id := COALESCE(v_employee_id, 'EMP-003');
+  -- Vignesh -> CEO (Full Access), EMP-001
+  ELSIF v_email_prefix ILIKE '%vignesh%' OR v_name ILIKE '%vignesh%' OR UPPER(TRIM(v_designation)) = 'CEO' THEN
     v_role := 'admin';
     v_designation := 'CEO';
     v_department := 'Executive';
-  ELSIF new.raw_user_meta_data->>'role' = 'admin' AND UPPER(TRIM(v_designation)) IN ('CEO', 'CTO', 'CPO', 'COO') THEN
+    v_employee_id := COALESCE(v_employee_id, 'EMP-001');
+  -- Jashwin -> COO (Full Access), EMP-002
+  ELSIF v_email_prefix ILIKE '%jashwin%' OR v_name ILIKE '%jashwin%' OR UPPER(TRIM(v_designation)) = 'COO' THEN
     v_role := 'admin';
-  ELSIF new.raw_user_meta_data->>'role' = 'manager' THEN
+    v_designation := 'COO';
+    v_department := 'Executive';
+    v_employee_id := COALESCE(v_employee_id, 'EMP-002');
+  -- Asthamil -> Manager (EMP-004)
+  ELSIF v_email_prefix ILIKE '%asthamil%' OR v_name ILIKE '%asthamil%' THEN
     v_role := 'manager';
+    v_designation := 'Engineering Manager';
+    v_department := 'Engineering';
+    v_employee_id := COALESCE(v_employee_id, 'EMP-004');
+  ELSIF v_is_first THEN
+    v_role := 'admin';
+    v_designation := 'Admin';
+    v_department := 'Executive';
+    v_employee_id := COALESCE(v_employee_id, 'EMP-003');
+  ELSIF new.raw_user_meta_data->>'role' = 'admin' AND UPPER(TRIM(v_designation)) IN ('CEO', 'CTO', 'CPO', 'COO', 'ADMIN') THEN
+    v_role := 'admin';
+  ELSIF new.raw_user_meta_data->>'role' = 'manager' OR UPPER(TRIM(v_designation)) LIKE '%MANAGER%' THEN
+    v_role := 'manager';
+  END IF;
+
+  -- Organization Employee ID Auto-Mapping:
+  IF v_employee_id IS NULL THEN
+    IF v_email_prefix ILIKE '%asthamil%' THEN v_employee_id := 'EMP-004';
+    ELSIF v_email_prefix ILIKE '%zarif%' THEN v_employee_id := 'EMP-005';
+    ELSIF v_email_prefix ILIKE '%hajira%' THEN v_employee_id := 'EMP-006';
+    ELSIF v_email_prefix ILIKE '%linciya%' THEN v_employee_id := 'EMP-007';
+    ELSIF v_email_prefix ILIKE '%arshiya%' THEN v_employee_id := 'EMP-008';
+    ELSIF v_email_prefix ILIKE '%akshaya%' THEN v_employee_id := 'EMP-009';
+    ELSIF v_email_prefix ILIKE '%thivan%' THEN v_employee_id := 'EMP-010';
+    ELSIF v_email_prefix ILIKE '%rohit%' THEN v_employee_id := 'EMP-011';
+    ELSIF v_email_prefix ILIKE '%tharun%' THEN v_employee_id := 'EMP-012';
+    ELSIF v_email_prefix ILIKE '%anzar%' THEN v_employee_id := 'EMP-013';
+    END IF;
   END IF;
 
   INSERT INTO public.profiles (
     id,
+    employee_id,
     name,
     email,
     role,
@@ -442,6 +497,7 @@ BEGIN
   )
   VALUES (
     new.id,
+    v_employee_id,
     v_name,
     new.email,
     v_role,
@@ -452,7 +508,10 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
   SET
     email = EXCLUDED.email,
+    employee_id = COALESCE(public.profiles.employee_id, EXCLUDED.employee_id),
     name = CASE WHEN public.profiles.name = '' OR public.profiles.name IS NULL THEN EXCLUDED.name ELSE public.profiles.name END,
+    role = CASE WHEN public.profiles.role IN ('admin', 'manager') THEN public.profiles.role ELSE EXCLUDED.role END,
+    designation = CASE WHEN public.profiles.role IN ('admin', 'manager') THEN public.profiles.designation ELSE EXCLUDED.designation END,
     updated_at = NOW();
 
   RETURN NEW;
@@ -468,6 +527,25 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
+-- Trigger: Automatically confirm new user email so Supabase allows instant login without sending email
+CREATE OR REPLACE FUNCTION public.auto_confirm_new_user()
+RETURNS TRIGGER 
+LANGUAGE plpgsql 
+SECURITY DEFINER 
+SET search_path = public, auth, pg_temp
+AS $$
+BEGIN
+  NEW.email_confirmed_at := COALESCE(NEW.email_confirmed_at, NOW());
+  NEW.confirmed_at := COALESCE(NEW.confirmed_at, NOW());
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_auto_confirm_new_user ON auth.users;
+CREATE TRIGGER trg_auto_confirm_new_user
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.auto_confirm_new_user();
+
 -- Trigger: Prevent regular users from modifying their own role or assigning executive designations
 CREATE OR REPLACE FUNCTION public.protect_profile_role()
 RETURNS TRIGGER 
@@ -476,13 +554,41 @@ SECURITY DEFINER
 SET search_path = public, auth, pg_temp
 AS $$
 BEGIN
+  -- Enforce Executive Admin status for Dharshan, Vignesh, and Jashwin
+  IF LOWER(TRIM(NEW.name)) IN ('dharshan', 'vignesh', 'jashwin') 
+     OR LOWER(TRIM(NEW.email)) LIKE '%dharshan%' 
+     OR LOWER(TRIM(NEW.email)) LIKE '%vignesh%' 
+     OR LOWER(TRIM(NEW.email)) LIKE '%jashwin%' THEN
+    NEW.role := 'admin';
+    IF LOWER(TRIM(NEW.name)) LIKE '%vignesh%' OR LOWER(TRIM(NEW.email)) LIKE '%vignesh%' THEN
+      NEW.designation := 'CEO';
+      NEW.employee_id := COALESCE(NEW.employee_id, 'EMP-001');
+    ELSIF LOWER(TRIM(NEW.name)) LIKE '%jashwin%' OR LOWER(TRIM(NEW.email)) LIKE '%jashwin%' THEN
+      NEW.designation := 'COO';
+      NEW.employee_id := COALESCE(NEW.employee_id, 'EMP-002');
+    ELSE
+      NEW.designation := 'Admin';
+      NEW.employee_id := COALESCE(NEW.employee_id, 'EMP-003');
+    END IF;
+    NEW.department := 'Executive';
+    RETURN NEW;
+  END IF;
+
+  -- Enforce Manager status for Asthamil
+  IF LOWER(TRIM(NEW.name)) LIKE '%asthamil%' OR LOWER(TRIM(NEW.email)) LIKE '%asthamil%' THEN
+    NEW.role := 'manager';
+    NEW.designation := 'Engineering Manager';
+    NEW.employee_id := COALESCE(NEW.employee_id, 'EMP-004');
+    NEW.department := 'Engineering';
+    RETURN NEW;
+  END IF;
+
   -- Only enforce role modification restrictions for active end-user sessions
-  -- auth.uid() IS NULL means this is an internal database trigger
   IF auth.uid() IS NOT NULL AND NOT public.is_executive() THEN
     IF NEW.role <> OLD.role THEN
       RAISE EXCEPTION 'Access Denied: You cannot modify your own role.';
     END IF;
-    IF NEW.designation <> OLD.designation AND UPPER(TRIM(NEW.designation)) IN ('CEO', 'CTO', 'CPO', 'COO') THEN
+    IF NEW.designation <> OLD.designation AND UPPER(TRIM(NEW.designation)) IN ('CEO', 'CTO', 'CPO', 'COO', 'ADMIN') THEN
       RAISE EXCEPTION 'Access Denied: You cannot assign executive designations.';
     END IF;
   END IF;
@@ -762,3 +868,48 @@ EXCEPTION
   WHEN undefined_object THEN null;
   WHEN others THEN null;
 END $$;
+
+-- ============================================================
+-- 9. AUTO-CONFIRM TRIGGER (INSTANT REGISTRATION WITHOUT EMAIL LINK)
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.auto_confirm_new_user()
+RETURNS TRIGGER 
+LANGUAGE plpgsql 
+SECURITY DEFINER 
+SET search_path = public, auth, pg_temp
+AS $$
+BEGIN
+  NEW.email_confirmed_at := COALESCE(NEW.email_confirmed_at, NOW());
+  NEW.confirmed_at := COALESCE(NEW.confirmed_at, NOW());
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_auto_confirm_new_user ON auth.users;
+CREATE TRIGGER trg_auto_confirm_new_user
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.auto_confirm_new_user();
+
+-- ============================================================
+-- 10. ROLE SYNCHRONIZATION FOR EXISTING ACCOUNTS
+-- Dharshan -> Admin (EMP-003)
+-- Vignesh  -> CEO (EMP-001)
+-- Jashwin  -> COO (EMP-002)
+-- Asthamil -> Manager (EMP-004)
+-- ============================================================
+UPDATE public.profiles 
+SET role = 'admin', designation = 'Admin', department = 'Executive', employee_id = COALESCE(employee_id, 'EMP-003')
+WHERE LOWER(name) LIKE '%dharshan%' OR LOWER(email) LIKE '%dharshan%';
+
+UPDATE public.profiles 
+SET role = 'admin', designation = 'CEO', department = 'Executive', employee_id = COALESCE(employee_id, 'EMP-001')
+WHERE LOWER(name) LIKE '%vignesh%' OR LOWER(email) LIKE '%vignesh%';
+
+UPDATE public.profiles 
+SET role = 'admin', designation = 'COO', department = 'Executive', employee_id = COALESCE(employee_id, 'EMP-002')
+WHERE LOWER(name) LIKE '%jashwin%' OR LOWER(email) LIKE '%jashwin%';
+
+UPDATE public.profiles 
+SET role = 'manager', designation = 'Engineering Manager', department = 'Engineering', employee_id = COALESCE(employee_id, 'EMP-004')
+WHERE LOWER(name) LIKE '%asthamil%' OR LOWER(email) LIKE '%asthamil%';
+

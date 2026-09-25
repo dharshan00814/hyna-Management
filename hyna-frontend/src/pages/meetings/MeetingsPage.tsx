@@ -10,8 +10,8 @@ import type { Meeting, MeetingType } from '@/types';
 
 export function MeetingsPage() {
   const navigate = useNavigate();
-  const { currentRole, currentUser } = useAuthStore();
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const { currentRole, currentUser, effectiveRole } = useAuthStore();
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);

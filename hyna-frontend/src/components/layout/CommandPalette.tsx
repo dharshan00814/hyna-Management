@@ -25,8 +25,8 @@ export function CommandPalette() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { currentRole } = useAuthStore();
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const { currentRole, effectiveRole } = useAuthStore();
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
 
   useEffect(() => {
     if (isOpen) {

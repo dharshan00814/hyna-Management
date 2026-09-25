@@ -11,8 +11,8 @@ import type { Project, Module, Task } from '@/types';
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentRole } = useAuthStore();
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const { currentRole, effectiveRole } = useAuthStore();
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateModule, setShowCreateModule] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

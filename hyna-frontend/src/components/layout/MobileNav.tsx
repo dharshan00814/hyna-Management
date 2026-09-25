@@ -4,11 +4,11 @@ import { cn } from '@/lib/utils';
 import { useAuthStore, useSidebarStore } from '@/stores';
 
 export function MobileNav() {
-  const { currentRole } = useAuthStore();
+  const { currentRole, effectiveRole } = useAuthStore();
   const { setMobileOpen } = useSidebarStore();
   const location = useLocation();
 
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
 
   const items = [
     { label: 'Home', icon: LayoutDashboard, path: `${prefix}/dashboard` },

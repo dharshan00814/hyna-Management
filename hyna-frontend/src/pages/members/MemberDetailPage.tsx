@@ -10,8 +10,8 @@ import type { User, Task, Project } from '@/types';
 export function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentRole } = useAuthStore();
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const { currentRole, effectiveRole } = useAuthStore();
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [activeTab, setActiveTab] = useState('profile');
   const [member, setMember] = useState<User | null>(null);
   const [memberTasks, setMemberTasks] = useState<Task[]>([]);

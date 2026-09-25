@@ -10,8 +10,8 @@ import type { Project, ProjectStatus } from '@/types';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const { currentRole, currentUser } = useAuthStore();
-  const prefix = currentRole === 'member' ? '/member' : '/admin';
+  const { currentRole, currentUser, effectiveRole } = useAuthStore();
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');

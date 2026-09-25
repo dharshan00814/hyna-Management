@@ -7,7 +7,7 @@ import { getNotifications, markNotificationRead } from '@/services/api';
 import type { UserRole, Notification } from '@/types';
 
 export function Header() {
-  const { currentUser, currentRole } = useAuthStore();
+  const { currentUser, currentRole, effectiveRole } = useAuthStore();
   const { setMobileOpen } = useSidebarStore();
   const { mode, setMode } = useThemeStore();
   const navigate = useNavigate();
@@ -208,7 +208,7 @@ export function Header() {
             <div className="py-1">
               <button
                 onClick={() => {
-                  const prefix = currentRole === 'member' ? '/member' : currentRole === 'manager' ? '/manager' : '/admin';
+                  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
                   navigate(`${prefix}/settings`);
                   setShowProfile(false);
                 }}

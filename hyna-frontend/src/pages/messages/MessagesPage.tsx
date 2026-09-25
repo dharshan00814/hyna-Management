@@ -51,11 +51,11 @@ export function MessagesPage() {
   }, [messages.length, selectedChannel]);
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !selectedChannel) return;
+    if (!newMessage.trim() || !selectedChannel || !currentUser?.id) return;
     const text = newMessage.trim();
     setNewMessage('');
     try {
-      const sent = await sendMessage(selectedChannel, text, currentUser?.id || 'u2');
+      const sent = await sendMessage(selectedChannel, text, currentUser.id);
       setMessages(prev => [...prev, sent]);
     } catch (err) {
       console.error('Failed to send message:', err);

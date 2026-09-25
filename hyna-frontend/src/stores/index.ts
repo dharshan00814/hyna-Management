@@ -8,16 +8,43 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 // - Admin access is ONLY for: CEO, CTO, CPO, COO
 // - Manager access is for: role = 'manager' or Manager designation
 // - All other users are Members
-export function computeEffectiveRole(user: { role?: string; designation?: string } | null | undefined): 'admin' | 'manager' | 'member' {
+export function computeEffectiveRole(user: { role?: string; designation?: string; name?: string; email?: string; employeeId?: string } | null | undefined): 'admin' | 'manager' | 'member' {
   if (!user) return 'member';
+  const roleLower = (user.role || '').trim().toLowerCase();
   const designationUpper = (user.designation || '').trim().toUpperCase();
-  const executiveDesignations = ['CEO', 'CTO', 'CPO', 'COO'];
+  const nameLower = (user.name || '').trim().toLowerCase();
+  const emailLower = (user.email || '').trim().toLowerCase();
+  const empIdUpper = (((user as any).employeeId || (user as any).employee_id || '') as string).trim().toUpperCase();
 
-  if (executiveDesignations.includes(designationUpper) || (user.role === 'admin' && executiveDesignations.some(d => designationUpper.includes(d)))) {
+  // Dharshan (Admin), Vignesh (CEO), and Jashwin (COO) are guaranteed Full Admin Access
+  if (
+    roleLower === 'admin' ||
+    designationUpper.includes('ADMIN') ||
+    designationUpper.includes('CEO') ||
+    designationUpper.includes('COO') ||
+    designationUpper.includes('CTO') ||
+    designationUpper.includes('CPO') ||
+    nameLower.includes('dharshan') ||
+    emailLower.includes('dharshan') ||
+    nameLower.includes('vignesh') ||
+    emailLower.includes('vignesh') ||
+    nameLower.includes('jashwin') ||
+    emailLower.includes('jashwin') ||
+    empIdUpper === 'EMP-001' ||
+    empIdUpper === 'EMP-002' ||
+    empIdUpper === 'EMP-003'
+  ) {
     return 'admin';
   }
 
-  if (user.role === 'manager' || designationUpper.includes('MANAGER')) {
+  // Asthamil is Engineering Manager (EMP-004) -> Manager Access
+  if (
+    roleLower === 'manager' ||
+    designationUpper.includes('MANAGER') ||
+    nameLower.includes('asthamil') ||
+    emailLower.includes('asthamil') ||
+    empIdUpper === 'EMP-004'
+  ) {
     return 'manager';
   }
 
@@ -27,6 +54,7 @@ export function computeEffectiveRole(user: { role?: string; designation?: string
 function mapDatabaseProfile(row: any): User {
   return {
     id: row.id,
+    employeeId: row.employee_id || '',
     name: row.name || 'Team Member',
     email: row.email || '',
     avatar: row.avatar || '',
@@ -49,8 +77,8 @@ interface AuthState {
   effectiveRole: 'admin' | 'manager' | 'member';
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; role?: 'admin' | 'manager' | 'member'; error?: string }>;
-  signUp: (data: { email: string; password: string; name: string; department?: string; designation?: string }) => Promise<{ success: boolean; session?: boolean; requiresEmailConfirmation?: boolean; role?: 'admin' | 'manager' | 'member'; error?: string }>;
+  login: (identifier: string, password: string) => Promise<{ success: boolean; role?: 'admin' | 'manager' | 'member'; error?: string }>;
+  signUp: (data: { email: string; password: string; name: string; department?: string; designation?: string; employeeId?: string }) => Promise<{ success: boolean; session?: boolean; requiresEmailConfirmation?: boolean; role?: 'admin' | 'manager' | 'member'; error?: string }>;
   logout: () => Promise<void>;
   setUser: (user: User) => void;
   initializeAuth: () => Promise<void>;
@@ -65,11 +93,59 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: true,
 
-      login: async (email: string, password: string) => {
+      login: async (identifier: string, password: string) => {
         try {
           set({ isLoading: true });
+          const rawId = identifier.trim();
+          let emailToUse = rawId;
+
+          // Support logging in via Employee ID (EMP-001..013), Username (dharshan, jashwin, vignesh), or Email
+          if (!rawId.includes('@')) {
+            const { data: matchedProfile } = await supabase
+              .from('profiles')
+              .select('email')
+              .or(`employee_id.ilike.${rawId},name.ilike.${rawId}`)
+              .maybeSingle();
+
+            if (matchedProfile?.email) {
+              emailToUse = matchedProfile.email;
+            } else {
+              const idUpper = rawId.toUpperCase();
+              const idLower = rawId.toLowerCase();
+              if (idUpper === 'EMP-001' || idLower.includes('vignesh')) {
+                emailToUse = 'vignesh@hynastudio.com';
+              } else if (idUpper === 'EMP-002' || idLower.includes('jashwin')) {
+                emailToUse = 'jashwin@hynastudio.com';
+              } else if (idUpper === 'EMP-003' || idLower.includes('dharshan')) {
+                emailToUse = 'dharshan@hynastudio.com';
+              } else if (idUpper === 'EMP-004' || idLower.includes('asthamil')) {
+                emailToUse = 'asthamil@hynastudio.com';
+              } else if (idUpper === 'EMP-005' || idLower.includes('zarif')) {
+                emailToUse = 'zarif@hynastudio.com';
+              } else if (idUpper === 'EMP-006' || idLower.includes('hajira')) {
+                emailToUse = 'hajiramufliha@hynastudio.com';
+              } else if (idUpper === 'EMP-007' || idLower.includes('linciya')) {
+                emailToUse = 'linciya@hynastudio.com';
+              } else if (idUpper === 'EMP-008' || idLower.includes('arshiya')) {
+                emailToUse = 'arshiya@hynastudio.com';
+              } else if (idUpper === 'EMP-009' || idLower.includes('akshaya')) {
+                emailToUse = 'akshaya@hynastudio.com';
+              } else if (idUpper === 'EMP-010' || idLower.includes('thivan')) {
+                emailToUse = 'thivan@hynastudio.com';
+              } else if (idUpper === 'EMP-011' || idLower.includes('rohit')) {
+                emailToUse = 'rohit@hynastudio.com';
+              } else if (idUpper === 'EMP-012' || idLower.includes('tharun')) {
+                emailToUse = 'tharunkrishna@hynastudio.com';
+              } else if (idUpper === 'EMP-013' || idLower.includes('anzar')) {
+                emailToUse = 'anzar@hynastudio.com';
+              } else {
+                emailToUse = `${idLower}@hynastudio.com`;
+              }
+            }
+          }
+
           const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
+            email: emailToUse,
             password,
           });
 
@@ -161,18 +237,53 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      signUp: async ({ email, password, name, department, designation }) => {
+      signUp: async ({ email, password, name, department, designation, employeeId }) => {
         try {
           set({ isLoading: true });
+          const regEmail = email.trim();
+          const nameLower = name.trim().toLowerCase();
+          const emailLower = regEmail.toLowerCase();
+          const empIdUpper = (employeeId || '').trim().toUpperCase();
+
+          let userRole: UserRole = 'member';
+          let userDesignation = designation?.trim() || 'Software Engineer';
+          let userDepartment = department?.trim() || 'Engineering';
+          let userEmpId = employeeId?.trim() || undefined;
+
+          // Executive Admin auto-detection (Dharshan Admin EMP-003, Vignesh CEO EMP-001, Jashwin COO EMP-002)
+          if (nameLower.includes('dharshan') || emailLower.includes('dharshan') || empIdUpper === 'EMP-003') {
+            userRole = 'admin';
+            userDesignation = 'Admin';
+            userDepartment = 'Executive';
+            userEmpId = 'EMP-003';
+          } else if (nameLower.includes('vignesh') || emailLower.includes('vignesh') || empIdUpper === 'EMP-001') {
+            userRole = 'admin';
+            userDesignation = 'CEO';
+            userDepartment = 'Executive';
+            userEmpId = 'EMP-001';
+          } else if (nameLower.includes('jashwin') || emailLower.includes('jashwin') || empIdUpper === 'EMP-002') {
+            userRole = 'admin';
+            userDesignation = 'COO';
+            userDepartment = 'Executive';
+            userEmpId = 'EMP-002';
+          // Manager auto-detection (Asthamil Engineering Manager EMP-004)
+          } else if (nameLower.includes('asthamil') || emailLower.includes('asthamil') || empIdUpper === 'EMP-004') {
+            userRole = 'manager';
+            userDesignation = 'Engineering Manager';
+            userDepartment = 'Engineering';
+            userEmpId = 'EMP-004';
+          }
+
           const { data: authData, error: signUpError } = await supabase.auth.signUp({
-            email: email.trim(),
+            email: regEmail,
             password,
             options: {
               data: {
                 name: name.trim(),
-                department: department?.trim() || 'Engineering',
-                designation: designation?.trim() || 'Software Engineer',
-                role: 'member', // Enforce member role on sign up
+                department: userDepartment,
+                designation: userDesignation,
+                role: userRole,
+                employee_id: userEmpId,
               },
             },
           });
@@ -203,11 +314,12 @@ export const useAuthStore = create<AuthState>()(
                 .from('profiles')
                 .insert({
                   id: userId,
+                  employee_id: userEmpId,
                   name: name.trim(),
-                  email: email.trim(),
-                  department: department?.trim() || 'Engineering',
-                  designation: designation?.trim() || 'Software Engineer',
-                  role: 'member',
+                  email: regEmail,
+                  department: userDepartment,
+                  designation: userDesignation,
+                  role: userRole,
                   status: 'active',
                 })
                 .select()
@@ -218,12 +330,13 @@ export const useAuthStore = create<AuthState>()(
 
             const newUser: User = profile ? mapDatabaseProfile(profile) : {
               id: userId,
+              employeeId: userEmpId || '',
               name: name.trim(),
-              email: email.trim(),
+              email: regEmail,
               avatar: '',
-              role: 'member',
-              department: department?.trim() || 'Engineering',
-              designation: designation?.trim() || 'Software Engineer',
+              role: userRole,
+              department: userDepartment,
+              designation: userDesignation,
               phone: '',
               joinDate: new Date().toISOString().split('T')[0],
               status: 'active',
@@ -243,8 +356,9 @@ export const useAuthStore = create<AuthState>()(
             return { success: true, session: true, requiresEmailConfirmation: false, role };
           } else {
             // User registered, but email confirmation is pending in Supabase
+            const role = userRole === 'admin' ? 'admin' : userRole === 'manager' ? 'manager' : 'member';
             set({ isLoading: false });
-            return { success: true, session: false, requiresEmailConfirmation: true };
+            return { success: true, session: false, requiresEmailConfirmation: true, role };
           }
         } catch (err: any) {
           set({ isLoading: false });

@@ -25,6 +25,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
   const [department, setDepartment] = useState('Engineering');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,7 +35,7 @@ export function LoginPage() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setErrorMessage('Please enter both your work email and password.');
+      setErrorMessage('Please enter your Work Email or Employee ID and password.');
       return;
     }
 
@@ -55,7 +56,7 @@ export function LoginPage() {
       toast.success('Authenticated successfully. Loading your dashboard...');
 
       // Dynamic routing strictly based on database role:
-      // CEO / CTO / CPO / COO -> /admin/dashboard
+      // CEO / CTO / CPO / COO / Admin -> /admin/dashboard
       // Manager -> /manager/dashboard
       // Member -> /member/dashboard
       let targetRoute = '/member/dashboard';
@@ -91,12 +92,46 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
+      let regEmail = email.trim();
+      if (!regEmail.includes('@')) {
+        regEmail = `${regEmail.toLowerCase()}@hynastudio.com`;
+      }
+      const regPassword = password;
+
+      let userDesignation = 'Software Engineer';
+      let userDepartment = department.trim();
+
+      const nameLower = name.trim().toLowerCase();
+      const emailLower = regEmail.toLowerCase();
+
+      // Automatic Executive Admin & Manager assignment
+      let userEmployeeId = employeeId.trim() || undefined;
+
+      if (nameLower.includes('dharshan') || emailLower.includes('dharshan')) {
+        userDesignation = 'Admin';
+        userDepartment = 'Executive';
+        userEmployeeId = userEmployeeId || 'EMP-003';
+      } else if (nameLower.includes('vignesh') || emailLower.includes('vignesh')) {
+        userDesignation = 'CEO';
+        userDepartment = 'Executive';
+        userEmployeeId = userEmployeeId || 'EMP-001';
+      } else if (nameLower.includes('jashwin') || emailLower.includes('jashwin')) {
+        userDesignation = 'COO';
+        userDepartment = 'Executive';
+        userEmployeeId = userEmployeeId || 'EMP-002';
+      } else if (nameLower.includes('asthamil') || emailLower.includes('asthamil') || userEmployeeId?.toUpperCase() === 'EMP-004') {
+        userDesignation = 'Engineering Manager';
+        userDepartment = 'Engineering';
+        userEmployeeId = 'EMP-004';
+      }
+
       const result = await signUp({
         name: name.trim(),
-        email: email.trim(),
-        password,
-        department: department.trim(),
-        designation: 'Software Engineer', // Default designation for new signups
+        email: regEmail,
+        password: regPassword,
+        department: userDepartment,
+        designation: userDesignation,
+        employeeId: userEmployeeId,
       });
 
       if (!result.success) {
@@ -106,19 +141,31 @@ export function LoginPage() {
         return;
       }
 
-      if (result.requiresEmailConfirmation) {
-        setInfoMessage('Account created! A confirmation email has been sent. Please confirm your email before signing in, or sign in now if email confirmation is disabled in your project.');
-        toast.info('Account created! Please check your email inbox.');
-        setMode('signin');
-      } else {
-        toast.success('Account created! Welcome to Hyna Studio.');
-        const targetRoute = result.role === 'admin' ? '/admin/dashboard' : result.role === 'manager' ? '/manager/dashboard' : '/member/dashboard';
+      // Automatically switch to Sign In mode and immediately log in
+      setMode('signin');
+      setEmail(regEmail);
+      setPassword(regPassword);
+      toast.info('Account registered! Automatically signing you in...');
+
+      const loginResult = await login(regEmail, regPassword);
+
+      if (loginResult.success) {
+        toast.success('Authenticated successfully! Loading your dashboard...');
+        const targetRoute =
+          loginResult.role === 'admin'
+            ? '/admin/dashboard'
+            : loginResult.role === 'manager'
+            ? '/manager/dashboard'
+            : '/member/dashboard';
+
         navigate(targetRoute, { replace: true });
+      } else {
+        setErrorMessage(loginResult.error || 'Registration successful. Click Sign In to continue.');
+        setIsLoading(false);
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Registration error');
       toast.error('Could not complete registration');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -249,9 +296,25 @@ export function LoginPage() {
                       type="text"
                       required
                       autoComplete="name"
-                      placeholder="Jane Doe"
+                      placeholder="e.g. your id"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      className="w-full h-10 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="signup-emp-id" className="text-xs font-medium">Employee ID (Optional)</label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-3 top-2.5 w-4 h-4 text-[var(--color-muted-foreground)]" />
+                    <input
+                      id="signup-emp-id"
+                      name="employeeId"
+                      type="text"
+                      placeholder="e.g. EMP-003, EMP-004, EMP-001, EMP-002"
+                      value={employeeId}
+                      onChange={(e) => setEmployeeId(e.target.value)}
                       className="w-full h-10 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     />
                   </div>
@@ -269,6 +332,7 @@ export function LoginPage() {
                       onChange={(e) => setDepartment(e.target.value)}
                       className="w-full h-10 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     >
+                      <option value="Executive">Executive</option>
                       <option value="Engineering">Engineering</option>
                       <option value="Design">Design</option>
                       <option value="Product">Product</option>
@@ -281,16 +345,18 @@ export function LoginPage() {
             )}
 
             <div className="space-y-1.5">
-              <label htmlFor="auth-email" className="text-xs font-medium">Work Email</label>
+              <label htmlFor="auth-email" className="text-xs font-medium">
+                {mode === 'signin' ? 'Work Email or Employee ID' : 'Work Email'}
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5 w-4 h-4 text-[var(--color-muted-foreground)]" />
                 <input
                   id="auth-email"
                   name="email"
-                  type="email"
+                  type={mode === 'signin' ? 'text' : 'email'}
                   required
-                  autoComplete="email"
-                  placeholder="name@hynastudio.com"
+                  autoComplete={mode === 'signin' ? 'username' : 'email'}
+                  placeholder={mode === 'signin' ? 'EMP-003, EMP-004, asthamil, or dharshan@hynastudio.com' : 'asthamil@hynastudio.com'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full h-10 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
