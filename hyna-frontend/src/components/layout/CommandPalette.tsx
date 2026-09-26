@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, FolderKanban, CheckSquare, Users, Video, FileText, MessageCircle, Settings, BarChart3 } from 'lucide-react';
+import { Search, FolderKanban, CheckSquare, Users, Video, FileText, MessageCircle, Settings, BarChart3, Activity, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getProjects, getTasks, getUsers, getMeetings } from '@/services/api';
@@ -57,9 +57,11 @@ export function CommandPalette() {
         { id: 'nav-dashboard', title: 'Dashboard', subtitle: 'Go to dashboard', icon: BarChart3, path: `${prefix}/dashboard`, category: 'Pages' },
         { id: 'nav-projects', title: 'Projects', subtitle: 'View all projects', icon: FolderKanban, path: `${prefix}/projects`, category: 'Pages' },
         { id: 'nav-tasks', title: 'Tasks', subtitle: 'Manage tasks', icon: CheckSquare, path: `${prefix}/tasks`, category: 'Pages' },
+        { id: 'nav-activity', title: 'Activity Tracking', subtitle: 'Development time in VS Code, Cursor & Antigravity', icon: Activity, path: `${prefix}/activity`, category: 'Pages' },
         { id: 'nav-meetings', title: 'Meetings', subtitle: 'View meetings', icon: Video, path: `${prefix}/meetings`, category: 'Pages' },
         { id: 'nav-messages', title: 'Messages', subtitle: 'Open messages', icon: MessageCircle, path: `${prefix}/messages`, category: 'Pages' },
         { id: 'nav-files', title: 'Files', subtitle: 'Browse files', icon: FileText, path: `${prefix}/files`, category: 'Pages' },
+        { id: 'nav-privacy', title: 'Privacy & Tracking Policy', subtitle: 'View data collection transparency', icon: ShieldCheck, path: '/privacy/tracking', category: 'Pages' },
         { id: 'nav-settings', title: 'Settings', subtitle: 'App settings', icon: Settings, path: `${prefix}/settings`, category: 'Pages' },
       ];
     }

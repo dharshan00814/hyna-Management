@@ -119,9 +119,9 @@ export function AdminDashboard() {
               </Button>
             </div>
             <div className="space-y-4">
-              {projects.filter(p => p.status === 'active').map((project) => (
+              {projects.filter(p => p.status === 'active').map((project, idx) => (
                 <div
-                  key={project.id}
+                  key={`${project.id}-${idx}`}
                   className="flex items-center gap-4 p-3 rounded-lg hover:bg-[var(--color-muted)] transition-colors cursor-pointer group"
                   onClick={() => navigate(`/admin/projects/${project.id}`)}
                 >

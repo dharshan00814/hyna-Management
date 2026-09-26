@@ -119,8 +119,8 @@ export function MemberDetailPage() {
 
       {activeTab === 'projects' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
-          {memberProjects.map(project => (
-            <div key={project.id} className="card p-5 card-hover cursor-pointer" onClick={() => navigate(`${prefix}/projects/${project.id}`)}>
+          {memberProjects.map((project, idx) => (
+            <div key={`${project.id}-${idx}`} className="card p-5 card-hover cursor-pointer" onClick={() => navigate(`${prefix}/projects/${project.id}`)}>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: project.color }} />
                 <h3 className="text-sm font-semibold">{project.name}</h3>

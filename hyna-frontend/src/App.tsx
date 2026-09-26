@@ -29,6 +29,14 @@ import { ManagerDashboard } from './pages/manager/ManagerDashboard';
 // Member pages
 import { MemberDashboard } from './pages/member/MemberDashboard';
 
+// Activity & Privacy Tracking pages
+import {
+  AdminActivityPage,
+  ManagerActivityPage,
+  MemberActivityPage,
+  PrivacyTrackingPage,
+} from './pages/activity';
+
 function App() {
   const { mode, resolvedTheme, setMode } = useThemeStore();
   const { effectiveRole, isAuthenticated, initializeAuth } = useAuthStore();
@@ -90,6 +98,7 @@ function App() {
             <Route path="/admin/members" element={<MembersPage />} />
             <Route path="/admin/members/:id" element={<MemberDetailPage />} />
             <Route path="/admin/attendance" element={<AttendancePage />} />
+            <Route path="/admin/activity" element={<AdminActivityPage />} />
             <Route path="/admin/meetings" element={<MeetingsPage />} />
             <Route path="/admin/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/admin/reports" element={<ReportsPage />} />
@@ -111,6 +120,7 @@ function App() {
             <Route path="/manager/members" element={<MembersPage />} />
             <Route path="/manager/members/:id" element={<MemberDetailPage />} />
             <Route path="/manager/attendance" element={<AttendancePage />} />
+            <Route path="/manager/activity" element={<ManagerActivityPage />} />
             <Route path="/manager/meetings" element={<MeetingsPage />} />
             <Route path="/manager/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/manager/reports" element={<ReportsPage />} />
@@ -130,6 +140,7 @@ function App() {
             <Route path="/member/projects" element={<ProjectsPage />} />
             <Route path="/member/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/member/attendance" element={<AttendancePage />} />
+            <Route path="/member/activity" element={<MemberActivityPage />} />
             <Route path="/member/meetings" element={<MeetingsPage />} />
             <Route path="/member/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/member/reports" element={<ReportsPage />} />
@@ -138,6 +149,12 @@ function App() {
             <Route path="/member/leave" element={<LeavePage />} />
             <Route path="/member/settings" element={<SettingsPage />} />
           </Route>
+
+          {/* Privacy & Tracking Policy Route */}
+          <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
+          <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
+          <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />
+          <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
         </Route>
 
         {/* Dynamic Fallback / Root Redirect */}

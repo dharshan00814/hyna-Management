@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Users, CalendarClock,
   Video, BarChart3, MessageCircle, FolderOpen, Settings, ChevronLeft,
-  CalendarOff, Megaphone, X, Hexagon,
+  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck,
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import { useSidebarStore, useAuthStore } from '@/stores';
@@ -15,12 +15,19 @@ interface NavItem {
   roles: UserRole[];
 }
 
-const getNavItems = (prefix: string): NavItem[] => [
+const getActivityLabel = (role: string) => {
+  if (role === 'admin') return 'Activity Analytics';
+  if (role === 'manager') return 'Team Activity';
+  return 'My Activity';
+};
+
+const getNavItems = (prefix: string, role: string): NavItem[] => [
   { label: 'Dashboard', icon: LayoutDashboard, path: `${prefix}/dashboard`, roles: ['admin', 'manager', 'member'] },
   { label: 'Projects', icon: FolderKanban, path: `${prefix}/projects`, roles: ['admin', 'manager', 'member'] },
   { label: 'Tasks', icon: CheckSquare, path: `${prefix}/tasks`, roles: ['admin', 'manager', 'member'] },
   { label: 'Members', icon: Users, path: `${prefix}/members`, roles: ['admin', 'manager'] },
   { label: 'Attendance', icon: CalendarClock, path: `${prefix}/attendance`, roles: ['admin', 'manager', 'member'] },
+  { label: getActivityLabel(role), icon: Activity, path: `${prefix}/activity`, roles: ['admin', 'manager', 'member'] },
   { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
   { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
   { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
@@ -30,6 +37,7 @@ const getNavItems = (prefix: string): NavItem[] => [
 ];
 
 const bottomNavItems: NavItem[] = [
+  { label: 'Privacy & Tracking', icon: ShieldCheck, path: '/privacy/tracking', roles: ['admin', 'manager', 'member'] },
   { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager', 'member'] },
 ];
 
@@ -39,7 +47,7 @@ export function Sidebar() {
   const location = useLocation();
 
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
-  const navItems = getNavItems(prefix).filter(item => item.roles.includes(effectiveRole));
+  const navItems = getNavItems(prefix, effectiveRole).filter(item => item.roles.includes(effectiveRole));
 
   return (
     <>

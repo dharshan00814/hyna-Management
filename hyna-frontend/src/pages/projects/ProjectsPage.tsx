@@ -136,7 +136,7 @@ export function ProjectsPage() {
             const manager = getUserById(project.managerId);
             return (
               <div
-                key={project.id}
+                key={`${project.id}-${idx}`}
                 className={cn('card card-hover p-5 cursor-pointer animate-slide-up', `stagger-${Math.min(idx + 1, 5)}`)}
                 onClick={() => navigate(`${prefix}/projects/${project.id}`)}
               >

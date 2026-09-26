@@ -249,14 +249,14 @@ export function ManagerDashboard() {
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {projects.map((proj) => {
+                {projects.map((proj, idx) => {
                   const projectMembers = proj.memberIds
                     .map(id => getUserById(id))
                     .filter((u): u is User => Boolean(u));
 
                   return (
                     <div
-                      key={proj.id}
+                      key={`${proj.id}-${idx}`}
                       onClick={() => navigate(`/manager/projects/${proj.id}`)}
                       className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[var(--color-primary)] transition-all cursor-pointer space-y-3 group"
                     >

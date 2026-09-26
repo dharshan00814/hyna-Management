@@ -256,3 +256,6 @@ export interface MemberDashboardStats {
   taskChange: number;
   completedChange: number;
 }
+
+// Activity Tracking Type Exports
+export * from './activity';
