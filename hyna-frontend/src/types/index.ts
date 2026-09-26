@@ -259,3 +259,4 @@ export interface MemberDashboardStats {
 
 // Activity Tracking Type Exports
 export * from './activity';
+export * from './developerActivity';

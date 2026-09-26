@@ -35,6 +35,9 @@ import {
   ManagerActivityPage,
   MemberActivityPage,
   PrivacyTrackingPage,
+  ConnectIntegrationsPage,
+  LiveDeveloperActivityPage,
+  MyDeveloperActivityPage,
 } from './pages/activity';
 
 function App() {
@@ -99,6 +102,7 @@ function App() {
             <Route path="/admin/members/:id" element={<MemberDetailPage />} />
             <Route path="/admin/attendance" element={<AttendancePage />} />
             <Route path="/admin/activity" element={<AdminActivityPage />} />
+            <Route path="/admin/developer-activity" element={<LiveDeveloperActivityPage />} />
             <Route path="/admin/meetings" element={<MeetingsPage />} />
             <Route path="/admin/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/admin/reports" element={<ReportsPage />} />
@@ -107,6 +111,7 @@ function App() {
             <Route path="/admin/leave" element={<LeavePage />} />
             <Route path="/admin/announcements" element={<AnnouncementsPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
+            <Route path="/admin/settings/integrations" element={<ConnectIntegrationsPage />} />
           </Route>
 
           {/* ======================================================== */}
@@ -121,6 +126,7 @@ function App() {
             <Route path="/manager/members/:id" element={<MemberDetailPage />} />
             <Route path="/manager/attendance" element={<AttendancePage />} />
             <Route path="/manager/activity" element={<ManagerActivityPage />} />
+            <Route path="/manager/developer-activity" element={<LiveDeveloperActivityPage />} />
             <Route path="/manager/meetings" element={<MeetingsPage />} />
             <Route path="/manager/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/manager/reports" element={<ReportsPage />} />
@@ -129,6 +135,7 @@ function App() {
             <Route path="/manager/leave" element={<LeavePage />} />
             <Route path="/manager/announcements" element={<AnnouncementsPage />} />
             <Route path="/manager/settings" element={<SettingsPage />} />
+            <Route path="/manager/settings/integrations" element={<ConnectIntegrationsPage />} />
           </Route>
 
           {/* ======================================================== */}
@@ -141,6 +148,7 @@ function App() {
             <Route path="/member/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/member/attendance" element={<AttendancePage />} />
             <Route path="/member/activity" element={<MemberActivityPage />} />
+            <Route path="/member/my-activity" element={<MyDeveloperActivityPage />} />
             <Route path="/member/meetings" element={<MeetingsPage />} />
             <Route path="/member/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/member/reports" element={<ReportsPage />} />
@@ -148,7 +156,13 @@ function App() {
             <Route path="/member/files" element={<FilesPage />} />
             <Route path="/member/leave" element={<LeavePage />} />
             <Route path="/member/settings" element={<SettingsPage />} />
+            <Route path="/member/settings/integrations" element={<ConnectIntegrationsPage />} />
           </Route>
+
+          {/* Direct Accessible Shared Routes */}
+          <Route path="/my-activity" element={<MyDeveloperActivityPage />} />
+          <Route path="/developer-activity" element={<LiveDeveloperActivityPage />} />
+          <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
 
           {/* Privacy & Tracking Policy Route */}
           <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />

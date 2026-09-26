@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Users, CalendarClock,
   Video, BarChart3, MessageCircle, FolderOpen, Settings, ChevronLeft,
-  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck,
+  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import { useSidebarStore, useAuthStore } from '@/stores';
@@ -21,12 +21,25 @@ const getActivityLabel = (role: string) => {
   return 'My Activity';
 };
 
+const getLiveActivityLabel = (role: string) => {
+  if (role === 'admin') return 'Live Developers';
+  if (role === 'manager') return 'Live Team Work';
+  return 'My Live Activity';
+};
+
+const getLiveActivityPath = (role: string) => {
+  if (role === 'admin') return '/admin/developer-activity';
+  if (role === 'manager') return '/manager/developer-activity';
+  return '/my-activity';
+};
+
 const getNavItems = (prefix: string, role: string): NavItem[] => [
   { label: 'Dashboard', icon: LayoutDashboard, path: `${prefix}/dashboard`, roles: ['admin', 'manager', 'member'] },
   { label: 'Projects', icon: FolderKanban, path: `${prefix}/projects`, roles: ['admin', 'manager', 'member'] },
   { label: 'Tasks', icon: CheckSquare, path: `${prefix}/tasks`, roles: ['admin', 'manager', 'member'] },
   { label: 'Members', icon: Users, path: `${prefix}/members`, roles: ['admin', 'manager'] },
   { label: 'Attendance', icon: CalendarClock, path: `${prefix}/attendance`, roles: ['admin', 'manager', 'member'] },
+  { label: getLiveActivityLabel(role), icon: Radio, path: getLiveActivityPath(role), roles: ['admin', 'manager', 'member'] },
   { label: getActivityLabel(role), icon: Activity, path: `${prefix}/activity`, roles: ['admin', 'manager', 'member'] },
   { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
   { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
@@ -37,6 +50,7 @@ const getNavItems = (prefix: string, role: string): NavItem[] => [
 ];
 
 const bottomNavItems: NavItem[] = [
+  { label: 'IDE Integrations', icon: Laptop, path: '/settings/integrations', roles: ['admin', 'manager', 'member'] },
   { label: 'Privacy & Tracking', icon: ShieldCheck, path: '/privacy/tracking', roles: ['admin', 'manager', 'member'] },
   { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager', 'member'] },
 ];

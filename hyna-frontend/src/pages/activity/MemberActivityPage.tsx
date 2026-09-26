@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Clock, Timer, Laptop, ShieldCheck, Filter,
   ArrowUpRight, AlertCircle, RefreshCw, Sparkles, Coffee,
-  Terminal, Code2, Layers, CheckCircle2, ChevronRight
+  Terminal, Code2, Layers, CheckCircle2, ChevronRight, Radio
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -17,6 +17,7 @@ import {
   formatDurationDetailed,
   formatDurationWithSeconds,
   getApplicationColor,
+  subscribeToActivitySessions,
 } from '@/services/activityService';
 import type { ActivitySession, ActivityFilter } from '@/types/activity';
 import { cn, formatDate, formatTime } from '@/lib/utils';
@@ -68,6 +69,10 @@ export function MemberActivityPage() {
 
   useEffect(() => {
     loadActivity();
+    const unsubscribe = subscribeToActivitySessions(() => {
+      loadActivity(false);
+    });
+    return () => unsubscribe();
   }, [dateFilter, appFilter]);
 
   // Today's specific sessions for today's summary card
@@ -100,7 +105,13 @@ export function MemberActivityPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link to="/my-activity">
+            <Button size="sm" className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-200" />
+              My Live Activity
+            </Button>
+          </Link>
           <Link to="/privacy/tracking">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />

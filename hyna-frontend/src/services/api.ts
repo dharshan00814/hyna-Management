@@ -215,7 +215,7 @@ function mapFile(row: any): FileItem {
     size: Number(row.size) || 0,
     folder: row.folder,
     uploadedBy: row.uploaded_by,
-    uploadedAt: row.uploaded_at,
+    uploadedAt: row.uploaded_at || row.created_at || new Date().toISOString(),
     url: row.url || '#',
     mimeType: row.mime_type || '',
     projectId: row.project_id,
@@ -741,18 +741,20 @@ export async function getUserMeetings(userId: string): Promise<Meeting[]> {
 }
 
 export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting> {
-  const insertPayload = {
+  const { data: authData } = await supabase.auth.getUser();
+  const currentUserId = authData?.user?.id || meeting.hostId;
+
+  const insertPayload: Record<string, any> = {
     title: meeting.title || 'New Meeting',
-    description: meeting.description || '',
+    description: meeting.description || meeting.notes || '',
     date: meeting.date || new Date().toISOString().split('T')[0],
     start_time: meeting.startTime || '10:00',
     end_time: meeting.endTime || '11:00',
-    host_id: meeting.hostId || 'u1',
-    participant_ids: meeting.participantIds || [],
+    host_id: currentUserId,
+    participant_ids: meeting.participantIds?.length ? meeting.participantIds : (currentUserId ? [currentUserId] : []),
     type: meeting.type || 'team',
     is_recurring: meeting.isRecurring || false,
     meeting_link: meeting.meetingLink || '',
-    notes: meeting.notes || '',
     status: 'scheduled',
   };
 
@@ -764,12 +766,12 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
       date: insertPayload.date,
       startTime: insertPayload.start_time,
       endTime: insertPayload.end_time,
-      hostId: insertPayload.host_id,
+      hostId: insertPayload.host_id || 'u1',
       participantIds: insertPayload.participant_ids,
       type: insertPayload.type,
       isRecurring: insertPayload.is_recurring,
       meetingLink: insertPayload.meeting_link,
-      notes: insertPayload.notes,
+      notes: meeting.notes || insertPayload.description,
       status: 'scheduled',
     };
   }
@@ -1090,7 +1092,7 @@ export async function getFiles(): Promise<FileItem[]> {
   const { data, error } = await supabase
     .from('files')
     .select('*')
-    .order('uploaded_at', { ascending: false });
+    .order('created_at', { ascending: false });
 
   if (error) return [];
   return (data || []).map(mapFile);
@@ -1113,7 +1115,7 @@ export async function getFilesByFolder(folder: string): Promise<FileItem[]> {
     .from('files')
     .select('*')
     .eq('folder', folder)
-    .order('uploaded_at', { ascending: false });
+    .order('created_at', { ascending: false });
 
   if (error) return [];
   return (data || []).map(mapFile);

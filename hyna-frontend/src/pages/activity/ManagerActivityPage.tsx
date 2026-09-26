@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Users, Clock, Timer, Laptop, ShieldCheck, Filter,
   RefreshCw, Layers, CheckCircle2, ChevronRight, UserCheck,
-  Calendar, Coffee, BarChart3
+  Calendar, Coffee, BarChart3, Radio
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -16,6 +16,7 @@ import {
   getActivitySummary,
   formatDurationDetailed,
   getApplicationColor,
+  subscribeToActivitySessions,
 } from '@/services/activityService';
 import { getUsers } from '@/services/api';
 import type { ActivitySession, ActivityFilter } from '@/types/activity';
@@ -83,6 +84,10 @@ export function ManagerActivityPage() {
 
   useEffect(() => {
     loadTeamActivity();
+    const unsubscribe = subscribeToActivitySessions(() => {
+      loadTeamActivity(false);
+    });
+    return () => unsubscribe();
   }, [currentUser?.id, dateFilter, memberFilter, appFilter]);
 
   const summary = useMemo(() => getActivitySummary(sessions), [sessions]);
@@ -136,7 +141,13 @@ export function ManagerActivityPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link to="/manager/developer-activity">
+            <Button size="sm" className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-200" />
+              Live Team Work
+            </Button>
+          </Link>
           <Link to="/privacy/tracking">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />

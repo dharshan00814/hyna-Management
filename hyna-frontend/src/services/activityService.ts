@@ -223,11 +223,89 @@ export async function syncActivitySessions(
   }
 }
 
+// Transform developer_sessions row to Frontend ActivitySession
+function mapDeveloperSessionToActivitySession(row: any, userMap?: Map<string, User>): ActivitySession {
+  const user = userMap?.get(row.user_id);
+  const startedAt = row.started_at || new Date().toISOString();
+  const lastActivityAt = row.last_activity_at || startedAt;
+  const endedAt = row.ended_at || null;
+
+  const startMs = new Date(startedAt).getTime();
+  const endMs = endedAt ? new Date(endedAt).getTime() : new Date(lastActivityAt).getTime();
+  const nowMs = Date.now();
+
+  // If ongoing session: calculate elapsed up to now or last_activity_at
+  const totalElapsedSeconds = Math.max(1, Math.round((Math.max(endMs, startMs) - startMs) / 1000));
+  
+  let activeSeconds = totalElapsedSeconds;
+  let idleSeconds = 0;
+
+  if (row.status === 'idle') {
+    const idleDuration = Math.max(0, Math.round((nowMs - new Date(lastActivityAt).getTime()) / 1000));
+    idleSeconds = Math.min(totalElapsedSeconds, Math.max(300, idleDuration));
+    activeSeconds = Math.max(0, totalElapsedSeconds - idleSeconds);
+  }
+
+  // Application name mapping
+  let application = 'VS Code';
+  const toolLower = (row.tool || '').toLowerCase();
+  if (toolLower === 'cursor') application = 'Cursor';
+  else if (toolLower === 'antigravity') application = 'Antigravity';
+  else if (toolLower === 'vscode') application = 'Visual Studio Code';
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    application,
+    projectName: row.workspace_name || row.project_id || 'Hyna Studio',
+    startedAt,
+    endedAt,
+    activeSeconds,
+    idleSeconds,
+    createdAt: row.created_at || startedAt,
+    updatedAt: row.updated_at || lastActivityAt,
+    user,
+  };
+}
+
 /**
  * Fetches the authenticated user's personal activity records.
+ * Integrates both developer_sessions (from IDEs) and legacy activity_sessions.
  */
 export async function getMyActivity(filters?: ActivityFilter): Promise<ActivitySession[]> {
   try {
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) return [];
+
+    const userMap = await getCachedUsersMap();
+
+    // 1. Fetch live developer_sessions (from VS Code, Cursor, Antigravity)
+    let devQuery = supabase
+      .from('developer_sessions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('started_at', { ascending: false });
+
+    if (filters?.startDate) {
+      devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
+    }
+    if (filters?.endDate) {
+      devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
+    }
+    if (filters?.application && filters.application !== 'all') {
+      const appLower = filters.application.toLowerCase();
+      if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
+      else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
+      else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
+    }
+    if (filters?.projectName && filters.projectName !== 'all') {
+      devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
+    }
+
+    const { data: devSessions } = await devQuery;
+    const mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+
+    // 2. Fetch legacy activity_sessions
     let query = supabase
       .from('activity_sessions')
       .select('*')
@@ -246,13 +324,20 @@ export async function getMyActivity(filters?: ActivityFilter): Promise<ActivityS
       query = query.ilike('project_name', `%${filters.projectName}%`);
     }
 
-    const { data, error } = await query;
-    if (error) {
-      handleTableError('Error fetching user activity', error);
-      return [];
-    }
+    const { data: legacySessions } = await query;
+    const mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
 
-    return (data || []).map((row) => mapActivitySession(row));
+    // Combine without duplicate IDs
+    const seen = new Set<string>();
+    const combined: ActivitySession[] = [];
+    [...mappedDev, ...mappedLegacy].forEach((s) => {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        combined.push(s);
+      }
+    });
+
+    return combined.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   } catch (err) {
     console.warn('[ActivityService] Failed to load my activity:', err);
     return [];
@@ -270,21 +355,15 @@ export async function getTeamActivity(
     const userMap = await getCachedUsersMap();
 
     // 1. Identify members in projects managed by this manager
-    const { data: managedProjects, error: projError } = await supabase
+    const { data: managedProjects } = await supabase
       .from('projects')
       .select('member_ids')
       .eq('manager_id', managerId);
-
-    if (projError) {
-      console.warn('[ActivityService] Error fetching managed projects:', projError.message);
-    }
 
     const memberSet = new Set<string>();
     (managedProjects || []).forEach((p) => {
       (p.member_ids || []).forEach((m: string) => memberSet.add(m));
     });
-
-    // Also include manager's own activity
     if (managerId) memberSet.add(managerId);
 
     const teamUserIds = Array.from(memberSet);
@@ -292,6 +371,36 @@ export async function getTeamActivity(
       return [];
     }
 
+    // Fetch from developer_sessions
+    let devQuery = supabase
+      .from('developer_sessions')
+      .select('*')
+      .in('user_id', teamUserIds)
+      .order('started_at', { ascending: false });
+
+    if (filters?.userId && filters.userId !== 'all') {
+      devQuery = devQuery.eq('user_id', filters.userId);
+    }
+    if (filters?.startDate) {
+      devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
+    }
+    if (filters?.endDate) {
+      devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
+    }
+    if (filters?.application && filters.application !== 'all') {
+      const appLower = filters.application.toLowerCase();
+      if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
+      else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
+      else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
+    }
+    if (filters?.projectName && filters.projectName !== 'all') {
+      devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
+    }
+
+    const { data: devSessions } = await devQuery;
+    const mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+
+    // Also fetch legacy activity_sessions
     let query = supabase
       .from('activity_sessions')
       .select('*')
@@ -314,13 +423,19 @@ export async function getTeamActivity(
       query = query.ilike('project_name', `%${filters.projectName}%`);
     }
 
-    const { data, error } = await query;
-    if (error) {
-      handleTableError('Error fetching team activity', error);
-      return [];
-    }
+    const { data: legacySessions } = await query;
+    const mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
 
-    return (data || []).map((row) => mapActivitySession(row, userMap));
+    const seen = new Set<string>();
+    const combined: ActivitySession[] = [];
+    [...mappedDev, ...mappedLegacy].forEach((s) => {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        combined.push(s);
+      }
+    });
+
+    return combined.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   } catch (err) {
     console.warn('[ActivityService] Failed to load team activity:', err);
     return [];
@@ -329,6 +444,7 @@ export async function getTeamActivity(
 
 /**
  * Fetches organization-wide activity for executives (Admin / CEO / CTO / COO / CPO).
+ * Seamlessly integrates live developer sessions from VS Code, Cursor, and Antigravity.
  */
 export async function getOrganizationActivity(
   filters?: ActivityFilter
@@ -336,6 +452,35 @@ export async function getOrganizationActivity(
   try {
     const userMap = await getCachedUsersMap();
 
+    // 1. Fetch live developer_sessions (VS Code, Cursor, Antigravity)
+    let devQuery = supabase
+      .from('developer_sessions')
+      .select('*')
+      .order('started_at', { ascending: false });
+
+    if (filters?.userId && filters.userId !== 'all') {
+      devQuery = devQuery.eq('user_id', filters.userId);
+    }
+    if (filters?.startDate) {
+      devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
+    }
+    if (filters?.endDate) {
+      devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
+    }
+    if (filters?.application && filters.application !== 'all') {
+      const appLower = filters.application.toLowerCase();
+      if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
+      else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
+      else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
+    }
+    if (filters?.projectName && filters.projectName !== 'all') {
+      devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
+    }
+
+    const { data: devSessions } = await devQuery;
+    const mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+
+    // 2. Fetch legacy activity_sessions
     let query = supabase
       .from('activity_sessions')
       .select('*')
@@ -357,16 +502,56 @@ export async function getOrganizationActivity(
       query = query.ilike('project_name', `%${filters.projectName}%`);
     }
 
-    const { data, error } = await query;
-    if (error) {
-      handleTableError('Error fetching organization activity', error);
-      return [];
-    }
+    const { data: legacySessions } = await query;
+    const mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
 
-    return (data || []).map((row) => mapActivitySession(row, userMap));
+    // Merge without duplicates
+    const seen = new Set<string>();
+    const combined: ActivitySession[] = [];
+    [...mappedDev, ...mappedLegacy].forEach((s) => {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        combined.push(s);
+      }
+    });
+
+    return combined.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   } catch (err) {
     console.warn('[ActivityService] Failed to load organization activity:', err);
     return [];
+  }
+}
+
+/**
+ * Subscribes to Supabase Realtime broadcast channels for live activity session updates.
+ */
+export function subscribeToActivitySessions(onUpdate: () => void): () => void {
+  try {
+    const channel = supabase
+      .channel('activity-sessions-realtime-listener')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'developer_sessions' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'developer_activity_events' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'activity_sessions' },
+        () => onUpdate()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('[ActivityService] Realtime subscription fallback:', err);
+    return () => {};
   }
 }
 
