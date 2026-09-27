@@ -13,20 +13,19 @@
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Hyna Studio" />
     <script>
-      // Immediately unregister rogue service workers and clear cache on localhost
+      // Register service worker for installable PWA support
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs) {
-          for (var i = 0; i < regs.length; i++) {
-            regs[i].unregister();
-          }
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (var i = 0; i < names.length; i++) {
-            caches.delete(names[i]);
-          }
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {
+            navigator.serviceWorker.register('/dev-sw.js?dev-sw').catch(function () {});
+          });
         });
       }
     </script>
