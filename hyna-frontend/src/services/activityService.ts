@@ -31,10 +31,14 @@ function isTableMissingError(error: any): boolean {
   return (
     code === '42P01' ||
     code === 'PGRST205' ||
+    code === 'PGRST200' ||
     error.status === 404 ||
+    error.status === 400 || // PostgREST returns 400 for schema cache misses too
     msg.includes('does not exist') ||
     msg.includes('schema cache') ||
-    msg.includes('Could not find the table')
+    msg.includes('Could not find the table') ||
+    msg.includes('relation') ||
+    msg.includes('undefined table')
   );
 }
 
@@ -279,53 +283,72 @@ export async function getMyActivity(filters?: ActivityFilter): Promise<ActivityS
 
     const userMap = await getCachedUsersMap();
 
-    // 1. Fetch live developer_sessions (from VS Code, Cursor, Antigravity)
-    let devQuery = supabase
-      .from('developer_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('started_at', { ascending: false });
+    // 1. Fetch live developer_sessions — individually try-caught for graceful degradation
+    let mappedDev: ActivitySession[] = [];
+    try {
+      let devQuery = supabase
+        .from('developer_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('started_at', { ascending: false });
 
-    if (filters?.startDate) {
-      devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
-    }
-    if (filters?.endDate) {
-      devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
-    }
-    if (filters?.application && filters.application !== 'all') {
-      const appLower = filters.application.toLowerCase();
-      if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
-      else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
-      else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
-    }
-    if (filters?.projectName && filters.projectName !== 'all') {
-      devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
-    }
+      if (filters?.startDate) {
+        devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
+      }
+      if (filters?.endDate) {
+        devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
+      }
+      if (filters?.application && filters.application !== 'all') {
+        const appLower = filters.application.toLowerCase();
+        if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
+        else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
+        else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
+      }
+      if (filters?.projectName && filters.projectName !== 'all') {
+        devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
+      }
 
-    const { data: devSessions } = await devQuery;
-    const mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
-
-    // 2. Fetch legacy activity_sessions
-    let query = supabase
-      .from('activity_sessions')
-      .select('*')
-      .order('started_at', { ascending: false });
-
-    if (filters?.startDate) {
-      query = query.gte('started_at', `${filters.startDate}T00:00:00Z`);
-    }
-    if (filters?.endDate) {
-      query = query.lte('started_at', `${filters.endDate}T23:59:59Z`);
-    }
-    if (filters?.application && filters.application !== 'all') {
-      query = query.ilike('application', `%${filters.application}%`);
-    }
-    if (filters?.projectName && filters.projectName !== 'all') {
-      query = query.ilike('project_name', `%${filters.projectName}%`);
+      const { data: devSessions, error: devError } = await devQuery;
+      if (devError && isTableMissingError(devError)) {
+        handleTableError('developer_sessions (my activity)', devError);
+      } else {
+        mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+      }
+    } catch (devErr) {
+      console.info('[ActivityService] developer_sessions not available:', (devErr as any)?.message);
     }
 
-    const { data: legacySessions } = await query;
-    const mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
+    // 2. Fetch legacy activity_sessions — individually try-caught
+    let mappedLegacy: ActivitySession[] = [];
+    try {
+      let query = supabase
+        .from('activity_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('started_at', { ascending: false });
+
+      if (filters?.startDate) {
+        query = query.gte('started_at', `${filters.startDate}T00:00:00Z`);
+      }
+      if (filters?.endDate) {
+        query = query.lte('started_at', `${filters.endDate}T23:59:59Z`);
+      }
+      if (filters?.application && filters.application !== 'all') {
+        query = query.ilike('application', `%${filters.application}%`);
+      }
+      if (filters?.projectName && filters.projectName !== 'all') {
+        query = query.ilike('project_name', `%${filters.projectName}%`);
+      }
+
+      const { data: legacySessions, error: legacyError } = await query;
+      if (legacyError && isTableMissingError(legacyError)) {
+        handleTableError('activity_sessions (my activity)', legacyError);
+      } else {
+        mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
+      }
+    } catch (legacyErr) {
+      console.info('[ActivityService] activity_sessions not available:', (legacyErr as any)?.message);
+    }
 
     // Combine without duplicate IDs
     const seen = new Set<string>();
@@ -371,60 +394,78 @@ export async function getTeamActivity(
       return [];
     }
 
-    // Fetch from developer_sessions
-    let devQuery = supabase
-      .from('developer_sessions')
-      .select('*')
-      .in('user_id', teamUserIds)
-      .order('started_at', { ascending: false });
+    // 2. Fetch from developer_sessions — individually try-caught
+    let mappedDev: ActivitySession[] = [];
+    try {
+      let devQuery = supabase
+        .from('developer_sessions')
+        .select('*')
+        .in('user_id', teamUserIds)
+        .order('started_at', { ascending: false });
 
-    if (filters?.userId && filters.userId !== 'all') {
-      devQuery = devQuery.eq('user_id', filters.userId);
-    }
-    if (filters?.startDate) {
-      devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
-    }
-    if (filters?.endDate) {
-      devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
-    }
-    if (filters?.application && filters.application !== 'all') {
-      const appLower = filters.application.toLowerCase();
-      if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
-      else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
-      else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
-    }
-    if (filters?.projectName && filters.projectName !== 'all') {
-      devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
-    }
+      if (filters?.userId && filters.userId !== 'all') {
+        devQuery = devQuery.eq('user_id', filters.userId);
+      }
+      if (filters?.startDate) {
+        devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
+      }
+      if (filters?.endDate) {
+        devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
+      }
+      if (filters?.application && filters.application !== 'all') {
+        const appLower = filters.application.toLowerCase();
+        if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
+        else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
+        else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
+      }
+      if (filters?.projectName && filters.projectName !== 'all') {
+        devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
+      }
 
-    const { data: devSessions } = await devQuery;
-    const mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
-
-    // Also fetch legacy activity_sessions
-    let query = supabase
-      .from('activity_sessions')
-      .select('*')
-      .in('user_id', teamUserIds)
-      .order('started_at', { ascending: false });
-
-    if (filters?.userId && filters.userId !== 'all') {
-      query = query.eq('user_id', filters.userId);
-    }
-    if (filters?.startDate) {
-      query = query.gte('started_at', `${filters.startDate}T00:00:00Z`);
-    }
-    if (filters?.endDate) {
-      query = query.lte('started_at', `${filters.endDate}T23:59:59Z`);
-    }
-    if (filters?.application && filters.application !== 'all') {
-      query = query.ilike('application', `%${filters.application}%`);
-    }
-    if (filters?.projectName && filters.projectName !== 'all') {
-      query = query.ilike('project_name', `%${filters.projectName}%`);
+      const { data: devSessions, error: devError } = await devQuery;
+      if (devError && isTableMissingError(devError)) {
+        handleTableError('developer_sessions (team)', devError);
+      } else {
+        mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+      }
+    } catch (devErr) {
+      console.info('[ActivityService] developer_sessions not available:', (devErr as any)?.message);
     }
 
-    const { data: legacySessions } = await query;
-    const mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
+    // 3. Also fetch legacy activity_sessions — individually try-caught
+    let mappedLegacy: ActivitySession[] = [];
+    try {
+      let query = supabase
+        .from('activity_sessions')
+        .select('*')
+        .in('user_id', teamUserIds)
+        .order('started_at', { ascending: false });
+
+      if (filters?.userId && filters.userId !== 'all') {
+        query = query.eq('user_id', filters.userId);
+      }
+      if (filters?.startDate) {
+        query = query.gte('started_at', `${filters.startDate}T00:00:00Z`);
+      }
+      if (filters?.endDate) {
+        query = query.lte('started_at', `${filters.endDate}T23:59:59Z`);
+      }
+      if (filters?.application && filters.application !== 'all') {
+        query = query.ilike('application', `%${filters.application}%`);
+      }
+      if (filters?.projectName && filters.projectName !== 'all') {
+        query = query.ilike('project_name', `%${filters.projectName}%`);
+      }
+
+      const { data: legacySessions, error: legacyError } = await query;
+      if (legacyError && isTableMissingError(legacyError)) {
+        handleTableError('activity_sessions (team)', legacyError);
+      } else {
+        mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
+      }
+    } catch (legacyErr) {
+      console.info('[ActivityService] activity_sessions not available:', (legacyErr as any)?.message);
+    }
 
     const seen = new Set<string>();
     const combined: ActivitySession[] = [];
@@ -453,57 +494,77 @@ export async function getOrganizationActivity(
     const userMap = await getCachedUsersMap();
 
     // 1. Fetch live developer_sessions (VS Code, Cursor, Antigravity)
-    let devQuery = supabase
-      .from('developer_sessions')
-      .select('*')
-      .order('started_at', { ascending: false });
+    // Wrapped separately so a missing table doesn't crash the whole function
+    let mappedDev: ActivitySession[] = [];
+    try {
+      let devQuery = supabase
+        .from('developer_sessions')
+        .select('*')
+        .order('started_at', { ascending: false });
 
-    if (filters?.userId && filters.userId !== 'all') {
-      devQuery = devQuery.eq('user_id', filters.userId);
-    }
-    if (filters?.startDate) {
-      devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
-    }
-    if (filters?.endDate) {
-      devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
-    }
-    if (filters?.application && filters.application !== 'all') {
-      const appLower = filters.application.toLowerCase();
-      if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
-      else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
-      else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
-    }
-    if (filters?.projectName && filters.projectName !== 'all') {
-      devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
-    }
+      if (filters?.userId && filters.userId !== 'all') {
+        devQuery = devQuery.eq('user_id', filters.userId);
+      }
+      if (filters?.startDate) {
+        devQuery = devQuery.gte('started_at', `${filters.startDate}T00:00:00Z`);
+      }
+      if (filters?.endDate) {
+        devQuery = devQuery.lte('started_at', `${filters.endDate}T23:59:59Z`);
+      }
+      if (filters?.application && filters.application !== 'all') {
+        const appLower = filters.application.toLowerCase();
+        if (appLower.includes('cursor')) devQuery = devQuery.eq('tool', 'cursor');
+        else if (appLower.includes('antigravity')) devQuery = devQuery.eq('tool', 'antigravity');
+        else if (appLower.includes('code')) devQuery = devQuery.eq('tool', 'vscode');
+      }
+      if (filters?.projectName && filters.projectName !== 'all') {
+        devQuery = devQuery.ilike('workspace_name', `%${filters.projectName}%`);
+      }
 
-    const { data: devSessions } = await devQuery;
-    const mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+      const { data: devSessions, error: devError } = await devQuery;
+      if (devError && isTableMissingError(devError)) {
+        handleTableError('developer_sessions query', devError);
+      } else {
+        mappedDev = (devSessions || []).map((row) => mapDeveloperSessionToActivitySession(row, userMap));
+      }
+    } catch (devErr) {
+      console.info('[ActivityService] developer_sessions not available yet:', (devErr as any)?.message);
+    }
 
     // 2. Fetch legacy activity_sessions
-    let query = supabase
-      .from('activity_sessions')
-      .select('*')
-      .order('started_at', { ascending: false });
+    // Wrapped separately — table may not exist until migration is applied
+    let mappedLegacy: ActivitySession[] = [];
+    try {
+      let query = supabase
+        .from('activity_sessions')
+        .select('*')
+        .order('started_at', { ascending: false });
 
-    if (filters?.userId && filters.userId !== 'all') {
-      query = query.eq('user_id', filters.userId);
-    }
-    if (filters?.startDate) {
-      query = query.gte('started_at', `${filters.startDate}T00:00:00Z`);
-    }
-    if (filters?.endDate) {
-      query = query.lte('started_at', `${filters.endDate}T23:59:59Z`);
-    }
-    if (filters?.application && filters.application !== 'all') {
-      query = query.ilike('application', `%${filters.application}%`);
-    }
-    if (filters?.projectName && filters.projectName !== 'all') {
-      query = query.ilike('project_name', `%${filters.projectName}%`);
-    }
+      if (filters?.userId && filters.userId !== 'all') {
+        query = query.eq('user_id', filters.userId);
+      }
+      if (filters?.startDate) {
+        query = query.gte('started_at', `${filters.startDate}T00:00:00Z`);
+      }
+      if (filters?.endDate) {
+        query = query.lte('started_at', `${filters.endDate}T23:59:59Z`);
+      }
+      if (filters?.application && filters.application !== 'all') {
+        query = query.ilike('application', `%${filters.application}%`);
+      }
+      if (filters?.projectName && filters.projectName !== 'all') {
+        query = query.ilike('project_name', `%${filters.projectName}%`);
+      }
 
-    const { data: legacySessions } = await query;
-    const mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
+      const { data: legacySessions, error: legacyError } = await query;
+      if (legacyError && isTableMissingError(legacyError)) {
+        handleTableError('activity_sessions query', legacyError);
+      } else {
+        mappedLegacy = (legacySessions || []).map((row) => mapActivitySession(row, userMap));
+      }
+    } catch (legacyErr) {
+      console.info('[ActivityService] activity_sessions not available yet:', (legacyErr as any)?.message);
+    }
 
     // Merge without duplicates
     const seen = new Set<string>();
