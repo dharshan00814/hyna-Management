@@ -20,8 +20,8 @@ if (!isSupabaseConfigured()) {
 }
 
 // Fallback URL and Key so createClient doesn't crash the frontend build or runtime on load
-const safeUrl = isSupabaseConfigured() ? supabaseUrl : 'https://placeholder.supabase.co';
-const safeKey = isSupabaseConfigured() ? supabaseAnonKey : 'placeholder-anon-key';
+export const safeUrl = isSupabaseConfigured() ? supabaseUrl : 'https://placeholder.supabase.co';
+export const safeKey = isSupabaseConfigured() ? supabaseAnonKey : 'placeholder-anon-key';
 
 export const supabase = createClient(safeUrl, safeKey, {
   auth: {
@@ -29,3 +29,13 @@ export const supabase = createClient(safeUrl, safeKey, {
     autoRefreshToken: true,
   },
 });
+
+export const createEphemeralClient = () => {
+  return createClient(safeUrl, safeKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+};
+
