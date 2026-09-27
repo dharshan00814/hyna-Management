@@ -329,8 +329,13 @@ export async function getUser(id: string): Promise<User | undefined> {
 }
 
 export async function updateUserProfile(id: string, updates: Partial<User>): Promise<User> {
-  const payload: any = {};
+  const payload: any = { updated_at: new Date().toISOString() };
   if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.role !== undefined) payload.role = updates.role;
+  if (updates.department !== undefined) payload.department = updates.department;
+  if (updates.designation !== undefined) payload.designation = updates.designation;
+  if (updates.employeeId !== undefined) payload.employee_id = updates.employeeId;
+  if (updates.status !== undefined) payload.status = updates.status;
   if (updates.phone !== undefined) payload.phone = updates.phone;
   if (updates.bio !== undefined) payload.bio = updates.bio;
   if (updates.skills !== undefined) payload.skills = updates.skills;
@@ -349,6 +354,37 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
   if (idx !== -1) usersCache[idx] = user;
   return user;
 }
+
+export async function updateMember(id: string, updates: Partial<User>): Promise<User> {
+  return updateUserProfile(id, updates);
+}
+
+export async function deleteMember(id: string): Promise<void> {
+  try {
+    await supabase.from('developer_sessions').delete().eq('user_id', id);
+    await supabase.from('developer_integrations').delete().eq('user_id', id);
+  } catch (e) {
+    // Non-fatal
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.warn('[deleteMember] Profile delete warning, falling back to inactive:', error.message);
+    const { error: updateErr } = await supabase
+      .from('profiles')
+      .update({ status: 'inactive' })
+      .eq('id', id);
+    if (updateErr) throw error;
+  }
+
+  usersCache = usersCache.filter(u => u.id !== id);
+}
+
+export const removeMember = deleteMember;
 
 export function getUserById(id: string): User | undefined {
   return usersCache.find(u => u.id === id);

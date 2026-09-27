@@ -69,14 +69,32 @@ export function LiveDeveloperActivityPage() {
       loadData(false);
     });
 
-    // Auto polling fallback every 30 seconds
+    // Auto polling fallback every 15 seconds
     const interval = setInterval(() => {
       loadData(false);
-    }, 30000);
+    }, 15000);
+
+    // Live continuous usage prediction ticker: ticks every second for all active developers
+    const liveTicker = setInterval(() => {
+      setCards((prevCards) =>
+        prevCards.map((c) => {
+          if (c.status === 'active' && c.currentSession?.started_at) {
+            const startMs = new Date(c.currentSession.started_at).getTime();
+            const liveSeconds = Math.max(0, Math.round((Date.now() - startMs) / 1000));
+            return {
+              ...c,
+              activeDurationSeconds: liveSeconds,
+            };
+          }
+          return c;
+        })
+      );
+    }, 1000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
+      clearInterval(liveTicker);
     };
   }, []);
 

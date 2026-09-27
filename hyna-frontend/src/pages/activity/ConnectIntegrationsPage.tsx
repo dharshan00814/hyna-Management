@@ -408,13 +408,12 @@ export function ConnectIntegrationsPage() {
                   </div>
 
                   <div className="text-xs text-[var(--color-muted-foreground)] space-y-2.5 bg-[var(--color-card)] p-3.5 rounded-lg border border-[var(--color-border)]">
-                    <span className="font-semibold text-[var(--color-foreground)] block">Next Steps in your IDE:</span>
+                    <span className="font-semibold text-[var(--color-foreground)] block">
+                      Connect via IDE Command Palette (Recommended):
+                    </span>
                     <ol className="list-decimal pl-4 space-y-1.5">
                       <li>
-                        If this window was already open, reload it: press <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[10px]">Ctrl+Shift+P</kbd> and run <strong>Developer: Reload Window</strong>.
-                      </li>
-                      <li>
-                        Press <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[10px]">Ctrl+Shift+P</kbd> (or <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[10px]">Cmd+Shift+P</kbd>).
+                        In your IDE ({getToolDisplayName(activeModalTool)}), press <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[10px]">Ctrl+Shift+P</kbd> (or <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[10px]">Cmd+Shift+P</kbd>).
                       </li>
                       <li>
                         Type and select <strong>Hyna: Connect With Code</strong>.
@@ -422,18 +421,22 @@ export function ConnectIntegrationsPage() {
                       <li>
                         Paste the code above and press <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[10px]">Enter</kbd>.
                       </li>
+                      <li className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        <strong>Automatic Terminal &amp; Disconnect:</strong> The <em>Hyna Live Tracker</em> terminal will automatically open and run live tracking in your tool. When you close or exit the IDE, tracking will automatically stop and disconnect!
+                      </li>
                     </ol>
 
-                    {activeModalTool === 'antigravity' && (
-                      <div className="mt-3 pt-2.5 border-t border-[var(--color-border)] text-[11px]">
-                        <span className="font-semibold text-[var(--color-foreground)] block mb-1">
-                          Alternative (Terminal Connector):
-                        </span>
-                        <code className="block p-1.5 rounded bg-[var(--color-muted)] font-mono text-[10px] break-all">
-                          node hyna-antigravity-connector/dist/index.js connect --code {generatedCode}
-                        </code>
-                      </div>
-                    )}
+                    <div className="mt-3 pt-2.5 border-t border-[var(--color-border)] text-[11px]">
+                      <span className="font-semibold text-[var(--color-foreground)] block mb-1">
+                        Alternative (Auto-Connecting Terminal Command):
+                      </span>
+                      <p className="text-[10px] text-[var(--color-muted-foreground)] mb-1.5">
+                        You can also run this single command — it will automatically connect, start live tracking, and disconnect upon exit:
+                      </p>
+                      <code className="block p-2 rounded bg-[var(--color-muted)] font-mono text-[10px] break-all border border-[var(--color-border)]">
+                        node hyna-antigravity-connector/dist/index.js connect --code {generatedCode}
+                      </code>
+                    </div>
                   </div>
                 </div>
               )}
