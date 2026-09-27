@@ -3,9 +3,9 @@
 // Replaces static mock data with live Supabase database queries
 // ============================================================
 
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, createEphemeralClient } from '@/lib/supabase';
 import type {
-  User, Project, Module, Task, Meeting, AttendanceRecord,
+  User, UserRole, Project, Module, Task, Meeting, AttendanceRecord,
   DailyReport, Notification, ChatChannel, ChatMessage,
   FileItem, Folder, LeaveRequest, Announcement,
 } from '@/types';
@@ -20,6 +20,7 @@ let tasksCache: Task[] = [];
 function mapUser(row: any): User {
   return {
     id: row.id,
+    employeeId: row.employee_id || '',
     name: row.name || 'Unknown User',
     email: row.email || '',
     avatar: row.avatar || '',
@@ -352,6 +353,109 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
 export function getUserById(id: string): User | undefined {
   return usersCache.find(u => u.id === id);
 }
+
+export interface AddMemberInput {
+  name: string;
+  email: string;
+  password?: string;
+  role?: UserRole;
+  department?: string;
+  designation?: string;
+  employeeId?: string;
+  phone?: string;
+}
+
+export async function addMember(input: AddMemberInput): Promise<User> {
+  const email = input.email.trim();
+  const password = input.password?.trim() || 'Hyna@2026';
+  const name = input.name.trim();
+  const employeeId = input.employeeId?.trim() || undefined;
+  const role = input.role || 'member';
+  const department = input.department?.trim() || 'Engineering';
+  const designation = input.designation?.trim() || 'Software Engineer';
+  const phone = input.phone?.trim() || '';
+
+  if (!email || !name) {
+    throw new Error('Full Name and Work Email are required.');
+  }
+
+  // 1. Create an ephemeral client so the current admin/manager session is NEVER disturbed
+  const ephemeralClient = createEphemeralClient();
+
+  const { data: authData, error: authError } = await ephemeralClient.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        name,
+        employee_id: employeeId,
+        role,
+        department,
+        designation,
+      },
+    },
+  });
+
+  if (authError) {
+    const msg = authError.message.toLowerCase();
+    if (msg.includes('already registered') || msg.includes('already taken')) {
+      throw new Error(`A member with email "${email}" is already registered.`);
+    }
+    throw new Error(authError.message);
+  }
+
+  const userId = authData?.user?.id;
+  if (!userId) {
+    throw new Error('Failed to create member authentication account.');
+  }
+
+  // 2. Ensure profile in profiles table exists with employeeId and phone
+  const profilePayload: any = {
+    id: userId,
+    email,
+    name,
+    role,
+    department,
+    designation,
+    phone,
+    status: 'active',
+  };
+  if (employeeId) {
+    profilePayload.employee_id = employeeId;
+  }
+
+  const { data: savedProfile, error: profileError } = await supabase
+    .from('profiles')
+    .upsert(profilePayload, { onConflict: 'id' })
+    .select()
+    .maybeSingle();
+
+  if (profileError) {
+    console.warn('Profile upsert warning:', profileError);
+  }
+
+  const newUser: User = savedProfile ? mapUser(savedProfile) : {
+    id: userId,
+    employeeId: employeeId || '',
+    name,
+    email,
+    avatar: '',
+    role,
+    department,
+    designation,
+    phone,
+    joinDate: new Date().toISOString().split('T')[0],
+    status: 'active',
+    activeProjects: 0,
+    lastActive: new Date().toISOString(),
+    bio: '',
+    skills: [],
+  };
+
+  usersCache.unshift(newUser);
+  return newUser;
+}
+
 
 // ============================================================
 // PROJECTS API
