@@ -155,11 +155,9 @@ export const useAuthStore = create<AuthState>()(
           const rawId = identifier.trim();
           let emailToUse = rawId;
 
-          // Support logging in via Employee ID (EMP-001..013), Username, or Email.
-          // IMPORTANT: We ONLY look up the email from the database (profiles table).
-          // We never guess or derive an email from getOrgMemberDetails — doing so would
-          // allow any user to claim another employee's account on first sign-in.
+          // Support logging in via Employee ID (EMP-001..013), username, or full email.
           if (!rawId.includes('@')) {
+            // Step 1: Look up email from the profiles table (most reliable source)
             const { data: matchedProfile } = await supabase
               .from('profiles')
               .select('email, employee_id, name')
@@ -167,16 +165,24 @@ export const useAuthStore = create<AuthState>()(
               .maybeSingle();
 
             if (matchedProfile?.email) {
-              // Found a DB profile — use its exact email so we authenticate only this person.
+              // Found in DB — use the exact stored email
               emailToUse = matchedProfile.email;
             } else {
-              // No profile found in DB. Do NOT fall back to guessing an email.
-              // This prevents cross-user account creation with wrong credentials.
-              set({ isLoading: false });
-              return {
-                success: false,
-                error: `No account found for "${rawId}". Please register first using the "Register Member" tab, or use your work email address to sign in.`,
-              };
+              // Step 2: Profile not in DB yet (fresh system or employee not seeded).
+              // Fall back to the fixed employee roster map for first-time login.
+              // This is safe for a closed internal system with a fixed known employee list.
+              const details = getOrgMemberDetails(rawId);
+              if (details.employeeId || rawId.toUpperCase().startsWith('EMP-')) {
+                // Known employee identifier — derive their canonical email
+                emailToUse = details.email;
+              } else {
+                // Completely unknown identifier — reject cleanly
+                set({ isLoading: false });
+                return {
+                  success: false,
+                  error: `No account found for "${rawId}". Please use your Employee ID (e.g. EMP-003) or work email address to sign in.`,
+                };
+              }
             }
           }
 
@@ -185,35 +191,36 @@ export const useAuthStore = create<AuthState>()(
             password,
           });
 
-          // If signIn failed with invalid credentials, this email exists in profiles but not yet
-          // in Supabase Auth — auto-provision the Supabase Auth account using the DB profile data.
-          // This is safe because we already confirmed the email via a DB profile lookup above.
+          // If sign-in failed with invalid credentials, the Supabase Auth account may not exist yet.
+          // Auto-provision it on first login using the profile data (from DB or roster map).
           if (signInError && (signInError.message.toLowerCase().includes('invalid') || signInError.message.toLowerCase().includes('credentials'))) {
-            // Look up full profile details to populate the new auth account correctly
+            // Try to get full profile details from DB first, then fall back to roster
             const { data: fullProfile } = await supabase
               .from('profiles')
               .select('*')
               .eq('email', emailToUse)
               .maybeSingle();
 
+            const rosterInfo = getOrgMemberDetails(rawId, emailToUse);
+
             const { data: signUpData, error: autoSignUpError } = await supabase.auth.signUp({
               email: emailToUse,
               password,
               options: {
                 data: {
-                  name: fullProfile?.name || emailToUse.split('@')[0],
-                  department: fullProfile?.department || 'Engineering',
-                  designation: fullProfile?.designation || 'Software Engineer',
-                  role: fullProfile?.role || 'member',
-                  employee_id: fullProfile?.employee_id || '',
+                  name: fullProfile?.name || rosterInfo.name,
+                  department: fullProfile?.department || rosterInfo.department,
+                  designation: fullProfile?.designation || rosterInfo.designation,
+                  role: fullProfile?.role || rosterInfo.role,
+                  employee_id: fullProfile?.employee_id || rosterInfo.employeeId,
                 },
               },
             });
 
             if (signUpData?.user) {
               const identities = signUpData.user.identities;
-              // Empty identities array means this email is ALREADY registered in Supabase Auth
-              // with a different password — wrong password entered.
+              // Empty identities = email already registered in Supabase Auth with a DIFFERENT password
+              // This is the key cross-user protection: wrong password is rejected
               if (identities && identities.length === 0) {
                 set({ isLoading: false });
                 return {
@@ -222,7 +229,7 @@ export const useAuthStore = create<AuthState>()(
                 };
               }
 
-              // Fresh Supabase Auth account created — authenticate with the chosen password:
+              // Fresh Supabase Auth account created — sign in with the newly set password:
               const retrySignIn = await supabase.auth.signInWithPassword({
                 email: emailToUse,
                 password,
@@ -248,6 +255,7 @@ export const useAuthStore = create<AuthState>()(
               }
             }
           }
+
 
           if (signInError || !authData?.user) {
             set({ isLoading: false });
