@@ -94,8 +94,8 @@ export function Sidebar() {
           isCollapsed ? 'justify-center px-2' : 'px-5',
         )}>
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--color-primary)] text-white shrink-0">
-              <Hexagon className="w-4.5 h-4.5" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shrink-0">
+              <img src="/logo.png" alt="Hyna Studio Logo" className="w-8 h-8 object-contain" />
             </div>
             {!isCollapsed && (
               <div className="min-w-0">
