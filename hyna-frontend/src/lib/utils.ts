@@ -14,8 +14,26 @@ export function formatDate(dateStr: string): string {
   return format(date, 'MMM d, yyyy');
 }
 
-export function formatTime(timeStr: string): string {
-  const [hours, minutes] = timeStr.split(':').map(Number);
+export function formatTime(timeStr: string | null | undefined): string {
+  if (!timeStr) return '—';
+  // If it's an ISO datetime string (contains 'T' or 'Z'), extract the time part from it
+  if (timeStr.includes('T') || timeStr.includes('Z')) {
+    try {
+      const date = new Date(timeStr);
+      if (isNaN(date.getTime())) return '—';
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const h = hours % 12 || 12;
+      return `${h}:${String(minutes).padStart(2, '0')} ${period}`;
+    } catch {
+      return '—';
+    }
+  }
+  // Legacy: "HH:MM" or "HH:MM:SS" format
+  const parts = timeStr.split(':').map(Number);
+  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return '—';
+  const [hours, minutes] = parts;
   const period = hours >= 12 ? 'PM' : 'AM';
   const h = hours % 12 || 12;
   return `${h}:${String(minutes).padStart(2, '0')} ${period}`;

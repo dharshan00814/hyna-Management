@@ -501,10 +501,13 @@ export function AdminActivityPage() {
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-xs text-[var(--color-muted-foreground)]">
-                        {formatTime(session.startedAt)} · {formatDate(session.startedAt)}
+                        {formatTime(session.startedAt)} · {session.startedAt ? formatDate(session.startedAt) : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-xs text-[var(--color-muted-foreground)]">
-                        {formatTime(session.endedAt)} · {formatDate(session.endedAt)}
+                        {session.endedAt
+                          ? `${formatTime(session.endedAt)} · ${formatDate(session.endedAt)}`
+                          : <span className="inline-flex items-center gap-1 text-emerald-500 font-medium"><Radio className="w-3 h-3 animate-pulse" />In Progress</span>
+                        }
                       </td>
                       <td className="px-5 py-3.5">
                         <span className="font-semibold text-xs text-emerald-600 dark:text-emerald-400">
