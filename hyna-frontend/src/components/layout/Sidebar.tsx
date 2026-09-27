@@ -2,10 +2,12 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Users, CalendarClock,
   Video, BarChart3, MessageCircle, FolderOpen, Settings, ChevronLeft,
-  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop
+  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop, Download
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import { useSidebarStore, useAuthStore } from '@/stores';
+import { usePWA } from '@/hooks/usePWA';
+import { InstallAppModal } from '@/components/common/InstallAppModal';
 import type { UserRole } from '@/types';
 
 interface NavItem {
@@ -58,6 +60,7 @@ const bottomNavItems: NavItem[] = [
 export function Sidebar() {
   const { isCollapsed, isMobileOpen, toggle, setMobileOpen } = useSidebarStore();
   const { currentUser, effectiveRole } = useAuthStore();
+  const { isInstallable, isInstalled, showModal, setShowModal, promptInstall } = usePWA();
   const location = useLocation();
 
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
@@ -169,6 +172,30 @@ export function Sidebar() {
             </NavLink>
           ))}
 
+          {/* Download / Install App */}
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            title={isCollapsed ? (isInstalled ? 'App Installed' : 'Download App') : undefined}
+            className={cn(
+              'flex items-center gap-3 rounded-lg text-sm font-medium transition-all w-full text-left',
+              isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2',
+              'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20'
+            )}
+          >
+            <Download className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
+            {!isCollapsed && (
+              <div className="flex items-center justify-between w-full">
+                <span>{isInstalled ? 'App Installed' : 'Download App'}</span>
+                {!isInstalled && (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-500 text-white">
+                    PWA
+                  </span>
+                )}
+              </div>
+            )}
+          </button>
+
           {/* User profile */}
           {currentUser && (
             <div className={cn(
@@ -194,6 +221,15 @@ export function Sidebar() {
           )}
         </div>
       </aside>
+
+      {/* PWA Install Modal */}
+      <InstallAppModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onInstallPrompt={promptInstall}
+        isInstallable={isInstallable}
+        isInstalled={isInstalled}
+      />
     </>
   );
 }
