@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { Loader2 } from 'lucide-react';
 import { useThemeStore, useAuthStore } from './stores';
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -42,7 +43,7 @@ import {
 
 function App() {
   const { mode, resolvedTheme, setMode } = useThemeStore();
-  const { effectiveRole, isAuthenticated, initializeAuth } = useAuthStore();
+  const { effectiveRole, isAuthenticated, isLoading, initializeAuth } = useAuthStore();
 
   // Initialize live Supabase authentication session on mount
   useEffect(() => {
@@ -80,7 +81,17 @@ function App() {
         <Route
           path="/login"
           element={
-            isAuthenticated ? (
+            isLoading ? (
+              // Show spinner while Supabase session is being restored — prevents login flash
+              <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[var(--color-background)] text-[var(--color-foreground)]">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-[var(--color-primary)] flex items-center justify-center shadow-lg shadow-indigo-500/25 animate-pulse">
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  </div>
+                  <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Restoring your session...</p>
+                </div>
+              </div>
+            ) : isAuthenticated ? (
               <Navigate to={`${rolePrefix}/dashboard`} replace />
             ) : (
               <LoginPage />

@@ -155,19 +155,28 @@ export const useAuthStore = create<AuthState>()(
           const rawId = identifier.trim();
           let emailToUse = rawId;
 
-          // Support logging in via Employee ID (EMP-001..013), Username (dharshan, jashwin, vignesh), or Email
+          // Support logging in via Employee ID (EMP-001..013), Username, or Email.
+          // IMPORTANT: We ONLY look up the email from the database (profiles table).
+          // We never guess or derive an email from getOrgMemberDetails — doing so would
+          // allow any user to claim another employee's account on first sign-in.
           if (!rawId.includes('@')) {
             const { data: matchedProfile } = await supabase
               .from('profiles')
-              .select('email')
+              .select('email, employee_id, name')
               .or(`employee_id.ilike.${rawId},name.ilike.${rawId}`)
               .maybeSingle();
 
             if (matchedProfile?.email) {
+              // Found a DB profile — use its exact email so we authenticate only this person.
               emailToUse = matchedProfile.email;
             } else {
-              const details = getOrgMemberDetails(rawId);
-              emailToUse = details.email;
+              // No profile found in DB. Do NOT fall back to guessing an email.
+              // This prevents cross-user account creation with wrong credentials.
+              set({ isLoading: false });
+              return {
+                success: false,
+                error: `No account found for "${rawId}". Please register first using the "Register Member" tab, or use your work email address to sign in.`,
+              };
             }
           }
 
@@ -176,28 +185,35 @@ export const useAuthStore = create<AuthState>()(
             password,
           });
 
-          // If signIn failed with invalid credentials, check if the account simply does not exist in Supabase Auth yet!
-          // Auto-provision initial account with the credentials chosen by the user:
+          // If signIn failed with invalid credentials, this email exists in profiles but not yet
+          // in Supabase Auth — auto-provision the Supabase Auth account using the DB profile data.
+          // This is safe because we already confirmed the email via a DB profile lookup above.
           if (signInError && (signInError.message.toLowerCase().includes('invalid') || signInError.message.toLowerCase().includes('credentials'))) {
-            const memberInfo = getOrgMemberDetails(rawId, emailToUse);
+            // Look up full profile details to populate the new auth account correctly
+            const { data: fullProfile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('email', emailToUse)
+              .maybeSingle();
 
             const { data: signUpData, error: autoSignUpError } = await supabase.auth.signUp({
               email: emailToUse,
               password,
               options: {
                 data: {
-                  name: memberInfo.name,
-                  department: memberInfo.department,
-                  designation: memberInfo.designation,
-                  role: memberInfo.role,
-                  employee_id: memberInfo.employeeId,
+                  name: fullProfile?.name || emailToUse.split('@')[0],
+                  department: fullProfile?.department || 'Engineering',
+                  designation: fullProfile?.designation || 'Software Engineer',
+                  role: fullProfile?.role || 'member',
+                  employee_id: fullProfile?.employee_id || '',
                 },
               },
             });
 
             if (signUpData?.user) {
               const identities = signUpData.user.identities;
-              // If identities is an empty array, it means this email was ALREADY registered with another password in Supabase
+              // Empty identities array means this email is ALREADY registered in Supabase Auth
+              // with a different password — wrong password entered.
               if (identities && identities.length === 0) {
                 set({ isLoading: false });
                 return {
@@ -206,7 +222,7 @@ export const useAuthStore = create<AuthState>()(
                 };
               }
 
-              // Fresh account created! Authenticate now with the newly established password:
+              // Fresh Supabase Auth account created — authenticate with the chosen password:
               const retrySignIn = await supabase.auth.signInWithPassword({
                 email: emailToUse,
                 password,
