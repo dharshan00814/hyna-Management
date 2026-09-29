@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
 import {
   ArrowLeft, Users, User as UserIcon, CheckSquare, Plus,
   Layers, Check, Trash2, Edit2, ShieldCheck, Calendar,
-  Crown, ArrowDown, X
+  Crown, ArrowDown, X, AlertTriangle
 } from 'lucide-react';
 import {
   Button, Badge, ProgressBar, Avatar, AvatarGroup, Tabs,
@@ -14,36 +13,21 @@ import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import {
   getProject, getModules, getProjectTasks, createModule, updateModule, deleteModule,
-  createTask, updateProject, getUsers, getUserById
+  createTask, updateProject, deleteProject, getUsers, getUserById
 } from '@/services/api';
-=======
-import { ArrowLeft, Users as UsersIcon, CheckSquare, Plus, Trash2, AlertTriangle, Crown } from 'lucide-react';
-import { Button, Badge, ProgressBar, Avatar, AvatarGroup, Tabs, EmptyState, Modal, Input, Textarea, LoadingState } from '@/components/ui';
-import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
-import { useAuthStore } from '@/stores';
-import { getProject, getModules, getProjectTasks, createModule, deleteProject, getUsers, getUserById } from '@/services/api';
->>>>>>> 8d2da06f4fa96dccd091f5321c958cbcf3b793d6
 import { toast } from 'sonner';
 import type { Project, Module, Task, User, TaskPriority, TaskStatus } from '@/types';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-<<<<<<< HEAD
-  const { currentUser, effectiveRole } = useAuthStore();
-=======
   const { currentRole, currentUser, effectiveRole } = useAuthStore();
->>>>>>> 8d2da06f4fa96dccd091f5321c958cbcf3b793d6
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const isAdminOrManager = effectiveRole === 'admin' || effectiveRole === 'manager';
 
   const [activeTab, setActiveTab] = useState('overview');
-<<<<<<< HEAD
-=======
-  const [showCreateModule, setShowCreateModule] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
->>>>>>> 8d2da06f4fa96dccd091f5321c958cbcf3b793d6
   const [isLoading, setIsLoading] = useState(true);
 
   // CEO Authority Check
@@ -323,57 +307,57 @@ export function ProjectDetailPage() {
             <p className="page-description mt-0.5 truncate">{project.description || 'No description provided.'}</p>
           </div>
         </div>
-<<<<<<< HEAD
-
         {/* Action Buttons */}
-        {isAdminOrManager && (
-          <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {isAdminOrManager && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditMode(isSolo ? 'solo' : 'team');
+                  setEditManagerId(project.managerId);
+                  setEditMemberIds(project.memberIds);
+                  setShowManageTeam(true);
+                }}
+              >
+                <Users className="w-3.5 h-3.5 mr-1.5" />
+                <span>{isSolo ? 'Change Assignee' : 'Manage Team'}</span>
+              </Button>
+
+              <Button size="sm" onClick={() => setShowCreateModule(true)}>
+                <Plus className="w-3.5 h-3.5 mr-1" /> New Module
+              </Button>
+
+              <Button size="sm" onClick={() => {
+                setTaskForm({
+                  title: '',
+                  description: '',
+                  priority: 'medium',
+                  status: 'todo',
+                  deadline: '',
+                  moduleId: modules[0]?.id || '',
+                  assigneeId: project.memberIds[0] || '',
+                });
+                setShowCreateTask(true);
+              }}>
+                <CheckSquare className="w-3.5 h-3.5 mr-1" /> Allocate Task
+              </Button>
+            </>
+          )}
+
+          {isCEO && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setEditMode(isSolo ? 'solo' : 'team');
-                setEditManagerId(project.managerId);
-                setEditMemberIds(project.memberIds);
-                setShowManageTeam(true);
-              }}
+              onClick={() => setShowDeleteModal(true)}
+              className="text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/30 shrink-0"
             >
-              <Users className="w-3.5 h-3.5 mr-1.5" />
-              <span>{isSolo ? 'Change Assignee' : 'Manage Team'}</span>
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete Project
             </Button>
-
-            <Button size="sm" onClick={() => setShowCreateModule(true)}>
-              <Plus className="w-3.5 h-3.5 mr-1" /> New Module
-            </Button>
-
-            <Button size="sm" onClick={() => {
-              setTaskForm({
-                title: '',
-                description: '',
-                priority: 'medium',
-                status: 'todo',
-                deadline: '',
-                moduleId: modules[0]?.id || '',
-                assigneeId: project.memberIds[0] || '',
-              });
-              setShowCreateTask(true);
-            }}>
-              <CheckSquare className="w-3.5 h-3.5 mr-1" /> Allocate Task
-            </Button>
-          </div>
-=======
-        {isCEO && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowDeleteModal(true)}
-            className="text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/30 shrink-0"
-          >
-            <Trash2 className="w-4 h-4 mr-1.5" />
-            Delete Project
-          </Button>
->>>>>>> 8d2da06f4fa96dccd091f5321c958cbcf3b793d6
-        )}
+          )}
+        </div>
       </div>
 
       <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} className="mb-6 w-fit" />

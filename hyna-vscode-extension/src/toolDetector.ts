@@ -2,9 +2,7 @@ import * as vscode from 'vscode';
 import type { DeveloperTool } from './types';
 
 /**
- * Detects whether the extension is running inside Cursor or standard VS Code.
- * Cursor is built on VS Code's extension host, but sets appName to 'Cursor'
- * and exposes Cursor-specific environment variables.
+ * Detects whether the extension is running inside Antigravity, Cursor, or standard VS Code.
  */
 export function detectDeveloperTool(): DeveloperTool {
   const appName = (vscode.env.appName || '').toLowerCase();
@@ -13,7 +11,9 @@ export function detectDeveloperTool(): DeveloperTool {
   if (
     appName.includes('antigravity') ||
     execPath.includes('antigravity') ||
-    Boolean(process.env.ANTIGRAVITY_AGENT)
+    Boolean(process.env.ANTIGRAVITY_AGENT) ||
+    Boolean(process.env.ANTIGRAVITY_EDITOR_APP_ROOT) ||
+    Boolean(process.env.ANTIGRAVITY_CONVERSATION_ID)
   ) {
     return 'antigravity';
   }
