@@ -13,13 +13,17 @@ import {
   User,
   Building,
   CheckCircle2,
+  Download,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores';
+import { usePWA } from '@/hooks/usePWA';
+import { InstallAppModal } from '@/components/common/InstallAppModal';
 import { Button, Input } from '@/components/ui';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, signUp } = useAuthStore();
+  const { isInstallable, isInstalled, showModal, setShowModal, promptInstall } = usePWA();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -177,8 +181,8 @@ export function LoginPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.25),transparent_50%),radial-gradient(circle_at_80%_80%,rgba(168,85,247,0.2),transparent_50%)] pointer-events-none" />
 
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Layers className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
+            <img src="/logo.png" alt="Hyna Studio Logo" className="w-10 h-10 object-contain" />
           </div>
           <div>
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-100 to-zinc-300">
@@ -228,8 +232,19 @@ export function LoginPage() {
       </div>
 
       {/* Right panel: Login & Auth Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 overflow-y-auto">
-        <div className="w-full max-w-md space-y-8">
+      <div className="w-full lg:w-1/2 flex flex-col justify-between p-6 sm:p-12 overflow-y-auto min-h-screen">
+        <div className="flex justify-end w-full max-w-md mx-auto">
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{isInstalled ? 'App Installed' : 'Install App'}</span>
+          </button>
+        </div>
+
+        <div className="w-full max-w-md mx-auto my-auto space-y-8 py-6">
           {/* Header */}
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -400,7 +415,23 @@ export function LoginPage() {
             </Button>
           </form>
         </div>
+
+        {/* Footer info */}
+        <div className="w-full max-w-md mx-auto text-center pt-4">
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            Can also be installed directly to your desktop or mobile home screen.
+          </p>
+        </div>
       </div>
+
+      {/* PWA Install Modal */}
+      <InstallAppModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onInstallPrompt={promptInstall}
+        isInstallable={isInstallable}
+        isInstalled={isInstalled}
+      />
     </div>
   );
 }

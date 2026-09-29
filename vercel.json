@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "buildCommand": "npm --prefix hyna-frontend install && npm --prefix hyna-frontend run build",
+  "outputDirectory": "hyna-frontend/dist",
+  "installCommand": "echo skip",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

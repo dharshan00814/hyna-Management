@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import type { DeveloperActivityEvent, DeveloperTool, ExtensionSessionState } from './types';
 
 export class HynaClient {
@@ -32,34 +33,61 @@ export class HynaClient {
   }
 
   /**
+   * Helper to infer tool from code prefix (HYNA-AGY-, HYNA-CRSR-, HYNA-VSCD-)
+   */
+  public inferToolFromCode(code: string, fallback: DeveloperTool): DeveloperTool {
+    const clean = (code || '').toUpperCase().trim();
+    if (clean.includes('-AGY-') || clean.includes('ANTIGRAVITY')) return 'antigravity';
+    if (clean.includes('-CRSR-') || clean.includes('CURSOR')) return 'cursor';
+    if (clean.includes('-VSCD-') || clean.includes('VSCODE')) return 'vscode';
+    return fallback;
+  }
+
+  /**
    * Connects extension to Hyna using a connection code generated on /settings/integrations.
    */
   public async connectWithCode(
     code: string,
     tool: DeveloperTool,
     deviceName: string
-  ): Promise<{ success: boolean; userId?: string; error?: string }> {
+  ): Promise<{ success: boolean; userId?: string; tool?: DeveloperTool; error?: string }> {
     if (!this.supabase) {
       return { success: false, error: 'Supabase client not initialized' };
     }
 
+    const cleanCode = code.trim().toUpperCase();
+    const effectiveTool = this.inferToolFromCode(cleanCode, tool);
+
     try {
       // 1. Try secure RPC function first
       try {
-        const { data: rpcData, error: rpcErr } = await this.supabase.rpc('verify_developer_connection_code', {
-          p_code: code.trim().toUpperCase(),
-          p_tool: tool.toLowerCase(),
+        let { data: rpcData, error: rpcErr } = await this.supabase.rpc('verify_developer_connection_code', {
+          p_code: cleanCode,
+          p_tool: effectiveTool,
           p_device_name: deviceName,
         });
 
+        if (rpcErr && (rpcErr.code === '23505' || rpcErr.message?.includes('uq_developer_integration'))) {
+          const retry = await this.supabase.rpc('verify_developer_connection_code', {
+            p_code: cleanCode,
+            p_tool: effectiveTool,
+            p_device_name: null,
+          });
+          if (!retry.error && retry.data?.success) {
+            rpcData = retry.data;
+            rpcErr = null;
+          }
+        }
+
         if (!rpcErr && rpcData && rpcData.success) {
+          const finalTool = (rpcData.tool as DeveloperTool) || effectiveTool;
           await this.context.secrets.store('hyna_user_id', rpcData.user_id);
-          await this.context.secrets.store('hyna_tool', tool);
+          await this.context.secrets.store('hyna_tool', finalTool);
           await this.context.secrets.store('hyna_device_name', deviceName);
           if (rpcData.api_key) {
             await this.context.secrets.store('hyna_api_key', rpcData.api_key);
           }
-          return { success: true, userId: rpcData.user_id };
+          return { success: true, userId: rpcData.user_id, tool: finalTool };
         }
       } catch {
         // Fallback to direct query below
@@ -69,20 +97,21 @@ export class HynaClient {
       const { data, error } = await this.supabase
         .from('developer_integrations')
         .select('*')
-        .eq('connection_code', code.trim().toUpperCase())
+        .eq('connection_code', cleanCode)
         .single();
 
       if (error || !data) {
         return { success: false, error: 'Invalid or expired connection code.' };
       }
 
+      const finalTool = (data.tool as DeveloperTool) || effectiveTool;
+      const apiKey = data.api_key || `hyna_dev_${finalTool}_${Date.now()}`;
+
       // Save credentials in extension secure storage
       await this.context.secrets.store('hyna_user_id', data.user_id);
-      await this.context.secrets.store('hyna_tool', tool);
+      await this.context.secrets.store('hyna_tool', finalTool);
       await this.context.secrets.store('hyna_device_name', deviceName);
-      if (data.api_key) {
-        await this.context.secrets.store('hyna_api_key', data.api_key);
-      }
+      await this.context.secrets.store('hyna_api_key', apiKey);
 
       // Update integration state to connected
       await this.supabase
@@ -90,12 +119,15 @@ export class HynaClient {
         .update({
           status: 'connected',
           device_name: deviceName,
+          api_key: apiKey,
+          connection_code: null,
           last_connected_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq('id', data.id);
 
-      return { success: true, userId: data.user_id };
+      return { success: true, userId: data.user_id, tool: finalTool };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Connection error' };
     }
@@ -105,22 +137,60 @@ export class HynaClient {
     return this.context.secrets.get('hyna_user_id');
   }
 
-  public async disconnect(): Promise<void> {
+  public async getStoredTool(): Promise<DeveloperTool | undefined> {
+    return (await this.context.secrets.get('hyna_tool')) as DeveloperTool | undefined;
+  }
+
+  public async getStoredDeviceName(): Promise<string | undefined> {
+    return this.context.secrets.get('hyna_device_name');
+  }
+
+  /**
+   * Sets integration status to 'disconnected' in Supabase without clearing local stored credentials.
+   * Useful when IDE closes or session ends.
+   */
+  public async setDisconnectedStatus(): Promise<void> {
     const userId = await this.getStoredUserId();
-    const tool = (await this.context.secrets.get('hyna_tool')) as DeveloperTool;
+    const tool = await this.getStoredTool();
 
     if (this.supabase && userId && tool) {
+      const nowIso = new Date().toISOString();
       try {
+        // 1. Mark integration record as disconnected
         await this.supabase
           .from('developer_integrations')
-          .update({ status: 'disconnected', connection_code: null })
+          .update({
+            status: 'disconnected',
+            last_seen_at: nowIso,
+            updated_at: nowIso,
+          })
           .eq('user_id', userId)
           .eq('tool', tool);
+
+        // 2. Terminate any active or idle sessions in developer_sessions
+        await this.supabase
+          .from('developer_sessions')
+          .update({
+            status: 'ended',
+            ended_at: nowIso,
+            last_activity_at: nowIso,
+          })
+          .eq('user_id', userId)
+          .eq('tool', tool)
+          .in('status', ['active', 'idle']);
+
+        this.activeSessionId = null;
       } catch (e) {
-        // ignore
+        console.warn('[Hyna] setDisconnectedStatus warning:', e);
       }
     }
+  }
 
+  /**
+   * Complete disconnect - marks status disconnected and purges local secrets.
+   */
+  public async disconnect(): Promise<void> {
+    await this.setDisconnectedStatus();
     await this.context.secrets.delete('hyna_user_id');
     await this.context.secrets.delete('hyna_tool');
     await this.context.secrets.delete('hyna_device_name');
@@ -142,9 +212,18 @@ export class HynaClient {
 
       // 1. Maintain or update developer_sessions row
       if (event.eventType === 'session_started' || !this.activeSessionId) {
-        const { data: newSession, error: sessErr } = await this.supabase
+        this.activeSessionId = crypto.randomUUID();
+        const initialStatus =
+          event.eventType === 'session_ended'
+            ? 'ended'
+            : event.eventType === 'idle'
+            ? 'idle'
+            : 'active';
+
+        const { error: sessErr } = await this.supabase
           .from('developer_sessions')
           .insert({
+            id: this.activeSessionId,
             user_id: event.userId,
             tool: event.tool,
             project_id: event.projectId || null,
@@ -154,13 +233,12 @@ export class HynaClient {
             git_branch: event.gitBranch || '',
             started_at: nowIso,
             last_activity_at: nowIso,
-            status: event.eventType === 'idle' ? 'idle' : 'active',
-          })
-          .select('id')
-          .single();
+            ended_at: event.eventType === 'session_ended' ? nowIso : null,
+            status: initialStatus,
+          });
 
-        if (!sessErr && newSession) {
-          this.activeSessionId = newSession.id;
+        if (sessErr) {
+          console.warn('[Hyna] Developer session insert error:', sessErr);
         }
       } else {
         const status =
@@ -201,10 +279,15 @@ export class HynaClient {
         created_at: event.timestamp || nowIso,
       });
 
-      // 3. Touch integration last_seen_at
+      // 3. Touch integration last_seen_at & status
+      const isEnded = event.eventType === 'session_ended';
       await this.supabase
         .from('developer_integrations')
-        .update({ last_seen_at: nowIso, status: 'connected' })
+        .update({
+          last_seen_at: nowIso,
+          status: isEnded ? 'disconnected' : 'connected',
+          updated_at: nowIso,
+        })
         .eq('user_id', event.userId)
         .eq('tool', event.tool);
 

@@ -1162,9 +1162,18 @@ BEGIN
 
   v_api_key := 'hyna_' || lower(trim(p_tool)) || '_' || encode(gen_random_bytes(16), 'hex');
 
+  -- Remove any stale duplicate integration for the same user, tool, and device
+  DELETE FROM public.developer_integrations
+  WHERE user_id = v_rec.user_id
+    AND tool = v_rec.tool
+    AND p_device_name IS NOT NULL
+    AND length(trim(p_device_name)) > 0
+    AND device_name = trim(p_device_name)
+    AND id != v_rec.id;
+
   UPDATE public.developer_integrations
   SET status = 'connected',
-      device_name = COALESCE(p_device_name, device_name),
+      device_name = COALESCE(NULLIF(trim(p_device_name), ''), device_name),
       api_key = v_api_key,
       connection_code = NULL,
       last_connected_at = NOW(),

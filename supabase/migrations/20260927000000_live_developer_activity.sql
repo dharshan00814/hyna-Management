@@ -300,3 +300,67 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null;
 WHEN others THEN null;
 END $$;
+
+-- ============================================================
+-- 7. RPC FUNCTION FOR ATOMIC IDE PAIRING
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.verify_developer_connection_code(
+  p_code TEXT,
+  p_tool TEXT,
+  p_device_name TEXT DEFAULT 'Developer Machine'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_rec RECORD;
+  v_api_key TEXT;
+BEGIN
+  IF p_code IS NULL OR length(trim(p_code)) < 4 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid pairing code format');
+  END IF;
+
+  SELECT * INTO v_rec
+  FROM public.developer_integrations
+  WHERE connection_code = upper(trim(p_code))
+    AND tool = lower(trim(p_tool))
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid or expired pairing code');
+  END IF;
+
+  v_api_key := 'hyna_' || lower(trim(p_tool)) || '_' || encode(gen_random_bytes(16), 'hex');
+
+  -- Remove any stale duplicate integration for the same user, tool, and device
+  DELETE FROM public.developer_integrations
+  WHERE user_id = v_rec.user_id
+    AND tool = v_rec.tool
+    AND p_device_name IS NOT NULL
+    AND length(trim(p_device_name)) > 0
+    AND device_name = trim(p_device_name)
+    AND id != v_rec.id;
+
+  UPDATE public.developer_integrations
+  SET status = 'connected',
+      device_name = COALESCE(NULLIF(trim(p_device_name), ''), device_name),
+      api_key = v_api_key,
+      connection_code = NULL,
+      last_connected_at = NOW(),
+      last_seen_at = NOW(),
+      updated_at = NOW()
+  WHERE id = v_rec.id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_rec.user_id,
+    'integration_id', v_rec.id,
+    'api_key', v_api_key,
+    'tool', v_rec.tool
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.verify_developer_connection_code TO anon, authenticated;
+

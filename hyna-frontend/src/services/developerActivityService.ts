@@ -148,23 +148,54 @@ export async function generateIntegrationPairingCode(
     const connectionCode = `HYNA-${toolTag}-${randomSuffix}`;
     const apiKey = `hyna_dev_${tool}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-    const { data, error } = await supabase
+    // Check if user already has an integration record for this tool
+    const { data: existing } = await supabase
       .from('developer_integrations')
-      .upsert(
-        {
-          user_id: user.id,
-          tool,
-          device_name: deviceName.trim() || 'Developer Machine',
-          status: 'connected',
+      .select('id, device_name')
+      .eq('user_id', user.id)
+      .eq('tool', tool)
+      .order('last_seen_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let data;
+    let error;
+
+    if (existing) {
+      const updateRes = await supabase
+        .from('developer_integrations')
+        .update({
           connection_code: connectionCode,
           api_key: apiKey,
-          last_connected_at: new Date().toISOString(),
+          status: 'disconnected',
           last_seen_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,tool,device_name' }
-      )
-      .select()
-      .single();
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      data = updateRes.data;
+      error = updateRes.error;
+    } else {
+      const upsertRes = await supabase
+        .from('developer_integrations')
+        .upsert(
+          {
+            user_id: user.id,
+            tool,
+            device_name: deviceName.trim() || 'Developer Machine',
+            status: 'disconnected',
+            connection_code: connectionCode,
+            api_key: apiKey,
+            last_seen_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,tool,device_name' }
+        )
+        .select()
+        .single();
+      data = upsertRes.data;
+      error = upsertRes.error;
+    }
 
     if (error) {
       handleTableError('Failed to generate integration pairing code', error);
@@ -186,15 +217,27 @@ export async function generateIntegrationPairingCode(
 }
 
 /**
- * Disconnects an IDE integration.
+ * Disconnects an IDE integration and marks active developer sessions as ended.
  */
 export async function disconnectIntegration(integrationId: string): Promise<boolean> {
   try {
+    const nowIso = new Date().toISOString();
+
+    // 1. Fetch integration row to know user_id and tool
+    const { data: integ } = await supabase
+      .from('developer_integrations')
+      .select('user_id, tool')
+      .eq('id', integrationId)
+      .maybeSingle();
+
+    // 2. Mark integration as disconnected
     const { error } = await supabase
       .from('developer_integrations')
       .update({
         status: 'disconnected',
         connection_code: null,
+        last_seen_at: nowIso,
+        updated_at: nowIso,
       })
       .eq('id', integrationId);
 
@@ -202,6 +245,21 @@ export async function disconnectIntegration(integrationId: string): Promise<bool
       handleTableError('Failed to disconnect integration', error);
       return false;
     }
+
+    // 3. Mark active/idle sessions in developer_sessions as ended
+    if (integ?.user_id && integ?.tool) {
+      await supabase
+        .from('developer_sessions')
+        .update({
+          status: 'ended',
+          ended_at: nowIso,
+          last_activity_at: nowIso,
+        })
+        .eq('user_id', integ.user_id)
+        .eq('tool', integ.tool)
+        .in('status', ['active', 'idle']);
+    }
+
     return true;
   } catch (err) {
     console.warn('[DeveloperActivityService] Disconnect exception:', err);
@@ -345,10 +403,10 @@ export async function getLiveDeveloperCards(): Promise<{
   try {
     await preloadLookupMaps();
 
-    const { data: sessions, error } = await supabase
-      .from('developer_sessions')
-      .select('*')
-      .order('last_activity_at', { ascending: false });
+    const [{ data: sessions, error }, { data: integrations }] = await Promise.all([
+      supabase.from('developer_sessions').select('*').order('last_activity_at', { ascending: false }),
+      supabase.from('developer_integrations').select('*'),
+    ]);
 
     if (error) {
       handleTableError('Error loading live developer sessions', error);
@@ -365,8 +423,15 @@ export async function getLiveDeveloperCards(): Promise<{
     }
 
     const now = Date.now();
-    const IDLE_CUTOFF_MS = 5 * 60 * 1000; // 5 minutes inactivity considered idle
-    const OFFLINE_CUTOFF_MS = 15 * 60 * 1000; // 15 minutes inactivity considered offline
+    const IDLE_CUTOFF_MS = 2.5 * 60 * 1000; // 2.5 minutes inactivity without heartbeat = idle
+    const OFFLINE_CUTOFF_MS = 5 * 60 * 1000; // 5 minutes inactivity without heartbeat = offline
+
+    // Map connected status: `${user_id}:${tool}` -> boolean
+    const connectedToolMap = new Map<string, boolean>();
+    (integrations || []).forEach((item) => {
+      const isConnected = item.status === 'connected';
+      connectedToolMap.set(`${item.user_id}:${item.tool}`, isConnected);
+    });
 
     // Group latest session by user
     const userLatestSessionMap = new Map<string, any>();
@@ -399,8 +464,10 @@ export async function getLiveDeveloperCards(): Promise<{
         const lastActMs = new Date(s.last_activity_at).getTime();
         const startMs = new Date(s.started_at).getTime();
         const diffMs = Math.max(0, now - lastActMs);
+        const isToolConnected = s.tool ? connectedToolMap.get(`${s.user_id}:${s.tool}`) : false;
 
-        if (s.status === 'ended' || diffMs > OFFLINE_CUTOFF_MS) {
+        // If session is explicitly ended, or the tool is disconnected, or inactivity passed cutoff -> offline
+        if (s.status === 'ended' || isToolConnected === false || diffMs > OFFLINE_CUTOFF_MS) {
           status = 'offline';
         } else if (s.status === 'idle' || diffMs > IDLE_CUTOFF_MS) {
           status = 'idle';
@@ -408,8 +475,17 @@ export async function getLiveDeveloperCards(): Promise<{
           status = 'active';
         }
 
-        activeDurationSeconds = Math.max(0, Math.round((lastActMs - startMs) / 1000));
-        lastActivityAgo = formatTimeAgo(s.last_activity_at);
+        // Live continuous usage prediction:
+        if (status === 'active') {
+          activeDurationSeconds = Math.max(0, Math.round((now - startMs) / 1000));
+        } else if (status === 'idle') {
+          activeDurationSeconds = Math.max(0, Math.round((lastActMs - startMs) / 1000));
+        } else {
+          const sessionEnd = s.ended_at ? new Date(s.ended_at).getTime() : lastActMs;
+          activeDurationSeconds = Math.max(0, Math.round((sessionEnd - startMs) / 1000));
+        }
+
+        lastActivityAgo = status === 'active' ? 'Active now' : formatTimeAgo(s.last_activity_at);
 
         if (status !== 'offline') {
           const t = s.tool as DeveloperTool;
@@ -424,11 +500,36 @@ export async function getLiveDeveloperCards(): Promise<{
       const project = s?.project_id ? cachedProjectsMap.get(s.project_id) : undefined;
       const task = s?.task_id ? cachedTasksMap.get(s.task_id) : undefined;
 
+      const currentSession: DeveloperSession | undefined = s
+        ? {
+            id: s.id,
+            userId: s.user_id,
+            integrationId: s.integration_id,
+            projectId: s.project_id,
+            taskId: s.task_id,
+            tool: s.tool as DeveloperTool,
+            workspaceName: s.workspace_name,
+            currentFile: s.current_file,
+            gitBranch: s.git_branch,
+            startedAt: s.started_at,
+            started_at: s.started_at,
+            lastActivityAt: s.last_activity_at,
+            last_activity_at: s.last_activity_at,
+            endedAt: s.ended_at,
+            status: s.status,
+            createdAt: s.created_at,
+            updatedAt: s.updated_at,
+            user,
+            project,
+            task,
+          }
+        : undefined;
+
       cards.push({
         user,
         status,
         tool: s?.tool as DeveloperTool | undefined,
-        currentSession: s,
+        currentSession,
         projectName: project?.name || s?.workspace_name || undefined,
         taskTitle: task?.title || undefined,
         workspaceName: s?.workspace_name || undefined,
@@ -637,6 +738,11 @@ export function subscribeToLiveDeveloperActivity(onUpdate: () => void): () => vo
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'developer_activity_events' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'developer_integrations' },
         () => onUpdate()
       )
       .subscribe();

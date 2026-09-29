@@ -34,24 +34,41 @@ function prompt(questionText: string): Promise<string> {
   });
 }
 
+const DEFAULT_SUPABASE_URL = "https://bpawtpzyodgzqjeglsye.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwYXd0cHp5b2RnenFqZWdsc3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDg4NjYsImV4cCI6MjEwNDMyNDg2Nn0.LOAf1FWvr-z-kpgRBLffxq7cgqKvCC3A5Pw-jU_FTz4";
+
 async function handleConnect(args: string[]): Promise<void> {
   printBanner();
 
   let code = "";
-  let url = process.env.VITE_SUPABASE_URL || "https://bpawtpzyodgzqjeglsye.supabase.co";
-  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || "";
+  let url = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+  let autoStart = true;
 
   // Parse args
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--code" && args[i + 1]) code = args[++i];
-    if (args[i] === "--url" && args[i + 1]) url = args[++i];
-    if (args[i] === "--key" && args[i + 1]) anonKey = args[++i];
+    const arg = args[i];
+    if ((arg === "--code" || arg === "-c") && args[i + 1]) {
+      code = args[++i];
+    } else if (arg.startsWith("--code=")) {
+      code = arg.substring(7).trim();
+    } else if (arg.startsWith("--code:")) {
+      const rest = arg.substring(7).trim();
+      code = rest || (args[++i] || "").trim();
+    } else if ((arg === "--url" || arg === "-u") && args[i + 1]) {
+      url = args[++i];
+    } else if ((arg === "--key" || arg === "-k") && args[i + 1]) {
+      anonKey = args[++i];
+    } else if (arg === "--no-start") {
+      autoStart = false;
+    }
   }
 
   if (!code) {
     console.log("To connect Antigravity:");
     console.log("1. Open Hyna Studio -> Settings -> IDE Integrations (/settings/integrations)");
-    console.log("2. Click 'Connect Antigravity' and copy your pairing code (HYNA-ANTIGRAVITY-XXXXXX)\n");
+    console.log("2. Click 'Connect Antigravity' and copy your pairing code (HYNA-AGY-XXXX)\n");
     code = await prompt("Enter Pairing Code: ");
   }
 
@@ -61,25 +78,35 @@ async function handleConnect(args: string[]): Promise<void> {
   }
 
   if (!anonKey) {
-    anonKey = await prompt("Enter Supabase Anon Key (or set VITE_SUPABASE_ANON_KEY): ");
+    anonKey = await prompt("Enter Supabase Anon Key (or press enter for default): ");
+    if (!anonKey) anonKey = DEFAULT_SUPABASE_ANON_KEY;
   }
 
-  if (!anonKey) {
-    console.error("\x1b[31mError: Anon key is required to contact Supabase.\x1b[0m");
-    process.exit(1);
-  }
-
-  console.log(`\nValidating code [${code}] with Hyna Studio...`);
+  const cleanCode = code.trim().toUpperCase();
+  console.log(`\nValidating code [${cleanCode}] with Hyna Studio...`);
   const client = createClient(url, anonKey);
   const deviceName = os.hostname();
 
   // 1. Try secure RPC function first
   try {
-    const { data: rpcData, error: rpcErr } = await client.rpc("verify_developer_connection_code", {
-      p_code: code.trim().toUpperCase(),
+    let { data: rpcData, error: rpcErr } = await client.rpc("verify_developer_connection_code", {
+      p_code: cleanCode,
       p_tool: "antigravity",
       p_device_name: deviceName,
     });
+
+    // If duplicate device conflict on an older record for this machine, retry preserving existing device name
+    if (rpcErr && (rpcErr.code === "23505" || rpcErr.message?.includes("uq_developer_integration"))) {
+      const retry = await client.rpc("verify_developer_connection_code", {
+        p_code: cleanCode,
+        p_tool: "antigravity",
+        p_device_name: null,
+      });
+      if (!retry.error && retry.data?.success) {
+        rpcData = retry.data;
+        rpcErr = null;
+      }
+    }
 
     if (!rpcErr && rpcData && rpcData.success) {
       const creds: StoredCredentials = {
@@ -95,18 +122,31 @@ async function handleConnect(args: string[]): Promise<void> {
       console.log("\x1b[32mSuccessfully connected Antigravity to Hyna Studio!\x1b[0m");
       console.log(`User ID: ${rpcData.user_id}`);
       console.log(`Device:  ${deviceName}`);
-      console.log("\nYou can now start live tracking anytime by running: \x1b[36mhyna-antigravity start\x1b[0m\n");
+
+      if (autoStart) {
+        console.log("\n\x1b[36m⚡ Automatically starting live activity tracking in terminal...\x1b[0m");
+        console.log("\x1b[90m(When you exit this terminal or press Ctrl+C, tracking automatically stops & disconnects)\x1b[0m\n");
+        const agent = new AntigravityActivityAgent(process.cwd());
+        await agent.start();
+      } else {
+        console.log("\nYou can start live tracking anytime by running: \x1b[36mnode dist/index.js start\x1b[0m\n");
+      }
       return;
     }
-  } catch {
-    // Fallback to direct query
+
+    if (rpcData && !rpcData.success) {
+      console.error(`\x1b[31mConnection failed: ${rpcData.error || "Invalid or expired pairing code."}\x1b[0m`);
+      process.exit(1);
+    }
+  } catch (err: any) {
+    // Non-fatal, try fallback
   }
 
   // 2. Direct table query fallback
   const { data: integration, error } = await client
     .from("developer_integrations")
     .select("*")
-    .eq("connection_code", code.trim().toUpperCase())
+    .eq("connection_code", cleanCode)
     .eq("tool", "antigravity")
     .maybeSingle();
 
@@ -118,12 +158,13 @@ async function handleConnect(args: string[]): Promise<void> {
 
   const apiKey = `hyna_agt_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`;
 
-  // Update integration row as connected
+  // Update integration row as connected (keep original device name if conflict)
+  const targetDevice = integration.device_name || deviceName;
   const { error: updateErr } = await client
     .from("developer_integrations")
     .update({
       status: "connected",
-      device_name: deviceName,
+      device_name: targetDevice,
       api_key: apiKey,
       connection_code: null, // Clear one-time code
       last_connected_at: new Date().toISOString(),
@@ -152,7 +193,15 @@ async function handleConnect(args: string[]): Promise<void> {
   console.log("\x1b[32mSuccessfully connected Antigravity to Hyna Studio!\x1b[0m");
   console.log(`User ID: ${integration.user_id}`);
   console.log(`Device:  ${deviceName}`);
-  console.log("\nYou can now start live tracking anytime by running: \x1b[36mhyna-antigravity start\x1b[0m\n");
+
+  if (autoStart) {
+    console.log("\n\x1b[36m⚡ Automatically starting live activity tracking in terminal...\x1b[0m");
+    console.log("\x1b[90m(When you exit this terminal or press Ctrl+C, tracking automatically stops & disconnects)\x1b[0m\n");
+    const agent = new AntigravityActivityAgent(process.cwd());
+    await agent.start();
+  } else {
+    console.log("\nYou can start live tracking anytime by running: \x1b[36mnode dist/index.js start\x1b[0m\n");
+  }
 }
 
 async function handleStart(): Promise<void> {
@@ -202,14 +251,26 @@ async function handleDisconnect(): Promise<void> {
 
   try {
     const client = createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+    const nowIso = new Date().toISOString();
     await client
       .from("developer_integrations")
       .update({
         status: "disconnected",
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
       .eq("user_id", creds.userId)
       .eq("tool", "antigravity");
+
+    await client
+      .from("developer_sessions")
+      .update({
+        status: "ended",
+        ended_at: nowIso,
+        last_activity_at: nowIso,
+      })
+      .eq("user_id", creds.userId)
+      .eq("tool", "antigravity")
+      .in("status", ["active", "idle"]);
   } catch {
     // Ignore network error during disconnect
   }

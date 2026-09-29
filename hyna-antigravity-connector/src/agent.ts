@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as crypto from "crypto";
 import { DeveloperActivityEvent, DeveloperEventType, StoredCredentials, ProjectTaskMapping } from "./types";
 import { getCredentials, enqueueOfflineEvent, getOfflineQueue, clearOfflineQueue, getLocalProjectTaskConfig } from "./storage";
 import { getSafeGitMetadata } from "./git";
@@ -83,13 +84,29 @@ export class AntigravityActivityAgent {
   }
 
   public async stop(): Promise<void> {
-    console.log("\n[Hyna Antigravity Agent] Ending session...");
+    console.log("\n[Hyna Antigravity Agent] Ending session and disconnecting...");
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.idleCheckTimer) clearInterval(this.idleCheckTimer);
     if (this.watcher) this.watcher.close();
 
     await this.sendEvent("session_ended");
-    console.log("\x1b[32m[Hyna Antigravity Agent] Session ended safely.\x1b[0m");
+
+    if (this.client && this.creds) {
+      try {
+        await this.client
+          .from("developer_integrations")
+          .update({
+            status: "disconnected",
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", this.creds.userId)
+          .eq("tool", "antigravity");
+      } catch {
+        // ignore
+      }
+    }
+    console.log("\x1b[32m[Hyna Antigravity Agent] Session ended safely. Workstation disconnected.\x1b[0m");
   }
 
   public recordActivity(relativeFilePath?: string): void {
@@ -183,9 +200,11 @@ export class AntigravityActivityAgent {
     try {
       // 1. Maintain developer_sessions table
       if (eventType === "session_started" || !this.currentSessionId) {
-        const { data: newSession, error: sErr } = await this.client
+        this.currentSessionId = crypto.randomUUID();
+        const { error: sErr } = await this.client
           .from("developer_sessions")
           .insert({
+            id: this.currentSessionId,
             user_id: this.creds.userId,
             tool: "antigravity",
             workspace_name: this.workspaceName,
@@ -196,12 +215,9 @@ export class AntigravityActivityAgent {
             started_at: event.timestamp,
             last_activity_at: event.timestamp,
             status: "active",
-          })
-          .select("id")
-          .single();
+          });
 
         if (sErr) throw sErr;
-        this.currentSessionId = newSession?.id || null;
       } else if (this.currentSessionId) {
         const sessionStatus = eventType === "session_ended" ? "ended" : this.isIdle ? "idle" : "active";
         await this.client

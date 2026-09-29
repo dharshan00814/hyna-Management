@@ -40,6 +40,21 @@
         "command": "hyna.status",
         "title": "Show Tracker Status",
         "category": "Hyna"
+      },
+      {
+        "command": "hyna.openTerminal",
+        "title": "Open Tracker Terminal",
+        "category": "Hyna"
+      },
+      {
+        "command": "hyna.start",
+        "title": "Start Live Tracking",
+        "category": "Hyna"
+      },
+      {
+        "command": "hyna.stop",
+        "title": "Stop Live Tracking & Disconnect",
+        "category": "Hyna"
       }
     ],
     "configuration": {
