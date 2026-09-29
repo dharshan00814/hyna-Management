@@ -21,6 +21,7 @@ import { ReportsPage } from './pages/reports/ReportsPage';
 import { MessagesPage } from './pages/messages/MessagesPage';
 import { FilesPage } from './pages/files/FilesPage';
 import { LeavePage } from './pages/leave/LeavePage';
+import { PayrollPage } from './pages/payroll/PayrollPage';
 import { AnnouncementsPage } from './pages/announcements/AnnouncementsPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 
@@ -120,6 +121,7 @@ function App() {
             <Route path="/admin/messages" element={<MessagesPage />} />
             <Route path="/admin/files" element={<FilesPage />} />
             <Route path="/admin/leave" element={<LeavePage />} />
+            <Route path="/admin/payroll" element={<PayrollPage />} />
             <Route path="/admin/announcements" element={<AnnouncementsPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
             <Route path="/admin/settings/integrations" element={<ConnectIntegrationsPage />} />
@@ -144,6 +146,7 @@ function App() {
             <Route path="/manager/messages" element={<MessagesPage />} />
             <Route path="/manager/files" element={<FilesPage />} />
             <Route path="/manager/leave" element={<LeavePage />} />
+            <Route path="/manager/payroll" element={<PayrollPage />} />
             <Route path="/manager/announcements" element={<AnnouncementsPage />} />
             <Route path="/manager/settings" element={<SettingsPage />} />
             <Route path="/manager/settings/integrations" element={<ConnectIntegrationsPage />} />
@@ -166,6 +169,7 @@ function App() {
             <Route path="/member/messages" element={<MessagesPage />} />
             <Route path="/member/files" element={<FilesPage />} />
             <Route path="/member/leave" element={<LeavePage />} />
+            <Route path="/member/payroll" element={<PayrollPage />} />
             <Route path="/member/settings" element={<SettingsPage />} />
             <Route path="/member/settings/integrations" element={<ConnectIntegrationsPage />} />
           </Route>
@@ -173,6 +177,7 @@ function App() {
           {/* Direct Accessible Shared Routes */}
           <Route path="/my-activity" element={<MyDeveloperActivityPage />} />
           <Route path="/developer-activity" element={<LiveDeveloperActivityPage />} />
+          <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
 
           {/* Privacy & Tracking Policy Route */}
