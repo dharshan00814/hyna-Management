@@ -46,11 +46,25 @@ export class HynaClient {
     try {
       // 1. Try secure RPC function first
       try {
-        const { data: rpcData, error: rpcErr } = await this.supabase.rpc('verify_developer_connection_code', {
-          p_code: code.trim().toUpperCase(),
-          p_tool: tool.toLowerCase(),
+        const cleanCode = code.trim().toUpperCase();
+        const effectiveTool = tool.toLowerCase();
+        let { data: rpcData, error: rpcErr } = await this.supabase.rpc('verify_developer_connection_code', {
+          p_code: cleanCode,
+          p_tool: effectiveTool,
           p_device_name: deviceName,
         });
+
+        if (rpcErr && (rpcErr.code === '23505' || rpcErr.message?.includes('uq_developer_integration'))) {
+          const retry = await this.supabase.rpc('verify_developer_connection_code', {
+            p_code: cleanCode,
+            p_tool: effectiveTool,
+            p_device_name: null,
+          });
+          if (!retry.error && retry.data?.success) {
+            rpcData = retry.data;
+            rpcErr = null;
+          }
+        }
 
         if (!rpcErr && rpcData && rpcData.success) {
           await this.context.secrets.store('hyna_user_id', rpcData.user_id);

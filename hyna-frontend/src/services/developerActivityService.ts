@@ -148,23 +148,54 @@ export async function generateIntegrationPairingCode(
     const connectionCode = `HYNA-${toolTag}-${randomSuffix}`;
     const apiKey = `hyna_dev_${tool}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-    const { data, error } = await supabase
+    // Check if user already has an integration record for this tool
+    const { data: existing } = await supabase
       .from('developer_integrations')
-      .upsert(
-        {
-          user_id: user.id,
-          tool,
-          device_name: deviceName.trim() || 'Developer Machine',
-          status: 'connected',
+      .select('id, device_name')
+      .eq('user_id', user.id)
+      .eq('tool', tool)
+      .order('last_seen_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let data;
+    let error;
+
+    if (existing) {
+      const updateRes = await supabase
+        .from('developer_integrations')
+        .update({
           connection_code: connectionCode,
           api_key: apiKey,
-          last_connected_at: new Date().toISOString(),
+          status: 'disconnected',
           last_seen_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,tool,device_name' }
-      )
-      .select()
-      .single();
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      data = updateRes.data;
+      error = updateRes.error;
+    } else {
+      const upsertRes = await supabase
+        .from('developer_integrations')
+        .upsert(
+          {
+            user_id: user.id,
+            tool,
+            device_name: deviceName.trim() || 'Developer Machine',
+            status: 'disconnected',
+            connection_code: connectionCode,
+            api_key: apiKey,
+            last_seen_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,tool,device_name' }
+        )
+        .select()
+        .single();
+      data = upsertRes.data;
+      error = upsertRes.error;
+    }
 
     if (error) {
       handleTableError('Failed to generate integration pairing code', error);
