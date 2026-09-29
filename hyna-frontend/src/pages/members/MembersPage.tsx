@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Mail, Phone } from 'lucide-react';
+import { Search, Plus, Mail, Phone, X } from 'lucide-react';
 import { Button, Avatar, EmptyState, LoadingState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getUsers, getTasks } from '@/services/api';
+import { getUsers, getTasks, addMember } from '@/services/api';
 import type { User, Task } from '@/types';
+import { toast } from 'sonner';
 
 export function MembersPage() {
   const navigate = useNavigate();
@@ -16,6 +17,26 @@ export function MembersPage() {
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newMember, setNewMember] = useState({ name: '', email: '', department: '', role: 'member' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const added = await addMember(newMember);
+      setUsers(prev => [added, ...prev]);
+      toast.success('Member added successfully!');
+      setIsModalOpen(false);
+      setNewMember({ name: '', email: '', department: '', role: 'member' });
+    } catch (error) {
+      toast.error('Failed to add member.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -54,8 +75,47 @@ export function MembersPage() {
           <h1 className="page-title">Members</h1>
           <p className="page-description">{users.length} team members</p>
         </div>
-        {currentRole !== 'member' && <Button><Plus className="w-4 h-4 mr-1" /> Add Member</Button>}
+        {currentRole !== 'member' && <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Member</Button>}
       </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--color-card)] w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
+              <h2 className="text-lg font-semibold text-[var(--color-card-foreground)]">Add New Member</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAddMember} className="p-4 space-y-4 text-left">
+              <div>
+                <label className="block text-sm font-medium mb-1">Full Name</label>
+                <input required type="text" value={newMember.name} onChange={e => setNewMember({ ...newMember, name: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" placeholder="John Doe" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Email</label>
+                <input required type="email" value={newMember.email} onChange={e => setNewMember({ ...newMember, email: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" placeholder="john@example.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Department</label>
+                <input required type="text" value={newMember.department} onChange={e => setNewMember({ ...newMember, department: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" placeholder="Engineering" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Role</label>
+                <select value={newMember.role} onChange={e => setNewMember({ ...newMember, role: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
+                  <option value="member">Member</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border)] mt-4">
+                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Member'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-md">

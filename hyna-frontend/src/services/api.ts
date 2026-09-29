@@ -353,6 +353,35 @@ export function getUserById(id: string): User | undefined {
   return usersCache.find(u => u.id === id);
 }
 
+export async function addMember(user: { name: string; email: string; department: string; role: string }): Promise<User> {
+  const insertPayload = {
+    name: user.name,
+    email: user.email,
+    department: user.department,
+    role: user.role,
+    status: 'active',
+  };
+
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase is not configured');
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert([insertPayload])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating member:', error);
+    throw error;
+  }
+  
+  const created = mapUser(data);
+  usersCache.unshift(created);
+  return created;
+}
+
 // ============================================================
 // PROJECTS API
 // ============================================================
@@ -1119,6 +1148,54 @@ export async function getFilesByFolder(folder: string): Promise<FileItem[]> {
 
   if (error) return [];
   return (data || []).map(mapFile);
+}
+
+export async function uploadFile(file: File, folder: string = 'General'): Promise<FileItem> {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase is not configured');
+  }
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+  const filePath = `${folder}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('files')
+    .upload(filePath, file);
+
+  if (uploadError) {
+    console.error('Error uploading file to storage:', uploadError);
+    throw uploadError;
+  }
+
+  let type = 'document';
+  if (file.type.startsWith('image/')) type = 'image';
+  else if (file.type.startsWith('video/')) type = 'video';
+  else if (file.name.match(/\.(zip|tar|gz|rar)$/i)) type = 'archive';
+  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json)$/i)) type = 'code';
+  else if (file.name.match(/\.(xls|xlsx|csv)$/i)) type = 'spreadsheet';
+  else if (file.name.match(/\.(ppt|pptx)$/i)) type = 'presentation';
+
+  const insertPayload = {
+    id: crypto.randomUUID(),
+    name: file.name,
+    type,
+    size: file.size,
+    folder,
+  };
+
+  const { data, error: dbError } = await supabase
+    .from('files')
+    .insert([insertPayload])
+    .select()
+    .single();
+
+  if (dbError) {
+    console.error('Error inserting file record:', dbError);
+    throw dbError;
+  }
+
+  return mapFile(data);
 }
 
 // ============================================================
