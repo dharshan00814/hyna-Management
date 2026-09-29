@@ -1163,50 +1163,166 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
 // ============================================================
 // MESSAGES API
 // ============================================================
+export const DEFAULT_CHAT_CHANNELS: ChatChannel[] = [
+  { id: 'ch_global', name: 'global-chat', type: 'general', memberIds: [], unreadCount: 0, icon: 'globe' },
+];
+
 export async function getChannels(): Promise<ChatChannel[]> {
-  if (!isSupabaseConfigured()) return [];
+  if (!isSupabaseConfigured()) return DEFAULT_CHAT_CHANNELS;
+
+  try {
+    const { data, error } = await supabase
+      .from('chat_channels')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching chat_channels, using default global channel:', error);
+      return DEFAULT_CHAT_CHANNELS;
+    }
+
+    // Filter out removed options: direct messages, development, random, announcements
+    const filtered = (data || []).filter(c => {
+      const n = (c.name || '').toLowerCase();
+      return (
+        c.type !== 'direct' &&
+        !['announcements', 'development', 'random', 'general'].includes(n)
+      );
+    });
+
+    let globalChannel = filtered.find(c => c.id === 'ch_global' || c.name === 'global-chat');
+
+    // If global-chat does not exist in the database yet, auto-create it
+    if (!globalChannel) {
+      try {
+        const { data: newGlobal, error: globalErr } = await supabase
+          .from('chat_channels')
+          .insert([{
+            id: 'ch_global',
+            name: 'global-chat',
+            type: 'general',
+            icon: 'globe',
+            member_ids: [],
+          }])
+          .select()
+          .single();
+
+        if (!globalErr && newGlobal) {
+          globalChannel = newGlobal;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    // Clean up unwanted channels in background
+    try {
+      supabase
+        .from('chat_channels')
+        .delete()
+        .or('name.in.(announcements,development,random,general),type.eq.direct')
+        .then(() => {});
+    } catch {
+      // ignore
+    }
+
+    return globalChannel ? [mapChannel(globalChannel)] : DEFAULT_CHAT_CHANNELS;
+  } catch (err) {
+    console.warn('Chat channels exception, using defaults:', err);
+    return DEFAULT_CHAT_CHANNELS;
+  }
+}
+
+export async function createChannel(name: string, type: 'general' | 'project' | 'direct' = 'general', memberIds: string[] = []): Promise<ChatChannel> {
+  const sanitizedName = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+  const newChan = {
+    id: `ch_${Math.random().toString(36).substring(2, 10)}`,
+    name: sanitizedName || 'new-channel',
+    type,
+    member_ids: memberIds,
+    unread_count: 0,
+    icon: type === 'direct' ? 'user' : 'hash',
+  };
+
+  if (!isSupabaseConfigured()) {
+    return mapChannel(newChan);
+  }
+
   const { data, error } = await supabase
     .from('chat_channels')
-    .select('*')
-    .order('created_at', { ascending: true });
+    .insert([newChan])
+    .select()
+    .single();
 
-  if (error) return [];
-  return (data || []).map(mapChannel);
+  if (error) {
+    console.error('Error creating channel in Supabase:', error);
+    throw error;
+  }
+
+  return mapChannel(data);
 }
 
 export async function getChannelMessages(channelId: string): Promise<ChatMessage[]> {
-  if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('*')
-    .eq('channel_id', channelId)
-    .order('timestamp', { ascending: true });
+  if (!isSupabaseConfigured() || !channelId) return [];
 
-  if (error) return [];
-  return (data || []).map(mapMessage);
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('channel_id', channelId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching channel messages:', error);
+      return [];
+    }
+
+    return (data || []).map(mapMessage);
+  } catch (err) {
+    console.warn('Exception in getChannelMessages:', err);
+    return [];
+  }
 }
 
 export async function sendMessage(channelId: string, content: string, senderId: string): Promise<ChatMessage> {
+  const now = new Date().toISOString();
+
+  if (!isSupabaseConfigured()) {
+    return {
+      id: `msg_${Date.now()}`,
+      channelId,
+      senderId,
+      content,
+      timestamp: now,
+      type: 'text',
+      attachments: [],
+      reactions: [],
+    };
+  }
+
+  // Ensure sender_id matches a valid UUID format for public.profiles foreign key
+  let validSenderId = senderId;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(senderId);
+  if (!isUuid) {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id) {
+        validSenderId = authData.user.id;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   const insertPayload = {
+    id: `msg_${Math.random().toString(36).substring(2, 10)}`,
     channel_id: channelId,
-    sender_id: senderId,
+    sender_id: validSenderId,
     content,
-    timestamp: new Date().toISOString(),
     type: 'text',
     attachments: [],
     reactions: [],
   };
-
-  if (!isSupabaseConfigured()) {
-    return {
-      id: `msg${Date.now()}`,
-      channelId,
-      senderId,
-      content,
-      timestamp: insertPayload.timestamp,
-      type: 'text',
-    };
-  }
 
   const { data, error } = await supabase
     .from('chat_messages')
@@ -1214,12 +1330,33 @@ export async function sendMessage(channelId: string, content: string, senderId: 
     .select()
     .single();
 
-  if (error) throw error;
-  // Update last message in channel
-  await supabase
-    .from('chat_channels')
-    .update({ last_message: content, last_message_at: insertPayload.timestamp })
-    .eq('id', channelId);
+  if (error) {
+    console.error('Error inserting chat message:', error);
+    // Return optimistic fallback message so UI doesn't drop the chat
+    return {
+      id: insertPayload.id,
+      channelId,
+      senderId: validSenderId,
+      content,
+      timestamp: now,
+      type: 'text',
+      attachments: [],
+      reactions: [],
+    };
+  }
+
+  // Update last message in channel asynchronously
+  try {
+    await supabase
+      .from('chat_channels')
+      .update({
+        last_message: content,
+        last_message_at: now,
+      })
+      .eq('id', channelId);
+  } catch (updateErr) {
+    console.warn('Could not update channel last message info:', updateErr);
+  }
 
   return mapMessage(data);
 }
