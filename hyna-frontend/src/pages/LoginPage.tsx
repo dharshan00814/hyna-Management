@@ -297,6 +297,56 @@ export function LoginPage() {
             </div>
           )}
 
+          {/* Quick Demo Role Sign In */}
+          {mode === 'signin' && (
+            <div className="space-y-2.5 p-3.5 rounded-2xl bg-[var(--color-muted)]/50 border border-[var(--color-border)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  Quick Role Sign In
+                </span>
+                <span className="text-[10px] text-indigo-500 font-medium">1-Click Fill</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('dharshan@hynastudio.com');
+                    setPassword('admin123');
+                    setErrorMessage('');
+                  }}
+                  className="p-2 rounded-xl text-xs bg-[var(--color-card)] hover:border-indigo-500/50 hover:bg-indigo-500/5 border border-[var(--color-border)] transition-all flex flex-col items-center gap-0.5 text-center cursor-pointer shadow-xs group"
+                >
+                  <span className="font-bold text-[12px] group-hover:text-indigo-600 dark:group-hover:text-indigo-400">Dharshan</span>
+                  <span className="text-[10px] text-[var(--color-muted-foreground)]">Admin</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('asthamil@hynastudio.com');
+                    setPassword('manager123');
+                    setErrorMessage('');
+                  }}
+                  className="p-2 rounded-xl text-xs bg-[var(--color-card)] hover:border-indigo-500/50 hover:bg-indigo-500/5 border border-[var(--color-border)] transition-all flex flex-col items-center gap-0.5 text-center cursor-pointer shadow-xs group"
+                >
+                  <span className="font-bold text-[12px] group-hover:text-indigo-600 dark:group-hover:text-indigo-400">Asthamil</span>
+                  <span className="text-[10px] text-[var(--color-muted-foreground)]">Manager</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('akshaya@hynastudio.com');
+                    setPassword('member123');
+                    setErrorMessage('');
+                  }}
+                  className="p-2 rounded-xl text-xs bg-[var(--color-card)] hover:border-indigo-500/50 hover:bg-indigo-500/5 border border-[var(--color-border)] transition-all flex flex-col items-center gap-0.5 text-center cursor-pointer shadow-xs group"
+                >
+                  <span className="font-bold text-[12px] group-hover:text-indigo-600 dark:group-hover:text-indigo-400">Akshaya</span>
+                  <span className="text-[10px] text-[var(--color-muted-foreground)]">Member</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={mode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
             {mode === 'signup' && (
