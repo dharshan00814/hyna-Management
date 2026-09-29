@@ -48,10 +48,21 @@ async function handleConnect(args: string[]): Promise<void> {
 
   // Parse args
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--code" && args[i + 1]) code = args[++i];
-    if (args[i] === "--url" && args[i + 1]) url = args[++i];
-    if (args[i] === "--key" && args[i + 1]) anonKey = args[++i];
-    if (args[i] === "--no-start") autoStart = false;
+    const arg = args[i];
+    if ((arg === "--code" || arg === "-c") && args[i + 1]) {
+      code = args[++i];
+    } else if (arg.startsWith("--code=")) {
+      code = arg.substring(7).trim();
+    } else if (arg.startsWith("--code:")) {
+      const rest = arg.substring(7).trim();
+      code = rest || (args[++i] || "").trim();
+    } else if ((arg === "--url" || arg === "-u") && args[i + 1]) {
+      url = args[++i];
+    } else if ((arg === "--key" || arg === "-k") && args[i + 1]) {
+      anonKey = args[++i];
+    } else if (arg === "--no-start") {
+      autoStart = false;
+    }
   }
 
   if (!code) {
@@ -71,17 +82,31 @@ async function handleConnect(args: string[]): Promise<void> {
     if (!anonKey) anonKey = DEFAULT_SUPABASE_ANON_KEY;
   }
 
-  console.log(`\nValidating code [${code}] with Hyna Studio...`);
+  const cleanCode = code.trim().toUpperCase();
+  console.log(`\nValidating code [${cleanCode}] with Hyna Studio...`);
   const client = createClient(url, anonKey);
   const deviceName = os.hostname();
 
   // 1. Try secure RPC function first
   try {
-    const { data: rpcData, error: rpcErr } = await client.rpc("verify_developer_connection_code", {
-      p_code: code.trim().toUpperCase(),
+    let { data: rpcData, error: rpcErr } = await client.rpc("verify_developer_connection_code", {
+      p_code: cleanCode,
       p_tool: "antigravity",
       p_device_name: deviceName,
     });
+
+    // If duplicate device conflict on an older record for this machine, retry preserving existing device name
+    if (rpcErr && (rpcErr.code === "23505" || rpcErr.message?.includes("uq_developer_integration"))) {
+      const retry = await client.rpc("verify_developer_connection_code", {
+        p_code: cleanCode,
+        p_tool: "antigravity",
+        p_device_name: null,
+      });
+      if (!retry.error && retry.data?.success) {
+        rpcData = retry.data;
+        rpcErr = null;
+      }
+    }
 
     if (!rpcErr && rpcData && rpcData.success) {
       const creds: StoredCredentials = {
@@ -108,15 +133,20 @@ async function handleConnect(args: string[]): Promise<void> {
       }
       return;
     }
-  } catch {
-    // Fallback to direct query
+
+    if (rpcData && !rpcData.success) {
+      console.error(`\x1b[31mConnection failed: ${rpcData.error || "Invalid or expired pairing code."}\x1b[0m`);
+      process.exit(1);
+    }
+  } catch (err: any) {
+    // Non-fatal, try fallback
   }
 
   // 2. Direct table query fallback
   const { data: integration, error } = await client
     .from("developer_integrations")
     .select("*")
-    .eq("connection_code", code.trim().toUpperCase())
+    .eq("connection_code", cleanCode)
     .eq("tool", "antigravity")
     .maybeSingle();
 
@@ -128,12 +158,13 @@ async function handleConnect(args: string[]): Promise<void> {
 
   const apiKey = `hyna_agt_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`;
 
-  // Update integration row as connected
+  // Update integration row as connected (keep original device name if conflict)
+  const targetDevice = integration.device_name || deviceName;
   const { error: updateErr } = await client
     .from("developer_integrations")
     .update({
       status: "connected",
-      device_name: deviceName,
+      device_name: targetDevice,
       api_key: apiKey,
       connection_code: null, // Clear one-time code
       last_connected_at: new Date().toISOString(),
