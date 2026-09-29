@@ -568,6 +568,33 @@ export async function createProject(project: Partial<Project>): Promise<Project>
   return created;
 }
 
+export async function deleteProject(projectId: string): Promise<boolean> {
+  // Update in-memory cache
+  projectsCache = projectsCache.filter(p => p.id !== projectId);
+
+  if (!isSupabaseConfigured()) {
+    return true;
+  }
+
+  try {
+    await supabase.from('tasks').delete().eq('project_id', projectId);
+    await supabase.from('modules').delete().eq('project_id', projectId);
+  } catch (e) {
+    console.warn('Cascade task/module delete notice:', e);
+  }
+
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', projectId);
+
+  if (error) {
+    console.error('Error deleting project in Supabase:', error);
+    throw error;
+  }
+  return true;
+}
+
 // ============================================================
 // MODULES API
 // ============================================================

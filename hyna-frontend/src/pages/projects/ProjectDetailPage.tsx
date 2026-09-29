@@ -1,27 +1,51 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users as UsersIcon, CheckSquare, Plus } from 'lucide-react';
+import { ArrowLeft, Users as UsersIcon, CheckSquare, Plus, Trash2, AlertTriangle, Crown } from 'lucide-react';
 import { Button, Badge, ProgressBar, Avatar, AvatarGroup, Tabs, EmptyState, Modal, Input, Textarea, LoadingState } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getProject, getModules, getProjectTasks, createModule, getUsers, getUserById } from '@/services/api';
+import { getProject, getModules, getProjectTasks, createModule, deleteProject, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
 import type { Project, Module, Task } from '@/types';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentRole, effectiveRole } = useAuthStore();
+  const { currentRole, currentUser, effectiveRole } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateModule, setShowCreateModule] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // CEO Authority Check
+  const isCEO = Boolean(
+    currentUser?.designation?.toUpperCase().includes('CEO') ||
+    currentUser?.name?.toLowerCase().includes('vignesh') ||
+    currentUser?.email?.toLowerCase().includes('vignesh') ||
+    (currentUser as any)?.employeeId?.toUpperCase() === 'EMP-001' ||
+    (effectiveRole === 'admin' && currentUser?.designation?.toUpperCase().includes('CEO'))
+  );
 
   const [project, setProject] = useState<Project | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newModuleName, setNewModuleName] = useState('');
   const [newModuleDescription, setNewModuleDescription] = useState('');
+
+  const handleDeleteProject = async () => {
+    if (!id || !project) return;
+    setIsDeleting(true);
+    try {
+      await deleteProject(id);
+      toast.success(`Project "${project.name}" was permanently deleted.`);
+      navigate(`${prefix}/projects`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete project');
+      setIsDeleting(false);
+    }
+  };
 
   const loadData = async () => {
     if (!id) return;
@@ -104,6 +128,17 @@ export function ProjectDetailPage() {
           </div>
           <p className="page-description mt-1 truncate">{project.description}</p>
         </div>
+        {isCEO && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDeleteModal(true)}
+            className="text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-500/30 shrink-0"
+          >
+            <Trash2 className="w-4 h-4 mr-1.5" />
+            Delete Project
+          </Button>
+        )}
       </div>
 
       <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} className="mb-6 w-fit" />
@@ -324,6 +359,53 @@ export function ProjectDetailPage() {
           />
         </div>
       </Modal>
+
+      {/* CEO Project Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => !isDeleting && setShowDeleteModal(false)}
+          title="Delete Project (CEO Authorization)"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={isDeleting}
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                isLoading={isDeleting}
+                onClick={handleDeleteProject}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Permanently Delete Project
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 pt-2">
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                <p className="font-semibold text-red-500">Irreversible Executive Action</p>
+                <p className="text-[var(--color-muted-foreground)] leading-relaxed">
+                  Are you sure you want to permanently delete <strong>{project.name}</strong>? All associated modules, sprint tasks, and member allocations will be permanently removed from the database.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-[var(--color-muted)] text-[11px] text-[var(--color-muted-foreground)] flex items-center justify-between">
+              <span>Authority Verification:</span>
+              <span className="font-semibold text-amber-500 flex items-center gap-1">
+                <Crown className="w-3.5 h-3.5" /> CEO Clearance Required
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
