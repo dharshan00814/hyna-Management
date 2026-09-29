@@ -6,7 +6,8 @@ import { cn, getStatusColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getProjects, createProject, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
-import type { Project, ProjectStatus } from '@/types';
+import type { Project } from '@/types';
+import { ProjectModal } from './ProjectModal';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
@@ -17,15 +18,7 @@ export function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  // New project form state
-  const [newProject, setNewProject] = useState({
-    name: '',
-    description: '',
-    startDate: new Date().toISOString().split('T')[0],
-    deadline: '',
-    status: 'planning' as ProjectStatus,
-  });
+  const [editProject, setEditProject] = useState<Project | undefined>();
 
   const loadData = async () => {
     try {
@@ -43,35 +36,11 @@ export function ProjectsPage() {
     loadData();
   }, []);
 
-  const handleCreateProject = async () => {
-    if (!newProject.name.trim()) {
-      toast.error('Please enter a project name');
-      return;
-    }
-
-    try {
-      const created = await createProject({
-        name: newProject.name,
-        description: newProject.description,
-        startDate: newProject.startDate,
-        deadline: newProject.deadline,
-        status: newProject.status,
-        managerId: currentUser?.id || 'u1',
-        memberIds: [currentUser?.id || 'u1'],
-      });
-      setProjects(prev => [created, ...prev]);
-      setShowCreate(false);
-      setNewProject({
-        name: '',
-        description: '',
-        startDate: new Date().toISOString().split('T')[0],
-        deadline: '',
-        status: 'planning',
-      });
-      toast.success('Project created successfully!');
-    } catch (err) {
-      toast.error('Failed to create project');
-      console.error(err);
+  const handleProjectSuccess = (savedProject: Project, isEdit: boolean) => {
+    if (isEdit) {
+      setProjects(prev => prev.map(p => p.id === savedProject.id ? savedProject : p));
+    } else {
+      setProjects(prev => [savedProject, ...prev]);
     }
   };
 
@@ -91,7 +60,10 @@ export function ProjectsPage() {
           <p className="page-description">{projects.length} total projects</p>
         </div>
         {currentRole !== 'member' && (
-          <Button onClick={() => setShowCreate(true)}>
+          <Button onClick={() => {
+            setEditProject(undefined);
+            setShowCreate(true);
+          }}>
             <Plus className="w-4 h-4 mr-1" /> New Project
           </Button>
         )}
@@ -145,7 +117,22 @@ export function ProjectsPage() {
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
                     <h3 className="text-base font-semibold">{project.name}</h3>
                   </div>
-                  <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
+                    {currentRole !== 'member' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditProject(project);
+                          setShowCreate(true);
+                        }}
+                        className="p-1 hover:bg-[var(--color-muted)] rounded text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+                        title="Edit Project"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-[var(--color-muted-foreground)] line-clamp-2 mb-4">{project.description}</p>
                 
@@ -174,57 +161,15 @@ export function ProjectsPage() {
         </div>
       )}
 
-      {/* Create project modal */}
-      <Modal
-        isOpen={showCreate}
-        onClose={() => setShowCreate(false)}
-        title="Create New Project"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button onClick={handleCreateProject}>Create Project</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label="Project Name"
-            placeholder="Enter project name"
-            value={newProject.name}
-            onChange={(e) => setNewProject(p => ({ ...p, name: e.target.value }))}
-          />
-          <Textarea
-            label="Description"
-            placeholder="Project description..."
-            rows={3}
-            value={newProject.description}
-            onChange={(e) => setNewProject(p => ({ ...p, description: e.target.value }))}
-          />
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Start Date"
-              type="date"
-              value={newProject.startDate}
-              onChange={(e) => setNewProject(p => ({ ...p, startDate: e.target.value }))}
-            />
-            <Input
-              label="Deadline"
-              type="date"
-              value={newProject.deadline}
-              onChange={(e) => setNewProject(p => ({ ...p, deadline: e.target.value }))}
-            />
-          </div>
-          <Select
-            label="Status"
-            value={newProject.status}
-            onChange={(val) => setNewProject(p => ({ ...p, status: val as ProjectStatus }))}
-            options={[
-              { value: 'planning', label: 'Planning' },
-              { value: 'active', label: 'Active' },
-            ]}
-          />
-        </div>
-      </Modal>
+      {/* Create/Edit project modal */}
+      {showCreate && (
+        <ProjectModal
+          isOpen={showCreate}
+          onClose={() => setShowCreate(false)}
+          onSuccess={handleProjectSuccess}
+          editProject={editProject}
+        />
+      )}
     </div>
   );
 }

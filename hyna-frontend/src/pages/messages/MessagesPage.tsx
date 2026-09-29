@@ -1,31 +1,32 @@
 import { useState, useRef, useEffect } from 'react';
-import { Hash, FolderOpen, User as UserIcon, Send, Smile, Paperclip } from 'lucide-react';
+import { toast } from 'sonner';
+import EmojiPicker from 'emoji-picker-react';
+import { Globe, Send, Smile, Paperclip } from 'lucide-react';
 import { Avatar, LoadingState } from '@/components/ui';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getChannels, getChannelMessages, sendMessage, getUsers, getUserById } from '@/services/api';
-import type { ChatChannel, ChatMessage } from '@/types';
+import { getChannelMessages, sendMessage, getUsers } from '@/services/api';
+import type { ChatMessage, User } from '@/types';
 
 export function MessagesPage() {
   const { currentUser } = useAuthStore();
-  const [channels, setChannels] = useState<ChatChannel[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+  const [activeChat, setActiveChat] = useState<string>('globe');
   const [newMessage, setNewMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
       try {
-        await getUsers();
-        const chs = await getChannels();
+        const usrs = await getUsers();
         if (isMounted) {
-          setChannels(chs);
-          if (chs.length > 0) {
-            setSelectedChannel(chs[0].id);
-          }
+          // Exclude the currently logged-in user from the direct messages list
+          setUsers(usrs.filter(u => u.id !== currentUser?.id));
         }
       } catch (err) {
         console.error(err);
@@ -35,43 +36,85 @@ export function MessagesPage() {
     }
     load();
     return () => { isMounted = false; };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     let isMounted = true;
-    if (!selectedChannel) return;
-    getChannelMessages(selectedChannel).then((msgs) => {
-      if (isMounted) setMessages(msgs);
-    });
-    return () => { isMounted = false; };
-  }, [selectedChannel]);
+    if (!activeChat || !currentUser?.id) return;
+
+    const fetchMessages = async () => {
+      try {
+        const msgs = await getChannelMessages(activeChat, currentUser.id);
+        if (isMounted) setMessages(msgs);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000); // 3-second fetch interval for real-time feel
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeChat, currentUser]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, selectedChannel]);
+  }, [messages.length, activeChat]);
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !selectedChannel || !currentUser?.id) return;
+    if (!newMessage.trim() || !activeChat || !currentUser?.id) return;
     const text = newMessage.trim();
+    
+    // OPTIMISTIC UI: create a temporary message
+    const tempMessage: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      channelId: activeChat,
+      senderId: currentUser.id,
+      content: text,
+      timestamp: new Date().toISOString(),
+      type: 'text',
+      attachments: [],
+      reactions: [],
+    };
+    
+    // Immediately update UI and clear input
+    setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
+    setShowEmojiPicker(false);
+    
     try {
-      const sent = await sendMessage(selectedChannel, text, currentUser.id);
-      setMessages(prev => [...prev, sent]);
-    } catch (err) {
+      const sent = await sendMessage(activeChat, text, currentUser.id);
+      // Replace the temp message with the real one returned from DB
+      setMessages(prev => prev.map(m => m.id === tempMessage.id ? sent : m));
+    } catch (err: any) {
       console.error('Failed to send message:', err);
+      // Revert Optimistic UI
+      setMessages(prev => prev.filter(m => m.id !== tempMessage.id));
+      setNewMessage(text); // Put text back into input
+      toast.error(err?.message || 'Failed to send message to database.');
     }
   };
 
-  const channel = channels.find(c => c.id === selectedChannel);
-
-  const channelIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-    hash: Hash,
-    code: Hash,
-    palette: Hash,
-    megaphone: Hash,
-    folder: FolderOpen,
-    user: UserIcon,
+  const onEmojiClick = (emojiObject: any) => {
+    setNewMessage(prev => {
+      const nextStr = prev + emojiObject.emoji;
+      // Programmatically return focus to the input field so Enter key works and focus trap is broken
+      // setTimeout waits for React to finish rendering the updated input value before selecting
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          const length = nextStr.length;
+          inputRef.current.setSelectionRange(length, length);
+        }
+      }, 0);
+      return nextStr;
+    });
   };
+
+  const activeUser = users.find(u => u.id === activeChat);
 
   if (isLoading) return <LoadingState />;
 
@@ -84,43 +127,32 @@ export function MessagesPage() {
             <h2 className="text-sm font-semibold">Messages</h2>
           </div>
           <div className="flex-1 overflow-y-auto py-2">
-            <div className="px-3 py-1 text-[11px] font-medium text-[var(--color-muted-foreground)] uppercase tracking-wider">Channels</div>
-            {channels.filter(c => c.type !== 'direct').map(ch => {
-              const Icon = channelIcons[ch.icon || 'hash'] || Hash;
-              return (
-                <button
-                  key={ch.id}
-                  onClick={() => setSelectedChannel(ch.id)}
-                  className={cn(
-                    'flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors rounded-md mx-1',
-                    selectedChannel === ch.id ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
-                  )}
-                  style={{ width: 'calc(100% - 8px)' }}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{ch.name}</span>
-                  {ch.unreadCount > 0 && (
-                    <span className="ml-auto bg-[var(--color-primary)] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">{ch.unreadCount}</span>
-                  )}
-                </button>
-              );
-            })}
+            <div className="px-3 py-1 text-[11px] font-medium text-[var(--color-muted-foreground)] uppercase tracking-wider">Public</div>
+            <button
+              onClick={() => setActiveChat('globe')}
+              className={cn(
+                'flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors rounded-md mx-1',
+                activeChat === 'globe' ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
+              )}
+              style={{ width: 'calc(100% - 8px)' }}
+            >
+              <Globe className="w-4 h-4 shrink-0" />
+              <span className="truncate">🌐 Globe Chat</span>
+            </button>
+
             <div className="px-3 py-1 mt-3 text-[11px] font-medium text-[var(--color-muted-foreground)] uppercase tracking-wider">Direct Messages</div>
-            {channels.filter(c => c.type === 'direct').map(ch => (
+            {users.map(user => (
               <button
-                key={ch.id}
-                onClick={() => setSelectedChannel(ch.id)}
+                key={user.id}
+                onClick={() => setActiveChat(user.id)}
                 className={cn(
                   'flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors rounded-md mx-1',
-                  selectedChannel === ch.id ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
+                  activeChat === user.id ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
                 )}
                 style={{ width: 'calc(100% - 8px)' }}
               >
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="truncate">{ch.name}</span>
-                {ch.unreadCount > 0 && (
-                  <span className="ml-auto bg-[var(--color-primary)] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">{ch.unreadCount}</span>
-                )}
+                <Avatar name={user.name} src={user.avatar} size="xs" />
+                <span className="truncate">{user.name}</span>
               </button>
             ))}
           </div>
@@ -132,15 +164,25 @@ export function MessagesPage() {
           <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)] shrink-0">
             {/* Mobile channel selector */}
             <select
-              value={selectedChannel}
-              onChange={(e) => setSelectedChannel(e.target.value)}
+              value={activeChat}
+              onChange={(e) => setActiveChat(e.target.value)}
               className="md:hidden h-8 px-2 rounded border border-[var(--color-input)] bg-[var(--color-background)] text-sm"
             >
-              {channels.map(ch => <option key={ch.id} value={ch.id}>{ch.type === 'direct' ? '💬 ' : '# '}{ch.name}</option>)}
+              <option value="globe">🌐 Globe Chat</option>
+              {users.map(u => <option key={u.id} value={u.id}>💬 {u.name}</option>)}
             </select>
             <div className="hidden md:block">
-              <h3 className="text-sm font-semibold"># {channel?.name || 'Channel'}</h3>
-              <p className="text-xs text-[var(--color-muted-foreground)]">{channel?.memberIds.length || 0} members</p>
+              {activeChat === 'globe' ? (
+                <>
+                  <h3 className="text-sm font-semibold">🌐 Globe Chat</h3>
+                  <p className="text-xs text-[var(--color-muted-foreground)]">All workspace members</p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-sm font-semibold">{activeUser?.name || 'Member'}</h3>
+                  <p className="text-xs text-[var(--color-muted-foreground)]">{activeUser?.role || 'Direct Message'}</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -148,15 +190,16 @@ export function MessagesPage() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {messages.length === 0 ? (
               <div className="text-center py-12 text-sm text-[var(--color-muted-foreground)]">
-                No messages in this channel yet. Say hello! 👋
+                No messages yet. Say hello! 👋
               </div>
             ) : (
               messages.map(msg => {
-                const sender = getUserById(msg.senderId);
+                // Find sender in users array, or if it's our own message, use currentUser context
+                const sender = users.find(u => u.id === msg.senderId) || (currentUser?.id === msg.senderId ? currentUser : null);
                 const isOwn = msg.senderId === currentUser?.id;
                 return (
                   <div key={msg.id} className={cn('flex gap-3', isOwn && 'flex-row-reverse')}>
-                    <Avatar name={sender?.name || ''} size="sm" />
+                    <Avatar name={sender?.name || 'User'} src={sender?.avatar} size="sm" />
                     <div className={cn('max-w-[70%]', isOwn && 'text-right')}>
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-xs font-medium">{sender?.name || 'User'}</span>
@@ -183,16 +226,32 @@ export function MessagesPage() {
                 <Paperclip className="w-4 h-4" />
               </button>
               <input
+                ref={inputRef}
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Type a message..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault(); // Prevent accidental form submissions or default behavior
+                    handleSend();
+                  }
+                }}
+                placeholder={activeChat === 'globe' ? "Message Globe Chat..." : `Message ${activeUser?.name || '...'}`}
                 className="flex-1 h-9 px-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
               />
-              <button className="p-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors">
-                <Smile className="w-4 h-4" />
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors"
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+                {showEmojiPicker && (
+                  <div className="absolute bottom-12 right-0 z-50 shadow-xl rounded-lg">
+                    <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
+                  </div>
+                )}
+              </div>
               <button
                 onClick={handleSend}
                 disabled={!newMessage.trim()}

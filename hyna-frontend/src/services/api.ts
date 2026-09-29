@@ -568,6 +568,39 @@ export async function createProject(project: Partial<Project>): Promise<Project>
   return created;
 }
 
+export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+  const updatePayload: any = {};
+  if (updates.name !== undefined) updatePayload.name = updates.name;
+  if (updates.description !== undefined) updatePayload.description = updates.description;
+  if (updates.status !== undefined) updatePayload.status = updates.status;
+  if (updates.progress !== undefined) updatePayload.progress = updates.progress;
+  if (updates.managerId !== undefined) updatePayload.manager_id = updates.managerId;
+  if (updates.memberIds !== undefined) updatePayload.member_ids = updates.memberIds;
+  if (updates.startDate !== undefined) updatePayload.start_date = updates.startDate;
+  if (updates.deadline !== undefined) updatePayload.deadline = updates.deadline;
+  if (updates.color !== undefined) updatePayload.color = updates.color;
+  if (updates.tags !== undefined) updatePayload.tags = updates.tags;
+
+  updatePayload.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update(updatePayload)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating project:', error);
+    throw error;
+  }
+  
+  const updated = mapProject(data);
+  const idx = projectsCache.findIndex(p => p.id === id);
+  if (idx !== -1) projectsCache[idx] = updated;
+  return updated;
+}
+
 // ============================================================
 // MODULES API
 // ============================================================
@@ -1134,6 +1167,20 @@ export async function submitDailyReport(report: Partial<DailyReport>): Promise<D
 // ============================================================
 // NOTIFICATIONS API
 // ============================================================
+export async function createNotification(notification: any): Promise<void> {
+  const payload = {
+    user_id: notification.userId,
+    title: notification.title,
+    message: notification.message,
+    link: notification.actionUrl,
+    type: notification.type || 'general',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from('notifications').insert([payload]);
+  if (error) console.error('Failed to create notification:', error);
+}
 export async function getNotifications(userId?: string): Promise<Notification[]> {
   if (!isSupabaseConfigured()) return [];
   let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
@@ -1174,21 +1221,27 @@ export async function getChannels(): Promise<ChatChannel[]> {
   return (data || []).map(mapChannel);
 }
 
-export async function getChannelMessages(channelId: string): Promise<ChatMessage[]> {
+export async function getChannelMessages(receiverId: string, currentUserId?: string): Promise<ChatMessage[]> {
   if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('*')
-    .eq('channel_id', channelId)
-    .order('timestamp', { ascending: true });
+  
+  let query = supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
+  
+  if (receiverId === 'globe') {
+    // Global chat is identified by null receiver_id
+    query = query.is('receiver_id', null);
+  } else if (currentUserId) {
+    // Direct messages between current user and receiver
+    query = query.or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`);
+  }
 
+  const { data, error } = await query;
   if (error) return [];
   return (data || []).map(mapMessage);
 }
 
-export async function sendMessage(channelId: string, content: string, senderId: string): Promise<ChatMessage> {
+export async function sendMessage(receiverId: string, content: string, senderId: string): Promise<ChatMessage> {
   const insertPayload = {
-    channel_id: channelId,
+    receiver_id: receiverId === 'globe' ? null : receiverId,
     sender_id: senderId,
     content,
     timestamp: new Date().toISOString(),
@@ -1200,7 +1253,7 @@ export async function sendMessage(channelId: string, content: string, senderId: 
   if (!isSupabaseConfigured()) {
     return {
       id: `msg${Date.now()}`,
-      channelId,
+      channelId: receiverId,
       senderId,
       content,
       timestamp: insertPayload.timestamp,
@@ -1215,14 +1268,11 @@ export async function sendMessage(channelId: string, content: string, senderId: 
     .single();
 
   if (error) throw error;
-  // Update last message in channel
-  await supabase
-    .from('chat_channels')
-    .update({ last_message: content, last_message_at: insertPayload.timestamp })
-    .eq('id', channelId);
 
   return mapMessage(data);
 }
+
+
 
 // ============================================================
 // FILES API
