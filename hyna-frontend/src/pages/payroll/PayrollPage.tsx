@@ -17,7 +17,6 @@ import {
 import { Button, Badge, Modal, Input, Select } from '@/components/ui';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
-
 interface PayrollRecord {
   id: string;
   employeeId: string;
@@ -347,13 +346,12 @@ export function PayrollPage() {
                   </td>
                   <td className="py-3.5 px-4">
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${
-                        record.status === 'Paid'
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${record.status === 'Paid'
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                           : record.status === 'Processing'
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
-                      }`}
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                        }`}
                     >
                       {record.status === 'Paid' && <CheckCircle2 className="w-3 h-3" />}
                       {record.status === 'Processing' && <Clock className="w-3 h-3" />}
