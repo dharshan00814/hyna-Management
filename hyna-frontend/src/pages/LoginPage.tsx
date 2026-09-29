@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Download } from 'lucide-react';
 import { useAuthStore } from '@/stores';
-import { usePWA } from '@/hooks/usePWA';
-import { InstallAppModal } from '@/components/common/InstallAppModal';
 
 const css = `
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap');
@@ -14,9 +11,6 @@ const css = `
 .su-card{background:#161616;border:1px solid #232323;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 40px 36px;position:relative;overflow-y:auto}
 .su-card::-webkit-scrollbar{width:4px}
 .su-card::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:4px}
-.su-top-bar{position:absolute;top:16px;right:16px;display:flex;gap:8px}
-.su-pwa-btn{background:#1f1f1f;border:1px solid #2b2b2b;color:#a0a0a0;border-radius:8px;padding:4px 8px;font:400 7.5px 'JetBrains Mono',monospace;display:flex;align-items:center;gap:4px;cursor:pointer;transition:all .15s}
-.su-pwa-btn:hover{background:#282828;color:#f2f2f2}
 .su-logo{width:38px;height:38px;object-fit:contain;margin-bottom:26px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.4))}
 .su-badge{font:400 8px 'JetBrains Mono',monospace;background:#262626;color:#bdbdbd;padding:8px 8px;border-radius:9px;margin-bottom:14px}
 .su h1{font-size:23px;font-weight:500;letter-spacing:-.4px;margin-bottom:8px;white-space:nowrap}
@@ -91,7 +85,6 @@ const Check = () => (
 export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  const { isInstallable, isInstalled, showModal, setShowModal, promptInstall } = usePWA();
 
   const [show, setShow] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -147,19 +140,6 @@ export function LoginPage() {
       <style>{css}</style>
       <div className="su-wrap">
         <section className="su-card">
-          {/* Optional subtle PWA install link */}
-          <div className="su-top-bar">
-            <button
-              type="button"
-              onClick={() => setShowModal(true)}
-              className="su-pwa-btn"
-              title="Install App"
-            >
-              <Download size={10} />
-              <span>{isInstalled ? 'App Ready' : 'Install'}</span>
-            </button>
-          </div>
-
           <Logo />
 
           <span className="su-badge">Welcome to Hyna studio</span>
@@ -299,15 +279,6 @@ export function LoginPage() {
           <div className="su-t su-img d" />
         </section>
       </div>
-
-      {/* PWA Install Modal */}
-      <InstallAppModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onInstallPrompt={promptInstall}
-        isInstallable={isInstallable}
-        isInstalled={isInstalled}
-      />
     </div>
   );
 }
