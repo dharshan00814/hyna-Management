@@ -1266,13 +1266,11 @@ export async function uploadFile(file: File, folder: string = 'General'): Promis
     throw new Error('Supabase is not configured');
   }
 
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-  const filePath = `${folder}/${fileName}`;
+  const filePath = `${folder}/${file.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from('files')
-    .upload(filePath, file);
+    .upload(filePath, file, { upsert: true });
 
   if (uploadError) {
     console.error('Error uploading file to storage:', uploadError);
