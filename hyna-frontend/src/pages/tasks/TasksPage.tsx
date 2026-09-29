@@ -5,7 +5,7 @@ import { cn, getStatusColor, getPriorityColor, getPriorityDot, formatDate } from
 import { useAuthStore } from '@/stores';
 import {
   getTasks, createTask, updateTask, submitTask, reviewTask,
-  getProjects, getModules, getUsers, getUserById,
+  getProjects, getModules, getUsers, getUserById, createNotification
 } from '@/services/api';
 import { toast } from 'sonner';
 import type { Task, TaskStatus, TaskPriority, Project, Module, User } from '@/types';
@@ -22,6 +22,7 @@ const statusColumns: { status: TaskStatus; label: string; color: string }[] = [
 export function TasksPage() {
   const { currentRole, currentUser, effectiveRole } = useAuthStore();
   const isAdminOrManager = effectiveRole === 'admin' || effectiveRole === 'manager';
+  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -81,6 +82,12 @@ export function TasksPage() {
 
   useEffect(() => {
     loadData();
+    
+    const handleRealtimeTask = () => {
+      loadData();
+    };
+    window.addEventListener('realtime-task', handleRealtimeTask);
+    return () => window.removeEventListener('realtime-task', handleRealtimeTask);
   }, [isAdminOrManager, currentUser?.id]);
 
   const handleCreateTask = async () => {
@@ -98,6 +105,18 @@ export function TasksPage() {
         projectId: newTask.projectId,
         assigneeId: newTask.assigneeId,
       });
+
+      // Notify the assigned member
+      if (newTask.assigneeId && newTask.assigneeId !== currentUser?.id) {
+        await createNotification({
+          userId: newTask.assigneeId,
+          title: 'New Task Assigned',
+          message: `You have been assigned: ${newTask.title}`,
+          actionUrl: '/member/tasks',
+          type: 'general'
+        });
+      }
+
       setTasks(prev => [created, ...prev]);
       setShowCreate(false);
       setNewTask({
@@ -107,7 +126,7 @@ export function TasksPage() {
         status: 'todo',
         deadline: '',
         projectId: projects[0]?.id || '',
-        assigneeId: users[0]?.id || '',
+        assigneeId: '',
       });
       const allocatedMember = users.find(u => u.id === newTask.assigneeId);
       toast.success(`Task created and allocated to ${allocatedMember?.name || 'Member'}!`);
@@ -481,20 +500,54 @@ export function TasksPage() {
             onChange={(e) => setNewTask(t => ({ ...t, description: e.target.value }))}
           />
 
+          <Select
+            label="Project *"
+            value={newTask.projectId}
+            onChange={(val) => setNewTask(t => ({ ...t, projectId: val, assigneeId: '' }))}
+            options={projects.map(p => ({ value: p.id, label: p.name }))}
+          />
+
           <div className="space-y-1.5">
-            <label className="text-xs font-medium">Allocate Team Member *</label>
-            <select
-              value={newTask.assigneeId}
-              onChange={(e) => setNewTask(t => ({ ...t, assigneeId: e.target.value }))}
-              className="w-full h-10 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-            >
-              <option value="">Select team member to complete task...</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>
-                  {u.name} — {u.designation || 'Software Engineer'} ({u.department || 'Engineering'}) [{u.employeeId || 'EMP'}]
-                </option>
-              ))}
-            </select>
+            <label className="text-sm font-medium">Allocate Team Member *</label>
+            <div className="flex flex-wrap gap-2 p-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] max-h-40 overflow-y-auto">
+              {(() => {
+                if (!newTask.projectId) {
+                  return <p className="text-sm text-[var(--color-muted-foreground)] p-2">Select a project first to see available members.</p>;
+                }
+                const selectedProject = projects.find(p => p.id === newTask.projectId);
+                if (!selectedProject) return null;
+                // Get all users associated with the project
+                const projectMembers = users.filter(u => 
+                  selectedProject.memberIds.includes(u.id) || 
+                  selectedProject.managerId === u.id || 
+                  selectedProject.leadId === u.id
+                );
+                
+                if (projectMembers.length === 0) {
+                  return <p className="text-sm text-[var(--color-muted-foreground)] p-2">No members allocated to this project.</p>;
+                }
+                
+                return projectMembers.map((user) => {
+                  const isSelected = newTask.assigneeId === user.id;
+                  return (
+                    <label key={user.id} className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs cursor-pointer border transition-colors",
+                      isSelected ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)]" : "border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]"
+                    )}>
+                      <input
+                        type="radio"
+                        name="task-assignee"
+                        className="hidden"
+                        checked={isSelected}
+                        onChange={() => setNewTask(t => ({ ...t, assigneeId: user.id }))}
+                      />
+                      <Avatar name={user.name} src={user.avatar} size="xs" />
+                      <span>{user.name}</span>
+                    </label>
+                  );
+                });
+              })()}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -524,13 +577,8 @@ export function TasksPage() {
             label="Deadline"
             type="date"
             value={newTask.deadline}
+            className="dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:dark:invert"
             onChange={(e) => setNewTask(t => ({ ...t, deadline: e.target.value }))}
-          />
-          <Select
-            label="Project *"
-            value={newTask.projectId}
-            onChange={(val) => setNewTask(t => ({ ...t, projectId: val }))}
-            options={projects.map(p => ({ value: p.id, label: p.name }))}
           />
         </div>
       </Modal>

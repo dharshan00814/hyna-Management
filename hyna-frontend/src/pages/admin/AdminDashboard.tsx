@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, FolderKanban, CheckSquare, CalendarClock, Clock, Video,
-  ArrowRight, Eye,
+  ArrowRight, Eye, Hand,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -95,7 +95,10 @@ export function AdminDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Lead'} 👋</h1>
+        <h1 className="page-title flex items-center gap-2">
+          {getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Lead'} 
+          <Hand className="w-6 h-6 text-yellow-500" />
+        </h1>
         <p className="page-description">Here's what's happening at Hyna Studio today.</p>
       </div>
 
@@ -107,9 +110,9 @@ export function AdminDashboard() {
         <StatCard label="Today's Attendance" value={`${presentCount}/${users.filter(u => u.status === 'active').length || 1}`} change={2} icon={CalendarClock} iconColor="text-emerald-500" className="stagger-3" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left column */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 flex flex-col gap-6">
           {/* Project overview */}
           <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
@@ -148,7 +151,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Task & Activity charts */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Weekly task chart */}
             <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
               <h2 className="text-base font-semibold mb-4">Weekly Tasks</h2>
@@ -268,10 +271,39 @@ export function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* Recent members */}
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold">Team Members</h2>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>
+                View all
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {users.slice(0, 6).map(user => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
+                  onClick={() => navigate(`/admin/members/${user.id}`)}
+                >
+                  <Avatar name={user.name} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{user.name}</p>
+                    <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
+                  </div>
+                  <div className={cn(
+                    'w-2 h-2 rounded-full shrink-0',
+                    user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300',
+                  )} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Right column */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6 lg:col-span-1 sticky top-6">
           {/* Today's attendance */}
           <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
@@ -325,34 +357,6 @@ export function AdminDashboard() {
             </div>
           </div>
 
-          {/* Recent members */}
-          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold">Team Members</h2>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>
-                View all
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {users.slice(0, 6).map(user => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
-                  onClick={() => navigate(`/admin/members/${user.id}`)}
-                >
-                  <Avatar name={user.name} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{user.name}</p>
-                    <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
-                  </div>
-                  <div className={cn(
-                    'w-2 h-2 rounded-full',
-                    user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300',
-                  )} />
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

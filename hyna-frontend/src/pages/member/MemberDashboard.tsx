@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckSquare, Clock, CheckCircle2, Send, Video, ArrowRight,
-  Check, Edit3, Calendar,
+  Check, Edit3, Calendar, Hand, PartyPopper
 } from 'lucide-react';
 import { StatCard, AvatarGroup, Badge, Button, Textarea, LoadingState } from '@/components/ui';
 import { cn, getGreeting, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
@@ -116,7 +116,10 @@ export function MemberDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'} 👋</h1>
+        <h1 className="page-title flex items-center gap-2">
+          {getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'}
+          <Hand className="w-6 h-6 text-yellow-500" />
+        </h1>
         <p className="page-description">Here's your work overview for today.</p>
       </div>
 
@@ -141,7 +144,9 @@ export function MemberDashboard() {
             </div>
             <div className="space-y-1">
               {todayTasks.length === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)] py-4 text-center">No tasks for today 🎉</p>
+                <p className="text-sm text-[var(--color-muted-foreground)] py-4 flex items-center justify-center gap-2">
+                  No tasks for today <PartyPopper className="w-4 h-4 text-emerald-500" />
+                </p>
               ) : (
                 todayTasks.map((task) => (
                   <div

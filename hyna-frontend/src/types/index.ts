@@ -42,6 +42,7 @@ export interface Project {
   status: ProjectStatus;
   progress: number;
   managerId: string;
+  leadId?: string;
   memberIds: string[];
   startDate: string;
   deadline: string;

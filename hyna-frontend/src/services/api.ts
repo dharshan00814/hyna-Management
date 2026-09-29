@@ -46,6 +46,7 @@ function mapProject(row: any): Project {
     status: row.status || 'planning',
     progress: row.progress ?? 0,
     managerId: row.manager_id || '',
+    leadId: row.lead_id || undefined,
     memberIds: row.member_ids || [],
     startDate: row.start_date || '',
     deadline: row.deadline || '',
@@ -546,6 +547,7 @@ export async function createProject(project: Partial<Project>): Promise<Project>
     status: project.status || 'planning',
     progress: project.progress || 0,
     manager_id: project.managerId || null,
+    lead_id: project.leadId || null,
     member_ids: project.memberIds || [],
     start_date: project.startDate || new Date().toISOString().split('T')[0],
     deadline: project.deadline || null,
@@ -575,6 +577,7 @@ export async function updateProject(id: string, updates: Partial<Project>): Prom
   if (updates.status !== undefined) updatePayload.status = updates.status;
   if (updates.progress !== undefined) updatePayload.progress = updates.progress;
   if (updates.managerId !== undefined) updatePayload.manager_id = updates.managerId;
+  if (updates.leadId !== undefined) updatePayload.lead_id = updates.leadId;
   if (updates.memberIds !== undefined) updatePayload.member_ids = updates.memberIds;
   if (updates.startDate !== undefined) updatePayload.start_date = updates.startDate;
   if (updates.deadline !== undefined) updatePayload.deadline = updates.deadline;

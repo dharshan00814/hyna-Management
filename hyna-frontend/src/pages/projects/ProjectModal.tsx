@@ -24,6 +24,7 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
     startDate: new Date().toISOString().split('T')[0],
     deadline: '',
     status: 'planning' as ProjectStatus,
+    leadId: '',
     memberIds: [] as string[],
   });
 
@@ -44,6 +45,7 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
           startDate: editProject.startDate,
           deadline: editProject.deadline,
           status: editProject.status,
+          leadId: editProject.leadId || '',
           memberIds: editProject.memberIds,
         });
       } else {
@@ -53,6 +55,7 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
           startDate: new Date().toISOString().split('T')[0],
           deadline: '',
           status: 'planning',
+          leadId: '',
           memberIds: [currentUser?.id || ''],
         });
       }
@@ -86,6 +89,7 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
           startDate: formData.startDate,
           deadline: formData.deadline,
           status: formData.status,
+          leadId: formData.leadId || undefined,
           memberIds: formData.memberIds,
         });
         toast.success('Project updated successfully!');
@@ -97,6 +101,7 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
           deadline: formData.deadline,
           status: formData.status,
           managerId: currentUser?.id || 'u1',
+          leadId: formData.leadId || undefined,
           memberIds: formData.memberIds,
         });
         toast.success('Project created successfully!');
@@ -111,6 +116,16 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
           userId: memberId,
           title: 'New Project Assignment',
           message: `You have been added to ${savedProject.name}`,
+          actionUrl: `/member/projects/${savedProject.id}`,
+          type: 'general'
+        });
+      }
+
+      if (formData.leadId && formData.leadId !== currentUser?.id && formData.leadId !== editProject?.leadId) {
+        await createNotification({
+          userId: formData.leadId,
+          title: 'New Project Lead Assignment',
+          message: `You have been assigned as the Lead for project: ${savedProject.name}`,
           actionUrl: `/member/projects/${savedProject.id}`,
           type: 'general'
         });
@@ -177,6 +192,16 @@ export function ProjectModal({ isOpen, onClose, onSuccess, editProject }: Projec
             { value: 'active', label: 'Active' },
             { value: 'on-hold', label: 'On Hold' },
             { value: 'completed', label: 'Completed' },
+          ]}
+        />
+        
+        <Select
+          label="Project Lead"
+          value={formData.leadId}
+          onChange={(val) => setFormData(p => ({ ...p, leadId: val }))}
+          options={[
+            { value: '', label: 'Unassigned' },
+            ...users.map(u => ({ value: u.id, label: u.name }))
           ]}
         />
         

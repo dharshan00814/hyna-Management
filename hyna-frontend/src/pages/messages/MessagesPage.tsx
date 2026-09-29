@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import EmojiPicker from 'emoji-picker-react';
-import { Globe, Send, Smile, Paperclip, FileText, X, Loader2 } from 'lucide-react';
+import { Globe, Send, Smile, Paperclip, FileText, X, Loader2, Hand } from 'lucide-react';
 import { Avatar, LoadingState } from '@/components/ui';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -183,7 +183,7 @@ export function MessagesPage() {
               style={{ width: 'calc(100% - 8px)' }}
             >
               <Globe className="w-4 h-4 shrink-0" />
-              <span className="truncate">🌐 Globe Chat</span>
+              <span className="truncate">Globe Chat</span>
             </button>
 
             <div className="px-3 py-1 mt-3 text-[11px] font-medium text-[var(--color-muted-foreground)] uppercase tracking-wider">Direct Messages</div>
@@ -214,13 +214,13 @@ export function MessagesPage() {
               onChange={(e) => setActiveChat(e.target.value)}
               className="md:hidden h-8 px-2 rounded border border-[var(--color-input)] bg-[var(--color-background)] text-sm"
             >
-              <option value="globe">🌐 Globe Chat</option>
-              {users.map(u => <option key={u.id} value={u.id}>💬 {u.name}</option>)}
+              <option value="globe">Globe Chat</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
             <div className="hidden md:block">
               {activeChat === 'globe' ? (
                 <>
-                  <h3 className="text-sm font-semibold">🌐 Globe Chat</h3>
+                  <h3 className="text-sm font-semibold flex items-center gap-1.5"><Globe className="w-4 h-4 text-[var(--color-muted-foreground)]" /> Globe Chat</h3>
                   <p className="text-xs text-[var(--color-muted-foreground)]">All workspace members</p>
                 </>
               ) : (
@@ -235,8 +235,8 @@ export function MessagesPage() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {messages.length === 0 ? (
-              <div className="text-center py-12 text-sm text-[var(--color-muted-foreground)]">
-                No messages yet. Say hello! 👋
+              <div className="text-center py-12 text-sm text-[var(--color-muted-foreground)] flex items-center justify-center gap-2">
+                No messages yet. Say hello! <Hand className="w-4 h-4 text-yellow-500" />
               </div>
             ) : (
               messages.map(msg => {

@@ -94,9 +94,7 @@ export function Sidebar() {
           isCollapsed ? 'justify-center px-2' : 'px-5',
         )}>
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shrink-0">
-              <img src="/logo.png" alt="Hyna Studio Logo" className="w-8 h-8 object-contain" />
-            </div>
+            <img src="/logo.png" alt="Hyna Studio Logo" className="w-8 h-8 object-contain shrink-0" />
             {!isCollapsed && (
               <div className="min-w-0">
                 <h1 className="text-sm font-semibold truncate">Hyna Studio</h1>
@@ -153,24 +151,28 @@ export function Sidebar() {
 
         {/* Bottom section */}
         <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1">
-          {bottomNavItems.map((item) => (
-            <NavLink
-              key={item.label}
-              to={`${prefix}${item.path}`}
-              onClick={() => setMobileOpen(false)}
-              title={isCollapsed ? item.label : undefined}
-              className={cn(
-                'flex items-center gap-3 rounded-lg text-sm font-medium transition-colors',
-                isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2.5',
-                location.pathname.includes('/settings')
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'text-[var(--color-muted-foreground)] hover:text-blue-500 hover:bg-blue-500/10',
-              )}
-            >
-              <item.icon className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
-              {!isCollapsed && <span>{item.label}</span>}
-            </NavLink>
-          ))}
+          {bottomNavItems.map((item) => {
+            const itemPath = `${prefix}${item.path}`;
+            const isActive = location.pathname === itemPath;
+            return (
+              <NavLink
+                key={item.label}
+                to={itemPath}
+                onClick={() => setMobileOpen(false)}
+                title={isCollapsed ? item.label : undefined}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg text-sm font-medium transition-colors',
+                  isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2.5',
+                  isActive
+                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                    : 'text-[var(--color-muted-foreground)] hover:text-blue-500 hover:bg-blue-500/10',
+                )}
+              >
+                <item.icon className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
+                {!isCollapsed && <span>{item.label}</span>}
+              </NavLink>
+            );
+          })}
 
           {/* Download / Install App */}
           <button
