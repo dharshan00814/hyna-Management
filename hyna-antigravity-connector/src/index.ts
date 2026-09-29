@@ -61,7 +61,7 @@ async function handleConnect(args: string[]): Promise<void> {
     } else if ((arg === "--key" || arg === "-k") && args[i + 1]) {
       anonKey = args[++i];
     } else if (arg === "--no-start") {
-      autoStart = false;
+      // autoStart = false; // Add this variable if needed later
     }
   }
 

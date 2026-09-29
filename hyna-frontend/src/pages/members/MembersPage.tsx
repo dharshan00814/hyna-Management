@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X } from 'lucide-react';
 import { Button, Avatar, Modal, Input, Select, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -141,76 +141,6 @@ export function MembersPage() {
     }
   };
 
-  const handleOpenEditModal = (user: User, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setEditingUser(user);
-    setEditFormData({
-      name: user.name || '',
-      role: user.role || 'member',
-      department: user.department || 'Engineering',
-      designation: user.designation || 'Software Engineer',
-      employeeId: user.employeeId || '',
-      phone: user.phone || '',
-      status: user.status || 'active',
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdateMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-    if (!editFormData.name.trim()) {
-      toast.error('Please enter the member\'s full name');
-      return;
-    }
-
-    setIsEditing(true);
-    try {
-      await updateMember(editingUser.id, {
-        name: editFormData.name.trim(),
-        role: editFormData.role,
-        department: editFormData.department.trim(),
-        designation: editFormData.designation.trim(),
-        employeeId: editFormData.employeeId.trim(),
-        phone: editFormData.phone.trim(),
-        status: editFormData.status,
-      });
-
-      toast.success(`Member "${editFormData.name}" updated successfully!`);
-      setShowEditModal(false);
-      setEditingUser(null);
-      await loadData();
-    } catch (err: any) {
-      console.error('Failed to update member:', err);
-      toast.error(err.message || 'Failed to update member');
-    } finally {
-      setIsEditing(false);
-    }
-  };
-
-  const handleOpenDeleteModal = (user: User, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setDeletingUser(user);
-    setShowDeleteModal(true);
-  };
-
-  const handleDeleteMember = async () => {
-    if (!deletingUser) return;
-    setIsDeleting(true);
-    try {
-      await deleteMember(deletingUser.id);
-      toast.success(`Member "${deletingUser.name}" removed successfully.`);
-      setShowDeleteModal(false);
-      setDeletingUser(null);
-      await loadData();
-    } catch (err: any) {
-      console.error('Failed to delete member:', err);
-      toast.error(err.message || 'Failed to remove member');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   const departments = [...new Set(users.map(u => u.department).filter(Boolean))];
   const filtered = users.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -258,6 +188,7 @@ export function MembersPage() {
           </Button>
         )}
       </div>
+
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -311,38 +242,16 @@ export function MembersPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     {user.employeeId && (
                       <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[var(--color-muted)] text-[var(--color-muted-foreground)] font-medium">
                         {user.employeeId}
                       </span>
                     )}
                     <div
-                      className={cn('w-2.5 h-2.5 rounded-full mr-1', user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300')}
+                      className={cn('w-2.5 h-2.5 rounded-full', user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300')}
                       title={user.status === 'active' ? 'Active' : 'Inactive'}
                     />
-                    {canManageMembers && (
-                      <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={(e) => handleOpenEditModal(user, e)}
-                          className="p-1.5 rounded-md hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
-                          title="Edit Member & Role"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        {user.id !== currentUser?.id && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenDeleteModal(user, e)}
-                            className="p-1.5 rounded-md hover:bg-red-500/10 text-[var(--color-muted-foreground)] hover:text-red-500 transition-colors"
-                            title="Remove Member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
                 <h3 className="text-sm font-semibold truncate group-hover:text-[var(--color-primary)] transition-colors">
@@ -351,7 +260,9 @@ export function MembersPage() {
                 <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <p className="text-xs text-[var(--color-primary)] font-medium">{user.department}</p>
-                  {getRoleBadge(user.role)}
+                  <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.2 bg-[var(--color-muted)] text-[var(--color-muted-foreground)] rounded">
+                    {user.role}
+                  </span>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs text-[var(--color-muted-foreground)]">
@@ -495,157 +406,6 @@ export function MembersPage() {
             </p>
           </div>
         </form>
-      </Modal>
-
-      {/* Edit Member Modal */}
-      <Modal
-        isOpen={showEditModal}
-        onClose={() => !isEditing && setShowEditModal(false)}
-        title="Edit Member & Role"
-        size="md"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              type="button"
-              disabled={isEditing}
-              onClick={() => setShowEditModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              isLoading={isEditing}
-              onClick={handleUpdateMember}
-            >
-              <UserCheck className="w-4 h-4 mr-1.5" />
-              Save Changes
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleUpdateMember} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Full Name *"
-              placeholder="e.g. Priya Sharma"
-              value={editFormData.name}
-              onChange={(e) => setEditFormData(f => ({ ...f, name: e.target.value }))}
-              required
-            />
-            <Input
-              label="Employee ID"
-              placeholder="e.g. EMP-014"
-              value={editFormData.employeeId}
-              onChange={(e) => setEditFormData(f => ({ ...f, employeeId: e.target.value }))}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium block mb-1">Email Address</label>
-            <div className="w-full h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)] text-sm flex items-center cursor-not-allowed">
-              {editingUser?.email}
-            </div>
-            <p className="text-[11px] text-[var(--color-muted-foreground)] mt-1">
-              Email is managed via authentication credentials.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Role *"
-              value={editFormData.role}
-              onChange={(val) => setEditFormData(f => ({ ...f, role: val as UserRole }))}
-              options={[
-                { value: 'member', label: 'Member' },
-                { value: 'manager', label: 'Manager' },
-                { value: 'admin', label: 'Executive Admin' },
-              ]}
-            />
-            <Select
-              label="Department"
-              value={editFormData.department}
-              onChange={(val) => setEditFormData(f => ({ ...f, department: val }))}
-              options={[
-                { value: 'Engineering', label: 'Engineering' },
-                { value: 'Design', label: 'Design' },
-                { value: 'Quality Assurance', label: 'Quality Assurance' },
-                { value: 'Product', label: 'Product' },
-                { value: 'Operations', label: 'Operations' },
-                { value: 'Marketing', label: 'Marketing' },
-                { value: 'Executive', label: 'Executive' },
-              ]}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Designation"
-              placeholder="e.g. Software Engineer"
-              value={editFormData.designation}
-              onChange={(e) => setEditFormData(f => ({ ...f, designation: e.target.value }))}
-            />
-            <Input
-              label="Phone Number"
-              placeholder="e.g. +91 98765 43210"
-              value={editFormData.phone}
-              onChange={(e) => setEditFormData(f => ({ ...f, phone: e.target.value }))}
-            />
-          </div>
-
-          <Select
-            label="Account Status"
-            value={editFormData.status}
-            onChange={(val) => setEditFormData(f => ({ ...f, status: val as 'active' | 'inactive' }))}
-            options={[
-              { value: 'active', label: 'Active Member' },
-              { value: 'inactive', label: 'Inactive / Suspended' },
-            ]}
-          />
-        </form>
-      </Modal>
-
-      {/* Delete Member Confirmation Modal */}
-      <Modal
-        isOpen={showDeleteModal}
-        onClose={() => !isDeleting && setShowDeleteModal(false)}
-        title="Remove Team Member"
-        size="sm"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              type="button"
-              disabled={isDeleting}
-              onClick={() => setShowDeleteModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              type="button"
-              isLoading={isDeleting}
-              onClick={handleDeleteMember}
-            >
-              <Trash2 className="w-4 h-4 mr-1.5" />
-              Remove Member
-            </Button>
-          </>
-        }
-      >
-        <div className="flex items-start gap-3 py-2">
-          <div className="w-10 h-10 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
-              Remove {deletingUser?.name}?
-            </h4>
-            <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
-              Are you sure you want to remove <span className="font-semibold text-[var(--color-foreground)]">{deletingUser?.name}</span> ({deletingUser?.email}) from the team? This will revoke their access to Hyna Studio and remove their assignments.
-            </p>
-          </div>
-        </div>
       </Modal>
     </div>
   );

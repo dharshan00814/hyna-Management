@@ -61,6 +61,8 @@ export class HynaClient {
     try {
       // 1. Try secure RPC function first
       try {
+        const cleanCode = code.trim().toUpperCase();
+        const effectiveTool = tool.toLowerCase();
         let { data: rpcData, error: rpcErr } = await this.supabase.rpc('verify_developer_connection_code', {
           p_code: cleanCode,
           p_tool: effectiveTool,
