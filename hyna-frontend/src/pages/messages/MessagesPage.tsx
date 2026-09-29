@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import EmojiPicker from 'emoji-picker-react';
-import { Globe, Send, Smile, Paperclip } from 'lucide-react';
+import { Globe, Send, Smile, Paperclip, FileText, X, Loader2 } from 'lucide-react';
 import { Avatar, LoadingState } from '@/components/ui';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getChannelMessages, sendMessage, getUsers } from '@/services/api';
 import type { ChatMessage, User } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 export function MessagesPage() {
   const { currentUser } = useAuthStore();
@@ -16,8 +17,11 @@ export function MessagesPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; path: string; type: string }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -65,8 +69,9 @@ export function MessagesPage() {
   }, [messages.length, activeChat]);
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !activeChat || !currentUser?.id) return;
+    if ((!newMessage.trim() && pendingAttachments.length === 0) || !activeChat || !currentUser?.id) return;
     const text = newMessage.trim();
+    const currentAttachments = [...pendingAttachments];
     
     // OPTIMISTIC UI: create a temporary message
     const tempMessage: ChatMessage = {
@@ -75,18 +80,19 @@ export function MessagesPage() {
       senderId: currentUser.id,
       content: text,
       timestamp: new Date().toISOString(),
-      type: 'text',
-      attachments: [],
+      type: currentAttachments.length > 0 && !text ? 'file' : 'text',
+      attachments: currentAttachments,
       reactions: [],
     };
     
     // Immediately update UI and clear input
     setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
+    setPendingAttachments([]);
     setShowEmojiPicker(false);
     
     try {
-      const sent = await sendMessage(activeChat, text, currentUser.id);
+      const sent = await sendMessage(activeChat, text, currentUser.id, currentAttachments);
       // Replace the temp message with the real one returned from DB
       setMessages(prev => prev.map(m => m.id === tempMessage.id ? sent : m));
     } catch (err: any) {
@@ -94,8 +100,48 @@ export function MessagesPage() {
       // Revert Optimistic UI
       setMessages(prev => prev.filter(m => m.id !== tempMessage.id));
       setNewMessage(text); // Put text back into input
+      setPendingAttachments(currentAttachments); // Restore attachments
       toast.error(err?.message || 'Failed to send message to database.');
     }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const uploaded = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const filePath = `chat-attachments/${fileName}`;
+
+      try {
+        const { error } = await supabase.storage.from('files').upload(filePath, file, { upsert: true });
+        if (error) throw error;
+
+        let type = 'document';
+        if (file.type.startsWith('image/')) type = 'image';
+        else if (file.type.startsWith('video/')) type = 'video';
+
+        uploaded.push({ name: file.name, path: filePath, type });
+      } catch (err: any) {
+        console.error('Error uploading attachment:', err);
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    setPendingAttachments(prev => [...prev, ...uploaded]);
+    setIsUploading(false);
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removePendingAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const onEmojiClick = (emojiObject: any) => {
@@ -210,6 +256,13 @@ export function MessagesPage() {
                         isOwn ? 'bg-[var(--color-primary)] text-white rounded-tr-sm' : 'bg-[var(--color-muted)] rounded-tl-sm',
                       )}>
                         {msg.content}
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="mt-1 flex flex-col gap-1">
+                            {msg.attachments.map((att, i) => (
+                              <AttachmentRenderer key={i} attachment={att} isOwn={isOwn} />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -219,12 +272,43 @@ export function MessagesPage() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Pending Attachments */}
+          {pendingAttachments.length > 0 && (
+            <div className="px-4 py-2 border-t border-[var(--color-border)] bg-[var(--color-muted)]/20 flex gap-2 overflow-x-auto">
+              {pendingAttachments.map((att, i) => (
+                <div key={i} className="flex items-center gap-2 bg-[var(--color-background)] border border-[var(--color-border)] p-1.5 pr-2 rounded-md shrink-0">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs truncate max-w-[120px]">{att.name}</span>
+                  <button onClick={() => removePendingAttachment(i)} className="p-0.5 rounded-full hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-red-500 transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Message input */}
-          <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <div className="px-4 py-3 border-t border-[var(--color-border)] relative">
+            {isUploading && (
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500/20 overflow-hidden">
+                <div className="h-full bg-blue-500 animate-pulse" style={{ width: '100%' }} />
+              </div>
+            )}
             <div className="flex items-center gap-2">
-              <button className="p-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors">
-                <Paperclip className="w-4 h-4" />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="p-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors disabled:opacity-50"
+              >
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
               </button>
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+              />
               <input
                 ref={inputRef}
                 type="text"
@@ -254,10 +338,10 @@ export function MessagesPage() {
               </div>
               <button
                 onClick={handleSend}
-                disabled={!newMessage.trim()}
+                disabled={(typeof newMessage === 'string' && !newMessage.trim() && pendingAttachments.length === 0) || isUploading}
                 className={cn(
                   'p-2 rounded-lg transition-colors',
-                  newMessage.trim() ? 'text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10' : 'text-[var(--color-muted-foreground)]',
+                  (newMessage.trim() || pendingAttachments.length > 0) && !isUploading ? 'text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10' : 'text-[var(--color-muted-foreground)]',
                 )}
               >
                 <Send className="w-4 h-4" />
@@ -269,3 +353,51 @@ export function MessagesPage() {
     </div>
   );
 }
+
+const AttachmentRenderer = ({ attachment, isOwn }: { attachment: { name: string; path: string; type: string; url?: string }, isOwn: boolean }) => {
+  const [url, setUrl] = useState<string | null>(attachment.url || null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!url) {
+      const fetchUrl = async () => {
+        try {
+          const { data, error } = await supabase.storage.from('files').createSignedUrl(attachment.path, 3600);
+          if (error) throw error;
+          if (data?.signedUrl && isMounted) setUrl(data.signedUrl);
+        } catch (err) {
+          console.error('Failed to get signed URL for attachment', err);
+        }
+      };
+      fetchUrl();
+    }
+    return () => { isMounted = false; };
+  }, [attachment.path, url]);
+
+  if (!url) {
+    return (
+      <div className={cn("flex items-center gap-2 p-2 mt-2 rounded-md border w-fit", isOwn ? "bg-white/10 border-white/20" : "bg-[var(--color-muted)]/50 border-[var(--color-border)]")}>
+        <Loader2 className={cn("w-3 h-3 animate-spin", isOwn ? "text-white/70" : "text-[var(--color-muted-foreground)]")} />
+        <span className={cn("text-xs", isOwn ? "text-white/70" : "text-[var(--color-muted-foreground)]")}>Loading...</span>
+      </div>
+    );
+  }
+
+  if (attachment.type === 'image') {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="block mt-2">
+        <img src={url} alt={attachment.name} className="max-w-[200px] max-h-[200px] rounded-md border border-white/20 object-cover shadow-sm" />
+      </a>
+    );
+  }
+
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className={cn(
+      "flex items-center gap-2 p-2 mt-2 rounded-md border transition-colors w-fit",
+      isOwn ? "bg-white/10 border-white/20 hover:bg-white/20 text-white" : "bg-[var(--color-background)] border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]"
+    )}>
+      <FileText className={cn("w-4 h-4 shrink-0", isOwn ? "text-white" : "text-blue-500")} />
+      <span className="text-xs truncate max-w-[150px]">{attachment.name}</span>
+    </a>
+  );
+};

@@ -1239,14 +1239,14 @@ export async function getChannelMessages(receiverId: string, currentUserId?: str
   return (data || []).map(mapMessage);
 }
 
-export async function sendMessage(receiverId: string, content: string, senderId: string): Promise<ChatMessage> {
+export async function sendMessage(receiverId: string, content: string, senderId: string, attachments: any[] = []): Promise<ChatMessage> {
   const insertPayload = {
     receiver_id: receiverId === 'globe' ? null : receiverId,
     sender_id: senderId,
     content,
     timestamp: new Date().toISOString(),
-    type: 'text',
-    attachments: [],
+    type: attachments.length > 0 && !content.trim() ? 'file' : 'text',
+    attachments,
     reactions: [],
   };
 
@@ -1257,7 +1257,9 @@ export async function sendMessage(receiverId: string, content: string, senderId:
       senderId,
       content,
       timestamp: insertPayload.timestamp,
-      type: 'text',
+      type: insertPayload.type as any,
+      attachments,
+      reactions: [],
     };
   }
 
