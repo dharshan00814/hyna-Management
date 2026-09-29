@@ -1284,7 +1284,13 @@ export async function getChannelMessages(channelId: string): Promise<ChatMessage
   }
 }
 
-export async function sendMessage(channelId: string, content: string, senderId: string): Promise<ChatMessage> {
+export async function sendMessage(
+  channelId: string, 
+  content: string, 
+  senderId: string,
+  attachments: string[] = [],
+  type: 'text' | 'file' | 'system' = 'text'
+): Promise<ChatMessage> {
   const now = new Date().toISOString();
 
   if (!isSupabaseConfigured()) {
@@ -1294,8 +1300,8 @@ export async function sendMessage(channelId: string, content: string, senderId: 
       senderId,
       content,
       timestamp: now,
-      type: 'text',
-      attachments: [],
+      type,
+      attachments,
       reactions: [],
     };
   }
@@ -1319,8 +1325,8 @@ export async function sendMessage(channelId: string, content: string, senderId: 
     channel_id: channelId,
     sender_id: validSenderId,
     content,
-    type: 'text',
-    attachments: [],
+    type,
+    attachments,
     reactions: [],
   };
 
@@ -1339,8 +1345,8 @@ export async function sendMessage(channelId: string, content: string, senderId: 
       senderId: validSenderId,
       content,
       timestamp: now,
-      type: 'text',
-      attachments: [],
+      type,
+      attachments,
       reactions: [],
     };
   }
@@ -1359,6 +1365,39 @@ export async function sendMessage(channelId: string, content: string, senderId: 
   }
 
   return mapMessage(data);
+}
+
+export async function toggleMessageReaction(messageId: string, emoji: string, userId: string): Promise<any> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const { data: msg } = await supabase
+      .from('chat_messages')
+      .select('reactions')
+      .eq('id', messageId)
+      .maybeSingle();
+
+    let reactions: { emoji: string; userIds: string[] }[] = Array.isArray(msg?.reactions) ? msg.reactions : [];
+    const existing = reactions.find(r => r.emoji === emoji);
+    if (existing) {
+      if (existing.userIds.includes(userId)) {
+        existing.userIds = existing.userIds.filter(id => id !== userId);
+      } else {
+        existing.userIds.push(userId);
+      }
+    } else {
+      reactions.push({ emoji, userIds: [userId] });
+    }
+    reactions = reactions.filter(r => r.userIds.length > 0);
+
+    await supabase
+      .from('chat_messages')
+      .update({ reactions })
+      .eq('id', messageId);
+
+    return reactions;
+  } catch (err) {
+    console.warn('Could not toggle reaction:', err);
+  }
 }
 
 // ============================================================
