@@ -78,8 +78,9 @@ export function LiveDeveloperActivityPage() {
     const liveTicker = setInterval(() => {
       setCards((prevCards) =>
         prevCards.map((c) => {
-          if (c.status === 'active' && c.currentSession?.started_at) {
-            const startMs = new Date(c.currentSession.started_at).getTime();
+          const sessionStartTime = c.currentSession?.startedAt || c.currentSession?.started_at;
+          if (c.status === 'active' && sessionStartTime) {
+            const startMs = new Date(sessionStartTime).getTime();
             const liveSeconds = Math.max(0, Math.round((Date.now() - startMs) / 1000));
             return {
               ...c,

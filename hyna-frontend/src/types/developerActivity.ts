@@ -74,7 +74,9 @@ export interface DeveloperSession {
   currentFile?: string;
   gitBranch?: string;
   startedAt: string;
+  started_at?: string;
   lastActivityAt: string;
+  last_activity_at?: string;
   endedAt?: string | null;
   status: DeveloperSessionStatus;
   createdAt: string;

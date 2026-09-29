@@ -357,8 +357,16 @@ export function MembersPage() {
                 <div className="mt-4 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs text-[var(--color-muted-foreground)]">
                   <span>{userTasks.length} tasks</span>
                   <div className="flex items-center gap-2">
-                    {user.email && <Mail className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" title={user.email} />}
-                    {user.phone && <Phone className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" title={user.phone} />}
+                    {user.email && (
+                      <span title={user.email} className="inline-flex">
+                        <Mail className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" />
+                      </span>
+                    )}
+                    {user.phone && (
+                      <span title={user.phone} className="inline-flex">
+                        <Phone className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" />
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
