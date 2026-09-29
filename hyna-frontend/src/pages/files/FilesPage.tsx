@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, Upload, Grid, List, Folder, FileText, Image, Film, Code, Archive, BarChart3, Presentation, Download, Trash2 } from 'lucide-react';
 import { Button, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatFileSize, formatDate } from '@/lib/utils';
-import { getFiles, getFolders, getUsers, getUserById } from '@/services/api';
+import { getFiles, getFolders, getUsers, getUserById, uploadFile } from '@/services/api';
 import { toast } from 'sonner';
 import type { FileItem, Folder as FolderType } from '@/types';
 
@@ -18,6 +18,30 @@ export function FilesPage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [folders, setFolders] = useState<FolderType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const toastId = toast.loading('Uploading file...');
+    try {
+      const uploaded = await uploadFile(file, selectedFolder || 'General');
+      setFiles(prev => [uploaded, ...prev]);
+      toast.success('File uploaded successfully!', { id: toastId });
+    } catch (err) {
+      toast.error('Failed to upload file.', { id: toastId });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -54,9 +78,10 @@ export function FilesPage() {
           <h1 className="page-title">Files</h1>
           <p className="page-description">{selectedFolder || 'All files'} • {filtered.length} files</p>
         </div>
-        <Button onClick={() => toast.info('File upload storage bucket configured via Supabase Storage.')}>
-          <Upload className="w-4 h-4 mr-1" /> Upload
+        <Button onClick={handleUploadClick} disabled={isUploading}>
+          <Upload className="w-4 h-4 mr-1" /> {isUploading ? 'Uploading...' : 'Upload'}
         </Button>
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
       </div>
 
       <div className="flex flex-wrap gap-3 mb-6">

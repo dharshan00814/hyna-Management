@@ -84,11 +84,11 @@ export function AdminDashboard() {
 
   const taskStatusData = [
     { name: 'Completed', value: tasks.filter(t => t.status === 'completed').length || 1, color: '#10b981' },
-    { name: 'In Progress', value: tasks.filter(t => t.status === 'in-progress').length || 1, color: '#6366f1' },
-    { name: 'In Review', value: tasks.filter(t => t.status === 'in-review').length || 1, color: '#8b5cf6' },
-    { name: 'Blocked', value: tasks.filter(t => t.status === 'blocked').length || 1, color: '#ef4444' },
-    { name: 'Todo', value: tasks.filter(t => t.status === 'todo').length || 1, color: '#3b82f6' },
-    { name: 'Backlog', value: tasks.filter(t => t.status === 'backlog').length || 1, color: '#a1a1aa' },
+    { name: 'In Progress', value: tasks.filter(t => t.status === 'in-progress').length || 1, color: '#2041F0' },
+    { name: 'In Review', value: tasks.filter(t => t.status === 'in-review').length || 1, color: '#D5DAFD' },
+    { name: 'Blocked', value: tasks.filter(t => t.status === 'blocked').length || 1, color: '#FF0000' },
+    { name: 'Todo', value: tasks.filter(t => t.status === 'todo').length || 1, color: '#7B8DF8' },
+    { name: 'Backlog', value: tasks.filter(t => t.status === 'backlog').length || 1, color: '#ABABAB' },
   ];
 
   return (
@@ -165,17 +165,17 @@ export function AdminDashboard() {
                       fontSize: '12px',
                     }}
                   />
-                  <Bar dataKey="completed" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={24} />
-                  <Bar dataKey="created" fill="#e4e4e7" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                  <Bar dataKey="completed" fill="#2041F0" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                  <Bar dataKey="created" fill="#7B8DF8" radius={[4, 4, 0, 0]} maxBarSize={24} />
                 </BarChart>
               </ResponsiveContainer>
               <div className="flex items-center gap-4 mt-3 justify-center">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-sm bg-[#6366f1]" />
+                  <div className="w-2.5 h-2.5 rounded-sm bg-[#2041F0]" />
                   <span className="text-xs text-[var(--color-muted-foreground)]">Completed</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-sm bg-[#e4e4e7]" />
+                  <div className="w-2.5 h-2.5 rounded-sm bg-[#7B8DF8]" />
                   <span className="text-xs text-[var(--color-muted-foreground)]">Created</span>
                 </div>
               </div>
@@ -277,10 +277,10 @@ export function AdminDashboard() {
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'Present', value: presentCount, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-                { label: 'Late', value: lateCount, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-950/30' },
-                { label: 'Absent', value: absentCount, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-950/30' },
-                { label: 'On Leave', value: leaveCount, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/30' },
+                { label: 'Present', value: presentCount, color: 'text-emerald-500', bg: 'bg-[#10b981]/10' },
+                { label: 'Late', value: lateCount, color: 'text-amber-500', bg: 'bg-[#f59e0b]/10' },
+                { label: 'Absent', value: absentCount, color: 'text-[#FF0000]', bg: 'bg-[#FF0000]/10' },
+                { label: 'On Leave', value: leaveCount, color: 'text-[#7B8DF8]', bg: 'bg-[#7B8DF8]/10' },
               ].map(item => (
                 <div key={item.label} className={cn('rounded-xl p-3 text-center', item.bg)}>
                   <p className={cn('text-2xl font-semibold', item.color)}>{item.value}</p>

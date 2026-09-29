@@ -33,9 +33,9 @@ export function StatCard({ label, value, change, icon: Icon, iconColor = 'text-[
           {change >= 0 ? (
             <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
           ) : (
-            <TrendingDown className="w-3.5 h-3.5 text-red-500" />
+            <TrendingDown className="w-3.5 h-3.5 text-[#FF0000]" />
           )}
-          <span className={cn('text-xs font-medium', change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+          <span className={cn('text-xs font-medium', change >= 0 ? 'text-emerald-500' : 'text-[#FF0000]')}>
             {change >= 0 ? '+' : ''}{change}%
           </span>
           <span className="text-xs text-[var(--color-muted-foreground)]">vs last month</span>
