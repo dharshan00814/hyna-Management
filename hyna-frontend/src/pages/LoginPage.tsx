@@ -17,7 +17,7 @@ const css = `
 .su-top-bar{position:absolute;top:16px;right:16px;display:flex;gap:8px}
 .su-pwa-btn{background:#1f1f1f;border:1px solid #2b2b2b;color:#a0a0a0;border-radius:8px;padding:4px 8px;font:400 7.5px 'JetBrains Mono',monospace;display:flex;align-items:center;gap:4px;cursor:pointer;transition:all .15s}
 .su-pwa-btn:hover{background:#282828;color:#f2f2f2}
-.su-logo{width:22px;height:22px;margin-bottom:38px;color:#e8e8e8}
+.su-logo{width:38px;height:38px;object-fit:contain;margin-bottom:26px;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.4))}
 .su-badge{font:400 8px 'JetBrains Mono',monospace;background:#262626;color:#bdbdbd;padding:8px 8px;border-radius:9px;margin-bottom:14px}
 .su h1{font-size:23px;font-weight:500;letter-spacing:-.4px;margin-bottom:8px;white-space:nowrap}
 .su-sub{font-size:8.5px;color:#8a8a8a;margin-bottom:28px;white-space:nowrap}
@@ -71,10 +71,7 @@ const css = `
 `;
 
 const Logo = () => (
-  <svg className="su-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 3c1.2 0 2 .6 2.6 1.6l6 10.2c.7 1.2.1 3.2-1.9 3.2H5.3c-2 0-2.6-2-1.9-3.2l6-10.2C10 3.6 10.8 3 12 3Z" />
-    <path d="M8.5 15.5c1-1 2-1.4 3.5-1.4s2.5.4 3.5 1.4" />
-  </svg>
+  <img src="/logo.png" alt="Hyna Studio" className="su-logo" />
 );
 
 const Eye = ({ off }: { off: boolean }) => (
@@ -283,9 +280,17 @@ export function LoginPage() {
             <svg className="su-shape" viewBox="0 0 32 32" fill="#111"><circle cx="11" cy="11" r="9" /><path d="M14 16h13a3 3 0 0 1 3 3v9H17a3 3 0 0 1-3-3v-9Z" /></svg>
           </div>
           <div className="su-t su-green">
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2" strokeLinejoin="round" style={{ transform: "translateX(18px)" }}>
-              <path d="M12 3c1.200 0 2 .6 2.600 1.600l6 10.200c.7 1.200.1 3.200-1.900 3.200H5.300c-2 0-2.600-2-1.900-3.200l6-10.200C10 3.600 10.800 3 12 3Z" />
-            </svg>
+            <img
+              src="/logo.png"
+              alt="Hyna Studio Glyph"
+              style={{
+                width: '38px',
+                height: '38px',
+                objectFit: 'contain',
+                filter: 'brightness(0)',
+                transform: 'translateX(16px)',
+              }}
+            />
           </div>
 
           <div className="su-t su-img e" />
