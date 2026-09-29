@@ -424,11 +424,36 @@ export async function getLiveDeveloperCards(): Promise<{
       const project = s?.project_id ? cachedProjectsMap.get(s.project_id) : undefined;
       const task = s?.task_id ? cachedTasksMap.get(s.task_id) : undefined;
 
+      const currentSession: DeveloperSession | undefined = s
+        ? {
+            id: s.id,
+            userId: s.user_id,
+            integrationId: s.integration_id,
+            projectId: s.project_id,
+            taskId: s.task_id,
+            tool: s.tool as DeveloperTool,
+            workspaceName: s.workspace_name,
+            currentFile: s.current_file,
+            gitBranch: s.git_branch,
+            startedAt: s.started_at,
+            started_at: s.started_at,
+            lastActivityAt: s.last_activity_at,
+            last_activity_at: s.last_activity_at,
+            endedAt: s.ended_at,
+            status: s.status,
+            createdAt: s.created_at,
+            updatedAt: s.updated_at,
+            user,
+            project,
+            task,
+          }
+        : undefined;
+
       cards.push({
         user,
         status,
         tool: s?.tool as DeveloperTool | undefined,
-        currentSession: s,
+        currentSession,
         projectName: project?.name || s?.workspace_name || undefined,
         taskTitle: task?.title || undefined,
         workspaceName: s?.workspace_name || undefined,

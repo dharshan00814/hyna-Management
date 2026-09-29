@@ -1,22 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
-import { Search, Plus, Mail, Phone, X } from 'lucide-react';
-import { Button, Avatar, EmptyState, LoadingState } from '@/components/ui';
-import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores';
-import { getUsers, getTasks, addMember } from '@/services/api';
-import type { User, Task } from '@/types';
-import { toast } from 'sonner';
-=======
-import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck } from 'lucide-react';
+import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X } from 'lucide-react';
 import { Button, Avatar, Modal, Input, Select, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getUsers, getTasks, addMember } from '@/services/api';
+import { getUsers, getTasks, addMember, updateMember, deleteMember } from '@/services/api';
 import { toast } from 'sonner';
 import type { User, Task, UserRole } from '@/types';
->>>>>>> b609783 (fix: implement working Add Member modal with auto-provisioning and EMP-ID tracking)
 
 export function MembersPage() {
   const navigate = useNavigate();
@@ -30,42 +20,6 @@ export function MembersPage() {
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
 
-<<<<<<< HEAD
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newMember, setNewMember] = useState({ name: '', email: '', department: '', role: 'member' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      const added = await addMember(newMember);
-      setUsers(prev => [added, ...prev]);
-      toast.success('Member added successfully!');
-      setIsModalOpen(false);
-      setNewMember({ name: '', email: '', department: '', role: 'member' });
-    } catch (error) {
-      toast.error('Failed to add member.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      try {
-        const [u, t] = await Promise.all([getUsers(), getTasks()]);
-        if (isMounted) {
-          setUsers(u);
-          setTasks(t);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-=======
   // Add Member Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +35,25 @@ export function MembersPage() {
     password: 'Password@123',
   });
 
+  // Edit Member Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    role: 'member' as UserRole,
+    department: 'Engineering',
+    designation: 'Software Engineer',
+    employeeId: '',
+    phone: '',
+    status: 'active' as 'active' | 'inactive',
+  });
+
+  // Delete Member Confirmation State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const loadData = async () => {
     try {
       const [u, t] = await Promise.all([getUsers(), getTasks()]);
@@ -90,7 +63,6 @@ export function MembersPage() {
       console.error('Error loading members data:', err);
     } finally {
       setIsLoading(false);
->>>>>>> b609783 (fix: implement working Add Member modal with auto-provisioning and EMP-ID tracking)
     }
   };
 
@@ -188,55 +160,13 @@ export function MembersPage() {
           <h1 className="page-title">Members</h1>
           <p className="page-description">{users.length} team members registered</p>
         </div>
-<<<<<<< HEAD
-        {currentRole !== 'member' && <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Member</Button>}
-=======
         {canManageMembers && (
           <Button onClick={handleOpenAddModal}>
             <Plus className="w-4 h-4 mr-1" /> Add Member
           </Button>
         )}
->>>>>>> b609783 (fix: implement working Add Member modal with auto-provisioning and EMP-ID tracking)
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-[var(--color-card)] w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-              <h2 className="text-lg font-semibold text-[var(--color-card-foreground)]">Add New Member</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleAddMember} className="p-4 space-y-4 text-left">
-              <div>
-                <label className="block text-sm font-medium mb-1">Full Name</label>
-                <input required type="text" value={newMember.name} onChange={e => setNewMember({ ...newMember, name: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" placeholder="John Doe" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
-                <input required type="email" value={newMember.email} onChange={e => setNewMember({ ...newMember, email: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" placeholder="john@example.com" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Department</label>
-                <input required type="text" value={newMember.department} onChange={e => setNewMember({ ...newMember, department: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" placeholder="Engineering" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Role</label>
-                <select value={newMember.role} onChange={e => setNewMember({ ...newMember, role: e.target.value })} className="w-full h-9 px-3 rounded-md border border-[var(--color-input)] bg-[var(--color-background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]">
-                  <option value="member">Member</option>
-                  <option value="manager">Manager</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border)] mt-4">
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Member'}</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -316,8 +246,16 @@ export function MembersPage() {
                 <div className="mt-4 pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs text-[var(--color-muted-foreground)]">
                   <span>{userTasks.length} tasks</span>
                   <div className="flex items-center gap-2">
-                    {user.email && <Mail className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" title={user.email} />}
-                    {user.phone && <Phone className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" title={user.phone} />}
+                    {user.email && (
+                      <span title={user.email} className="inline-flex">
+                        <Mail className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" />
+                      </span>
+                    )}
+                    {user.phone && (
+                      <span title={user.phone} className="inline-flex">
+                        <Phone className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" />
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
