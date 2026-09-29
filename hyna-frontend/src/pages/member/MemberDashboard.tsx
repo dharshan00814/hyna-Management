@@ -132,7 +132,7 @@ export function MemberDashboard() {
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Today's tasks */}
-          <div className="card p-6 animate-slide-up">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold">Today's Tasks</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/member/tasks')}>
@@ -181,7 +181,7 @@ export function MemberDashboard() {
           </div>
 
           {/* Daily work report */}
-          <div className="card p-6 animate-slide-up stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center gap-2 mb-4">
               <Edit3 className="w-4 h-4 text-[var(--color-primary)]" />
               <h2 className="text-base font-semibold">Today's Work Report</h2>
@@ -204,7 +204,7 @@ export function MemberDashboard() {
         {/* Right column */}
         <div className="space-y-6">
           {/* Daily check-in */}
-          <div className="card p-6 animate-slide-in-right">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
             <div className="text-center py-4">
               {isCheckedIn ? (
@@ -256,7 +256,7 @@ export function MemberDashboard() {
           </div>
 
           {/* Upcoming meetings */}
-          <div className="card p-6 animate-slide-in-right stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
             </div>
@@ -292,7 +292,7 @@ export function MemberDashboard() {
           </div>
 
           {/* My activity summary */}
-          <div className="card p-6 animate-slide-in-right stagger-2">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
             <h2 className="text-base font-semibold mb-4">Activity Summary</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">

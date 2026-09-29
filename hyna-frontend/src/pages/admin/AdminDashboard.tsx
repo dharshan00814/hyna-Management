@@ -111,7 +111,7 @@ export function AdminDashboard() {
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Project overview */}
-          <div className="card p-6 animate-slide-up">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold">Project Overview</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin/projects')}>
@@ -150,7 +150,7 @@ export function AdminDashboard() {
           {/* Task & Activity charts */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Weekly task chart */}
-            <div className="card p-6 animate-slide-up stagger-1">
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
               <h2 className="text-base font-semibold mb-4">Weekly Tasks</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={weeklyTaskData} barGap={4}>
@@ -182,7 +182,7 @@ export function AdminDashboard() {
             </div>
 
             {/* Task status pie */}
-            <div className="card p-6 animate-slide-up stagger-2">
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
               <h2 className="text-base font-semibold mb-4">Task Overview</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
@@ -222,7 +222,7 @@ export function AdminDashboard() {
 
           {/* Pending reviews */}
           {pendingReviews.length > 0 && (
-            <div className="card p-6 animate-slide-up stagger-3">
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-3">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold">Pending Reviews</h2>
                 <span className="text-xs text-[var(--color-muted-foreground)]">{pendingReviews.length} tasks</span>
@@ -273,7 +273,7 @@ export function AdminDashboard() {
         {/* Right column */}
         <div className="space-y-6">
           {/* Today's attendance */}
-          <div className="card p-6 animate-slide-in-right">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
@@ -291,7 +291,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Upcoming meetings */}
-          <div className="card p-6 animate-slide-in-right stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin/meetings')}>
@@ -326,7 +326,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Recent members */}
-          <div className="card p-6 animate-slide-in-right stagger-2">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Team Members</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>

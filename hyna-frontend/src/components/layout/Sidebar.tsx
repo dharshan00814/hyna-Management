@@ -141,7 +141,7 @@ export function Sidebar() {
                   isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2.5',
                   isActive
                     ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                    : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)]',
+                    : 'text-[var(--color-muted-foreground)] hover:text-blue-500 hover:bg-blue-500/10',
                 )}
               >
                 <item.icon className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
@@ -164,7 +164,7 @@ export function Sidebar() {
                 isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2.5',
                 location.pathname.includes('/settings')
                   ? 'bg-[var(--color-primary)] text-white'
-                  : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)]',
+                  : 'text-[var(--color-muted-foreground)] hover:text-blue-500 hover:bg-blue-500/10',
               )}
             >
               <item.icon className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
