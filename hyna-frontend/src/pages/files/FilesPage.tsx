@@ -64,9 +64,38 @@ export function FilesPage() {
       URL.revokeObjectURL(objectUrl);
       
       toast.success('Download complete', { id: toastId });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to download file', { id: toastId });
+      toast.error(err.message || 'Failed to download file', { id: toastId });
+    }
+  };
+
+  const handleDelete = async (file: FileItem) => {
+    const filePath = `${file.folder}/${file.name}`;
+    const toastId = toast.loading('Deleting file...');
+    try {
+      // 1. Delete from Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('files')
+        .remove([filePath]);
+        
+      if (storageError) throw storageError;
+
+      // 2. Delete metadata row from DB
+      const { error: dbError } = await supabase
+        .from('files')
+        .delete()
+        .eq('id', file.id);
+        
+      if (dbError) throw dbError;
+
+      // 3. Update local state
+      setFiles(prev => prev.filter(f => f.id !== file.id));
+      
+      toast.success('File deleted successfully', { id: toastId });
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      toast.error(err.message || 'Failed to delete file', { id: toastId });
     }
   };
 
@@ -196,7 +225,7 @@ export function FilesPage() {
                   <div className="flex gap-1">
                     <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleView(file)} title="View"><Eye className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
                     <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDownload(file)} title="Download"><Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
-                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.error('File deleted')} title="Delete"><Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
+                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDelete(file)} title="Delete"><Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
                   </div>
                 </div>
               </div>
@@ -229,7 +258,7 @@ export function FilesPage() {
                       <div className="flex items-center justify-end gap-1">
                         <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleView(file)} title="View"><Eye className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
                         <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDownload(file)} title="Download"><Download className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
-                        <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.error('File deleted')} title="Delete"><Trash2 className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
+                        <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDelete(file)} title="Delete"><Trash2 className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
                       </div>
                     </td>
                   </tr>
