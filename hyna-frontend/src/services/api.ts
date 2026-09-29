@@ -1263,36 +1263,67 @@ export async function getFilesByFolder(folder: string): Promise<FileItem[]> {
 
 export async function uploadFile(file: File, folder: string = 'General'): Promise<FileItem> {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase is not configured');
+    throw new Error('Supabase is not configured. Please check your .env credentials.');
   }
 
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+  const fileExt = file.name.split('.').pop() || '';
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const uniquePrefix = `${Math.random().toString(36).substring(2, 8)}-${Date.now()}`;
+  const fileName = `${uniquePrefix}-${sanitizedName}`;
   const filePath = `${folder}/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from('files')
-    .upload(filePath, file);
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
 
   if (uploadError) {
     console.error('Error uploading file to storage:', uploadError);
+    const msg = uploadError.message || '';
+    if (msg.toLowerCase().includes('bucket not found') || (uploadError as any).statusCode === '404') {
+      throw new Error("Supabase Storage bucket 'files' not found. Please create a public bucket named 'files' in Supabase Dashboard -> Storage.");
+    }
+    if (msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('policy') || (uploadError as any).statusCode === '403') {
+      throw new Error("Upload blocked by Supabase Storage RLS. Please apply the storage policies for the 'files' bucket.");
+    }
     throw uploadError;
+  }
+
+  // Generate public URL
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  const publicUrl = urlData?.publicUrl || '#';
+
+  // Get current user ID if logged in
+  let currentUserId: string | null = null;
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    currentUserId = authData?.user?.id || null;
+  } catch {
+    // Session optional in demo/offline
   }
 
   let type = 'document';
   if (file.type.startsWith('image/')) type = 'image';
   else if (file.type.startsWith('video/')) type = 'video';
-  else if (file.name.match(/\.(zip|tar|gz|rar)$/i)) type = 'archive';
-  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json)$/i)) type = 'code';
+  else if (file.name.match(/\.(zip|tar|gz|rar|7z)$/i)) type = 'archive';
+  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json|py|java|c|cpp|go|rs|sql|md)$/i)) type = 'code';
   else if (file.name.match(/\.(xls|xlsx|csv)$/i)) type = 'spreadsheet';
   else if (file.name.match(/\.(ppt|pptx)$/i)) type = 'presentation';
 
   const insertPayload = {
-    id: crypto.randomUUID(),
+    id: `fl_${Math.random().toString(36).substring(2, 10)}`,
     name: file.name,
     type,
     size: file.size,
     folder,
+    url: publicUrl,
+    uploaded_by: currentUserId,
+    mime_type: file.type || 'application/octet-stream',
   };
 
   const { data, error: dbError } = await supabase
@@ -1302,11 +1333,55 @@ export async function uploadFile(file: File, folder: string = 'General'): Promis
     .single();
 
   if (dbError) {
-    console.error('Error inserting file record:', dbError);
-    throw dbError;
+    console.warn('Database record creation failed, returning mapped memory item:', dbError);
+    return {
+      id: insertPayload.id,
+      name: file.name,
+      type: insertPayload.type as any,
+      size: file.size,
+      folder,
+      uploadedBy: currentUserId || 'user',
+      uploadedAt: new Date().toISOString(),
+      url: publicUrl,
+      mimeType: insertPayload.mime_type,
+    };
   }
 
   return mapFile(data);
+}
+
+export async function deleteFile(fileId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { data: fileRecord } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', fileId)
+      .maybeSingle();
+
+    if (fileRecord?.url && fileRecord.url.includes('/files/')) {
+      const parts = fileRecord.url.split('/files/');
+      const storagePath = parts[parts.length - 1]?.split('?')[0];
+      if (storagePath) {
+        await supabase.storage.from('files').remove([decodeURIComponent(storagePath)]);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not remove file from Supabase storage:', err);
+  }
+
+  const { error } = await supabase
+    .from('files')
+    .delete()
+    .eq('id', fileId);
+
+  if (error) {
+    console.error('Error deleting file record from database:', error);
+    throw error;
+  }
+
+  return true;
 }
 
 // ============================================================

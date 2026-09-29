@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Upload, Grid, List, Folder, FileText, Image, Film, Code, Archive, BarChart3, Presentation, Download, Trash2 } from 'lucide-react';
+import { Search, Upload, Grid, List, Folder, FileText, Image, Film, Code, Archive, BarChart3, Presentation, Download, Trash2, ExternalLink } from 'lucide-react';
 import { Button, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatFileSize, formatDate } from '@/lib/utils';
-import { getFiles, getFolders, getUsers, getUserById, uploadFile } from '@/services/api';
+import { supabase } from '@/lib/supabase';
+import { getFiles, getFolders, getUsers, getUserById, uploadFile, deleteFile } from '@/services/api';
 import { toast } from 'sonner';
 import type { FileItem, Folder as FolderType } from '@/types';
 
@@ -25,18 +26,46 @@ export function FilesPage() {
     fileInputRef.current?.click();
   };
 
+  const handleDownload = (file: FileItem) => {
+    if (file.url && file.url !== '#') {
+      window.open(file.url, '_blank', 'noopener,noreferrer');
+      toast.success(`Opening ${file.name}`);
+    } else {
+      const { data } = supabase.storage.from('files').getPublicUrl(`${file.folder}/${file.name}`);
+      if (data?.publicUrl) {
+        window.open(data.publicUrl, '_blank', 'noopener,noreferrer');
+        toast.success(`Opening ${file.name}`);
+      } else {
+        toast.error('File download URL unavailable');
+      }
+    }
+  };
+
+  const handleDelete = async (file: FileItem) => {
+    if (!window.confirm(`Are you sure you want to delete "${file.name}"?`)) return;
+    const toastId = toast.loading(`Deleting ${file.name}...`);
+    try {
+      await deleteFile(file.id);
+      setFiles(prev => prev.filter(f => f.id !== file.id));
+      toast.success('File deleted successfully', { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete file', { id: toastId });
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    const toastId = toast.loading('Uploading file...');
+    const toastId = toast.loading(`Uploading "${file.name}"...`);
     try {
       const uploaded = await uploadFile(file, selectedFolder || 'General');
       setFiles(prev => [uploaded, ...prev]);
       toast.success('File uploaded successfully!', { id: toastId });
-    } catch (err) {
-      toast.error('Failed to upload file.', { id: toastId });
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      toast.error(err?.message || 'Failed to upload file.', { id: toastId, duration: 8000 });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -149,8 +178,20 @@ export function FilesPage() {
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]">
                   <span className="text-xs text-[var(--color-muted-foreground)]">{uploader?.name || 'User'}</span>
                   <div className="flex gap-1">
-                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.success('Download started')}><Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
-                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.error('File deleted')}><Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
+                    <button
+                      className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors"
+                      title="Download file"
+                      onClick={() => handleDownload(file)}
+                    >
+                      <Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
+                    </button>
+                    <button
+                      className="p-1 rounded hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] transition-colors"
+                      title="Delete file"
+                      onClick={() => handleDelete(file)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -180,7 +221,22 @@ export function FilesPage() {
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)] hidden md:table-cell">{uploader?.name || 'User'}</td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)] hidden sm:table-cell">{formatDate(file.uploadedAt)}</td>
                     <td className="px-4 py-3 text-right">
-                      <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.success('Download started')}><Download className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors"
+                          title="Download file"
+                          onClick={() => handleDownload(file)}
+                        >
+                          <Download className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                        </button>
+                        <button
+                          className="p-1.5 rounded hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] transition-colors"
+                          title="Delete file"
+                          onClick={() => handleDelete(file)}
+                        >
+                          <Trash2 className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
