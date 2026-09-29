@@ -69,7 +69,7 @@ export function LiveDeveloperActivityPage() {
       loadData(false);
     });
 
-    // Auto polling fallback every 30 seconds
+    // Auto polling fallback every 15 seconds
     const interval = setInterval(() => {
       loadData(false);
     }, 15000);

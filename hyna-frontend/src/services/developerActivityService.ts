@@ -217,15 +217,27 @@ export async function generateIntegrationPairingCode(
 }
 
 /**
- * Disconnects an IDE integration.
+ * Disconnects an IDE integration and marks active developer sessions as ended.
  */
 export async function disconnectIntegration(integrationId: string): Promise<boolean> {
   try {
+    const nowIso = new Date().toISOString();
+
+    // 1. Fetch integration row to know user_id and tool
+    const { data: integ } = await supabase
+      .from('developer_integrations')
+      .select('user_id, tool')
+      .eq('id', integrationId)
+      .maybeSingle();
+
+    // 2. Mark integration as disconnected
     const { error } = await supabase
       .from('developer_integrations')
       .update({
         status: 'disconnected',
         connection_code: null,
+        last_seen_at: nowIso,
+        updated_at: nowIso,
       })
       .eq('id', integrationId);
 
@@ -233,6 +245,21 @@ export async function disconnectIntegration(integrationId: string): Promise<bool
       handleTableError('Failed to disconnect integration', error);
       return false;
     }
+
+    // 3. Mark active/idle sessions in developer_sessions as ended
+    if (integ?.user_id && integ?.tool) {
+      await supabase
+        .from('developer_sessions')
+        .update({
+          status: 'ended',
+          ended_at: nowIso,
+          last_activity_at: nowIso,
+        })
+        .eq('user_id', integ.user_id)
+        .eq('tool', integ.tool)
+        .in('status', ['active', 'idle']);
+    }
+
     return true;
   } catch (err) {
     console.warn('[DeveloperActivityService] Disconnect exception:', err);
@@ -376,10 +403,10 @@ export async function getLiveDeveloperCards(): Promise<{
   try {
     await preloadLookupMaps();
 
-    const { data: sessions, error } = await supabase
-      .from('developer_sessions')
-      .select('*')
-      .order('last_activity_at', { ascending: false });
+    const [{ data: sessions, error }, { data: integrations }] = await Promise.all([
+      supabase.from('developer_sessions').select('*').order('last_activity_at', { ascending: false }),
+      supabase.from('developer_integrations').select('*'),
+    ]);
 
     if (error) {
       handleTableError('Error loading live developer sessions', error);
@@ -396,8 +423,15 @@ export async function getLiveDeveloperCards(): Promise<{
     }
 
     const now = Date.now();
-    const IDLE_CUTOFF_MS = 5 * 60 * 1000; // 5 minutes inactivity considered idle
-    const OFFLINE_CUTOFF_MS = 15 * 60 * 1000; // 15 minutes inactivity considered offline
+    const IDLE_CUTOFF_MS = 2.5 * 60 * 1000; // 2.5 minutes inactivity without heartbeat = idle
+    const OFFLINE_CUTOFF_MS = 5 * 60 * 1000; // 5 minutes inactivity without heartbeat = offline
+
+    // Map connected status: `${user_id}:${tool}` -> boolean
+    const connectedToolMap = new Map<string, boolean>();
+    (integrations || []).forEach((item) => {
+      const isConnected = item.status === 'connected';
+      connectedToolMap.set(`${item.user_id}:${item.tool}`, isConnected);
+    });
 
     // Group latest session by user
     const userLatestSessionMap = new Map<string, any>();
@@ -430,8 +464,10 @@ export async function getLiveDeveloperCards(): Promise<{
         const lastActMs = new Date(s.last_activity_at).getTime();
         const startMs = new Date(s.started_at).getTime();
         const diffMs = Math.max(0, now - lastActMs);
+        const isToolConnected = s.tool ? connectedToolMap.get(`${s.user_id}:${s.tool}`) : false;
 
-        if (s.status === 'ended' || diffMs > OFFLINE_CUTOFF_MS) {
+        // If session is explicitly ended, or the tool is disconnected, or inactivity passed cutoff -> offline
+        if (s.status === 'ended' || isToolConnected === false || diffMs > OFFLINE_CUTOFF_MS) {
           status = 'offline';
         } else if (s.status === 'idle' || diffMs > IDLE_CUTOFF_MS) {
           status = 'idle';
@@ -439,8 +475,17 @@ export async function getLiveDeveloperCards(): Promise<{
           status = 'active';
         }
 
-        activeDurationSeconds = Math.max(0, Math.round((lastActMs - startMs) / 1000));
-        lastActivityAgo = formatTimeAgo(s.last_activity_at);
+        // Live continuous usage prediction:
+        if (status === 'active') {
+          activeDurationSeconds = Math.max(0, Math.round((now - startMs) / 1000));
+        } else if (status === 'idle') {
+          activeDurationSeconds = Math.max(0, Math.round((lastActMs - startMs) / 1000));
+        } else {
+          const sessionEnd = s.ended_at ? new Date(s.ended_at).getTime() : lastActMs;
+          activeDurationSeconds = Math.max(0, Math.round((sessionEnd - startMs) / 1000));
+        }
+
+        lastActivityAgo = status === 'active' ? 'Active now' : formatTimeAgo(s.last_activity_at);
 
         if (status !== 'offline') {
           const t = s.tool as DeveloperTool;
@@ -693,6 +738,11 @@ export function subscribeToLiveDeveloperActivity(onUpdate: () => void): () => vo
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'developer_activity_events' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'developer_integrations' },
         () => onUpdate()
       )
       .subscribe();

@@ -34,12 +34,17 @@ function prompt(questionText: string): Promise<string> {
   });
 }
 
+const DEFAULT_SUPABASE_URL = "https://bpawtpzyodgzqjeglsye.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwYXd0cHp5b2RnenFqZWdsc3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDg4NjYsImV4cCI6MjEwNDMyNDg2Nn0.LOAf1FWvr-z-kpgRBLffxq7cgqKvCC3A5Pw-jU_FTz4";
+
 async function handleConnect(args: string[]): Promise<void> {
   printBanner();
 
   let code = "";
-  let url = process.env.VITE_SUPABASE_URL || "https://bpawtpzyodgzqjeglsye.supabase.co";
-  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || "";
+  let url = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+  let autoStart = true;
 
   // Parse args
   for (let i = 0; i < args.length; i++) {
@@ -63,7 +68,7 @@ async function handleConnect(args: string[]): Promise<void> {
   if (!code) {
     console.log("To connect Antigravity:");
     console.log("1. Open Hyna Studio -> Settings -> IDE Integrations (/settings/integrations)");
-    console.log("2. Click 'Connect Antigravity' and copy your pairing code (HYNA-ANTIGRAVITY-XXXXXX)\n");
+    console.log("2. Click 'Connect Antigravity' and copy your pairing code (HYNA-AGY-XXXX)\n");
     code = await prompt("Enter Pairing Code: ");
   }
 
@@ -73,12 +78,8 @@ async function handleConnect(args: string[]): Promise<void> {
   }
 
   if (!anonKey) {
-    anonKey = await prompt("Enter Supabase Anon Key (or set VITE_SUPABASE_ANON_KEY): ");
-  }
-
-  if (!anonKey) {
-    console.error("\x1b[31mError: Anon key is required to contact Supabase.\x1b[0m");
-    process.exit(1);
+    anonKey = await prompt("Enter Supabase Anon Key (or press enter for default): ");
+    if (!anonKey) anonKey = DEFAULT_SUPABASE_ANON_KEY;
   }
 
   const cleanCode = code.trim().toUpperCase();
@@ -121,7 +122,15 @@ async function handleConnect(args: string[]): Promise<void> {
       console.log("\x1b[32mSuccessfully connected Antigravity to Hyna Studio!\x1b[0m");
       console.log(`User ID: ${rpcData.user_id}`);
       console.log(`Device:  ${deviceName}`);
-      console.log("\nYou can now start live tracking anytime by running: \x1b[36mhyna-antigravity start\x1b[0m\n");
+
+      if (autoStart) {
+        console.log("\n\x1b[36m⚡ Automatically starting live activity tracking in terminal...\x1b[0m");
+        console.log("\x1b[90m(When you exit this terminal or press Ctrl+C, tracking automatically stops & disconnects)\x1b[0m\n");
+        const agent = new AntigravityActivityAgent(process.cwd());
+        await agent.start();
+      } else {
+        console.log("\nYou can start live tracking anytime by running: \x1b[36mnode dist/index.js start\x1b[0m\n");
+      }
       return;
     }
 
@@ -184,7 +193,15 @@ async function handleConnect(args: string[]): Promise<void> {
   console.log("\x1b[32mSuccessfully connected Antigravity to Hyna Studio!\x1b[0m");
   console.log(`User ID: ${integration.user_id}`);
   console.log(`Device:  ${deviceName}`);
-  console.log("\nYou can now start live tracking anytime by running: \x1b[36mhyna-antigravity start\x1b[0m\n");
+
+  if (autoStart) {
+    console.log("\n\x1b[36m⚡ Automatically starting live activity tracking in terminal...\x1b[0m");
+    console.log("\x1b[90m(When you exit this terminal or press Ctrl+C, tracking automatically stops & disconnects)\x1b[0m\n");
+    const agent = new AntigravityActivityAgent(process.cwd());
+    await agent.start();
+  } else {
+    console.log("\nYou can start live tracking anytime by running: \x1b[36mnode dist/index.js start\x1b[0m\n");
+  }
 }
 
 async function handleStart(): Promise<void> {
@@ -234,14 +251,26 @@ async function handleDisconnect(): Promise<void> {
 
   try {
     const client = createClient(creds.supabaseUrl, creds.supabaseAnonKey);
+    const nowIso = new Date().toISOString();
     await client
       .from("developer_integrations")
       .update({
         status: "disconnected",
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
       .eq("user_id", creds.userId)
       .eq("tool", "antigravity");
+
+    await client
+      .from("developer_sessions")
+      .update({
+        status: "ended",
+        ended_at: nowIso,
+        last_activity_at: nowIso,
+      })
+      .eq("user_id", creds.userId)
+      .eq("tool", "antigravity")
+      .in("status", ["active", "idle"]);
   } catch {
     // Ignore network error during disconnect
   }

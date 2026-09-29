@@ -10,7 +10,7 @@ import type { User, Task, UserRole } from '@/types';
 
 export function MembersPage() {
   const navigate = useNavigate();
-  const { currentRole, effectiveRole } = useAuthStore();
+  const { currentRole, effectiveRole, currentUser } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const canManageMembers = effectiveRole === 'admin' || effectiveRole === 'manager' || currentRole !== 'member';
 
@@ -150,6 +150,28 @@ export function MembersPage() {
     const matchesDept = departmentFilter === 'all' || u.department === departmentFilter;
     return matchesSearch && matchesDept;
   });
+
+  const getRoleBadge = (role: UserRole) => {
+    if (role === 'admin') {
+      return (
+        <span className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded">
+          Executive Admin
+        </span>
+      );
+    }
+    if (role === 'manager') {
+      return (
+        <span className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded">
+          Manager
+        </span>
+      );
+    }
+    return (
+      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-[var(--color-muted)] text-[var(--color-muted-foreground)] rounded">
+        Member
+      </span>
+    );
+  };
 
   if (isLoading) return <LoadingState />;
 
