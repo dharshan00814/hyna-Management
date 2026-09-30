@@ -13,6 +13,7 @@ import {
   TrendingUp,
   FileCheck,
   Plus,
+  Video,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -34,7 +35,7 @@ import {
   getUserById,
   createTask,
 } from '@/services/api';
-import { cn, formatDate, getStatusColor, getPriorityColor } from '@/lib/utils';
+import { cn, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
 import type { Project, Task, User, Meeting, AttendanceRecord } from '@/types';
 
 export function ManagerDashboard() {
@@ -381,11 +382,67 @@ export function ManagerDashboard() {
             ) : (
               <div className="space-y-3">
                 {meetings.slice(0, 3).map((m) => (
-                  <div key={m.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-1">
-                    <p className="text-sm font-medium">{m.title}</p>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">
-                      {m.startTime} - {m.endTime} • {m.type}
-                    </p>
+                  <div 
+                    key={m.id} 
+                    onClick={() => navigate(`/manager/meetings/${m.id}`)}
+                    className="p-3.5 rounded-xl border border-[var(--color-border)] hover:border-indigo-500/50 hover:bg-[var(--color-muted)]/40 hover:shadow-sm transition-all cursor-pointer group space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {m.title}
+                      </p>
+                      <Badge className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        {m.type}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                      <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>{formatDate(m.date)} • {formatTime(m.startTime)}</span>
+                    </div>
+                    {m.participantIds && m.participantIds.length > 0 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <AvatarGroup
+                          names={m.participantIds.slice(0, 4).map(id => getUserById(id)?.name || '').filter(Boolean)}
+                          max={3}
+                        />
+                        <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                          {m.participantIds.length} participants
+                        </span>
+                      </div>
+                    )}
+                    {m.meetingLink ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full mt-2 text-xs h-7" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const link = (m.meetingLink || '').trim();
+                          if (link.startsWith('http://') || link.startsWith('https://')) {
+                            window.open(link, '_blank', 'noopener,noreferrer');
+                          } else if (link.includes('meet.google.com') || link.includes('zoom.us')) {
+                            window.open(`https://${link}`, '_blank', 'noopener,noreferrer');
+                          } else {
+                            navigate(`/manager/meetings/${m.id}`);
+                          }
+                        }}
+                      >
+                        <Video className="w-3.5 h-3.5 mr-1" />
+                        {m.meetingLink.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full mt-1.5 text-xs text-indigo-600 dark:text-indigo-400"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/manager/meetings/${m.id}`);
+                        }}
+                      >
+                        View Details →
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
