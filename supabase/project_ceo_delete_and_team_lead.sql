@@ -44,11 +44,6 @@ AS $$
       )
   );
 $$;
-
--- --------------------------------------------------------------------
--- SECTION 3: ROW LEVEL SECURITY (RLS) POLICIES ON PROJECTS
--- --------------------------------------------------------------------
-
 -- Ensure RLS is active on projects
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 

@@ -1,7 +1,7 @@
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import {
   TrendingUp, TrendingDown, Users, FolderKanban, CheckSquare, CalendarClock,
-  Clock, Loader2, AlertCircle, Inbox, type LucideIcon,
+  Clock, Loader2, AlertCircle, Inbox, X, type LucideIcon,
 } from 'lucide-react';
 
 // ============================================================
@@ -18,7 +18,7 @@ interface StatCardProps {
 
 export function StatCard({ label, value, change, icon: Icon, iconColor = 'text-[var(--color-primary)]', className }: StatCardProps) {
   return (
-    <div className={cn('card p-5 animate-slide-up', className)}>
+    <div className={cn('card p-5 animate-slide-up transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-blue-500/10', className)}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-[var(--color-muted-foreground)] font-medium">{label}</p>
@@ -275,6 +275,8 @@ export function Input({ label, error, className, id, ...props }: InputProps) {
           'placeholder:text-[var(--color-muted-foreground)]',
           'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-1',
           'disabled:opacity-50',
+          'dark:[color-scheme:dark]',
+          '[&::-webkit-calendar-picker-indicator]:dark:invert',
           error && 'border-red-500 focus:ring-red-500',
           className,
         )}
@@ -391,7 +393,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', footer }:
             onClick={onClose}
             className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--color-muted)] transition-colors text-[var(--color-muted-foreground)]"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
         <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">

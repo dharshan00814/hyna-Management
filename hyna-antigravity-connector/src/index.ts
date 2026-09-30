@@ -34,16 +34,13 @@ function prompt(questionText: string): Promise<string> {
   });
 }
 
-const DEFAULT_SUPABASE_URL = "https://bpawtpzyodgzqjeglsye.supabase.co";
-const DEFAULT_SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwYXd0cHp5b2RnenFqZWdsc3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDg4NjYsImV4cCI6MjEwNDMyNDg2Nn0.LOAf1FWvr-z-kpgRBLffxq7cgqKvCC3A5Pw-jU_FTz4";
-
 async function handleConnect(args: string[]): Promise<void> {
   printBanner();
 
+  const stored = getCredentials();
   let code = "";
-  let url = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+  let url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || stored?.supabaseUrl || "";
+  let anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || stored?.supabaseAnonKey || "";
   let autoStart = true;
 
   // Parse args
@@ -65,6 +62,24 @@ async function handleConnect(args: string[]): Promise<void> {
     }
   }
 
+  if (!url) {
+    url = await prompt("Enter Hyna Supabase URL (e.g. https://your-project.supabase.co): ");
+  }
+
+  if (!url) {
+    console.error("\x1b[31mError: Supabase URL is required.\x1b[0m");
+    process.exit(1);
+  }
+
+  if (!anonKey) {
+    anonKey = await prompt("Enter Hyna Supabase Anon Key: ");
+  }
+
+  if (!anonKey) {
+    console.error("\x1b[31mError: Supabase Anon Key is required to connect.\x1b[0m");
+    process.exit(1);
+  }
+
   if (!code) {
     console.log("To connect Antigravity:");
     console.log("1. Open Hyna Studio -> Settings -> IDE Integrations (/settings/integrations)");
@@ -75,11 +90,6 @@ async function handleConnect(args: string[]): Promise<void> {
   if (!code) {
     console.error("\x1b[31mError: Pairing code is required.\x1b[0m");
     process.exit(1);
-  }
-
-  if (!anonKey) {
-    anonKey = await prompt("Enter Supabase Anon Key (or press enter for default): ");
-    if (!anonKey) anonKey = DEFAULT_SUPABASE_ANON_KEY;
   }
 
   const cleanCode = code.trim().toUpperCase();

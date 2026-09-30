@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Clock, Timer, Coffee, Laptop, ShieldCheck, RefreshCw,
   Layers, CheckCircle2, ChevronRight, GitBranch, ExternalLink,
-  Calendar, FileCode, Radio
+  Calendar, FileCode, Radio, Play, Activity, Folder, ClipboardList, FileEdit, PowerOff
 } from 'lucide-react';
 import { StatCard, Badge, Button, LoadingState, EmptyState } from '@/components/ui';
 import { useAuthStore } from '@/stores';
@@ -326,15 +326,15 @@ export function MyDeveloperActivityPage() {
                   />
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm text-[var(--color-foreground)] flex items-center gap-2">
-                      {evt.eventType === 'session_started' && '🟢 Session started'}
-                      {evt.eventType === 'session_heartbeat' && '⚡ Heartbeat'}
-                      {evt.eventType === 'file_activity' && '📝 File activity'}
-                      {evt.eventType === 'workspace_changed' && '📂 Workspace opened'}
-                      {evt.eventType === 'task_started' && '📋 Task started'}
-                      {evt.eventType === 'task_changed' && '📋 Task updated'}
-                      {evt.eventType === 'idle' && '🟡 Idle'}
-                      {evt.eventType === 'active' && '🟢 Active'}
-                      {evt.eventType === 'session_ended' && '⚪ Session ended'}
+                      {evt.eventType === 'session_started' && <span className="flex items-center gap-1.5"><Play className="w-3.5 h-3.5 text-emerald-500" /> Session started</span>}
+                      {evt.eventType === 'session_heartbeat' && <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-[var(--color-primary)]" /> Heartbeat</span>}
+                      {evt.eventType === 'file_activity' && <span className="flex items-center gap-1.5"><FileEdit className="w-3.5 h-3.5 text-amber-500" /> File activity</span>}
+                      {evt.eventType === 'workspace_changed' && <span className="flex items-center gap-1.5"><Folder className="w-3.5 h-3.5 text-blue-500" /> Workspace opened</span>}
+                      {evt.eventType === 'task_started' && <span className="flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5 text-violet-500" /> Task started</span>}
+                      {evt.eventType === 'task_changed' && <span className="flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5 text-violet-500" /> Task updated</span>}
+                      {evt.eventType === 'idle' && <span className="flex items-center gap-1.5"><Coffee className="w-3.5 h-3.5 text-amber-500" /> Idle</span>}
+                      {evt.eventType === 'active' && <span className="flex items-center gap-1.5"><Radio className="w-3.5 h-3.5 text-emerald-500" /> Active</span>}
+                      {evt.eventType === 'session_ended' && <span className="flex items-center gap-1.5"><PowerOff className="w-3.5 h-3.5 text-zinc-400" /> Session ended</span>}
                       <span className="text-[11px] font-normal text-[var(--color-muted-foreground)]">
                         via {getToolDisplayName(evt.tool)}
                       </span>

@@ -175,10 +175,9 @@ function App() {
           <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
         </Route>
 
-        {/* Meeting Room - Without AppLayout (Full screen) */}
-        <Route element={<ProtectedRoute allowedRoles={['admin', 'manager', 'member']} />}>
-          <Route path="/meeting/:id" element={<MeetingRoom />} />
-        </Route>
+        {/* Meeting Room - Without AppLayout (Full screen, direct link joinable) */}
+        <Route path="/meeting/:id" element={<MeetingRoom />} />
+
 
         {/* Dynamic Fallback / Root Redirect */}
         <Route path="/" element={<Navigate to={`${rolePrefix}/dashboard`} replace />} />

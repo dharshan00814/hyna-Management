@@ -1,13 +1,87 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { DeveloperActivityEvent, DeveloperTool, ExtensionSessionState } from './types';
+
+function getHynaDirPath(): string {
+  return path.join(os.homedir(), '.hyna');
+}
+
+function getCredentialsFilePath(): string {
+  return path.join(getHynaDirPath(), 'credentials.json');
+}
+
+interface SharedCredentials {
+  userId?: string;
+  tool?: DeveloperTool;
+  deviceName?: string;
+  apiKey?: string;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  lastConnectedAt?: string;
+}
+
+function getSharedCredentials(): SharedCredentials | null {
+  try {
+    const credsPath = getCredentialsFilePath();
+    if (fs.existsSync(credsPath)) {
+      const content = fs.readFileSync(credsPath, 'utf8');
+      return JSON.parse(content) as SharedCredentials;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveSharedCredentials(creds: Partial<SharedCredentials>): void {
+  try {
+    const hynaDir = getHynaDirPath();
+    if (!fs.existsSync(hynaDir)) {
+      fs.mkdirSync(hynaDir, { recursive: true });
+    }
+    const credsPath = getCredentialsFilePath();
+    let existing: any = {};
+    if (fs.existsSync(credsPath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+      } catch {
+        existing = {};
+      }
+    }
+    const updated = {
+      ...existing,
+      ...creds,
+      lastConnectedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(credsPath, JSON.stringify(updated, null, 2), { mode: 0o600 });
+  } catch {
+    // ignore
+  }
+}
+
+function clearSharedCredentials(): void {
+  try {
+    const credsPath = getCredentialsFilePath();
+    if (fs.existsSync(credsPath)) {
+      fs.unlinkSync(credsPath);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export class HynaClient {
   private supabase: SupabaseClient | null = null;
   private context: vscode.ExtensionContext;
   private queuedEvents: DeveloperActivityEvent[] = [];
   private activeSessionId: string | null = null;
+  private isNetworkOffline = false;
+  private connectivityTimer: NodeJS.Timeout | null = null;
+  public onNetworkRestored?: () => void;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -15,12 +89,31 @@ export class HynaClient {
     this.initializeClient();
   }
 
+  public setActiveSessionId(id: string | null) {
+    this.activeSessionId = id;
+  }
+
+  public getActiveSessionId(): string | null {
+    return this.activeSessionId;
+  }
+
   public initializeClient() {
     const config = vscode.workspace.getConfiguration('hyna');
-    const supabaseUrl = config.get<string>('supabaseUrl') || 'https://bpawtpzyodgzqjeglsye.supabase.co';
+    const shared = getSharedCredentials();
+
+    const supabaseUrl =
+      config.get<string>('supabaseUrl') ||
+      shared?.supabaseUrl ||
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      '';
+
     const anonKey =
       config.get<string>('supabaseAnonKey') ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwYXd0cHp5b2RnenFqZWdsc3llIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDg4NjYsImV4cCI6MjEwNDMyNDg2Nn0.LOAf1FWvr-z-kpgRBLffxq7cgqKvCC3A5Pw-jU_FTz4';
+      shared?.supabaseAnonKey ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      '';
 
     if (supabaseUrl && anonKey) {
       this.supabase = createClient(supabaseUrl, anonKey, {
@@ -52,7 +145,39 @@ export class HynaClient {
     deviceName: string
   ): Promise<{ success: boolean; userId?: string; tool?: DeveloperTool; error?: string }> {
     if (!this.supabase) {
-      return { success: false, error: 'Supabase client not initialized' };
+      this.initializeClient();
+    }
+    if (!this.supabase) {
+      const config = vscode.workspace.getConfiguration('hyna');
+      let url = config.get<string>('supabaseUrl') || getSharedCredentials()?.supabaseUrl || process.env.VITE_SUPABASE_URL || '';
+      if (!url) {
+        url = (await vscode.window.showInputBox({
+          title: 'Hyna Studio: Supabase URL',
+          prompt: 'Enter your Hyna Supabase Project URL (e.g. https://xyz.supabase.co)',
+          ignoreFocusOut: true,
+        })) || '';
+        if (url) {
+          await config.update('supabaseUrl', url, vscode.ConfigurationTarget.Global);
+        }
+      }
+
+      let key = config.get<string>('supabaseAnonKey') || getSharedCredentials()?.supabaseAnonKey || process.env.VITE_SUPABASE_ANON_KEY || '';
+      if (!key) {
+        key = (await vscode.window.showInputBox({
+          title: 'Hyna Studio: Supabase Anon Key',
+          prompt: 'Enter your Hyna Supabase Anon Public Key',
+          password: true,
+          ignoreFocusOut: true,
+        })) || '';
+        if (key) {
+          await config.update('supabaseAnonKey', key, vscode.ConfigurationTarget.Global);
+        }
+      }
+
+      this.initializeClient();
+    }
+    if (!this.supabase) {
+      return { success: false, error: 'Supabase URL and Anon Key are required. Please configure them in Settings or supply environment variables.' };
     }
 
     const cleanCode = code.trim().toUpperCase();
@@ -61,8 +186,6 @@ export class HynaClient {
     try {
       // 1. Try secure RPC function first
       try {
-        const cleanCode = code.trim().toUpperCase();
-        const effectiveTool = tool.toLowerCase();
         let { data: rpcData, error: rpcErr } = await this.supabase.rpc('verify_developer_connection_code', {
           p_code: cleanCode,
           p_tool: effectiveTool,
@@ -83,13 +206,31 @@ export class HynaClient {
 
         if (!rpcErr && rpcData && rpcData.success) {
           const finalTool = (rpcData.tool as DeveloperTool) || effectiveTool;
-          await this.context.secrets.store('hyna_user_id', rpcData.user_id);
+          const finalUserId = rpcData.user_id;
+          const finalApiKey = rpcData.api_key;
+
+          await this.context.secrets.store('hyna_user_id', finalUserId);
           await this.context.secrets.store('hyna_tool', finalTool);
           await this.context.secrets.store('hyna_device_name', deviceName);
-          if (rpcData.api_key) {
-            await this.context.secrets.store('hyna_api_key', rpcData.api_key);
+          if (finalApiKey) {
+            await this.context.secrets.store('hyna_api_key', finalApiKey);
           }
-          return { success: true, userId: rpcData.user_id, tool: finalTool };
+
+          const config = vscode.workspace.getConfiguration('hyna');
+          const shared = getSharedCredentials();
+          const supabaseUrl = config.get<string>('supabaseUrl') || shared?.supabaseUrl || process.env.VITE_SUPABASE_URL || '';
+          const anonKey = config.get<string>('supabaseAnonKey') || shared?.supabaseAnonKey || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+          saveSharedCredentials({
+            userId: finalUserId,
+            tool: finalTool,
+            deviceName,
+            apiKey: finalApiKey,
+            supabaseUrl,
+            supabaseAnonKey: anonKey,
+          });
+
+          return { success: true, userId: finalUserId, tool: finalTool };
         }
       } catch {
         // Fallback to direct query below
@@ -115,6 +256,20 @@ export class HynaClient {
       await this.context.secrets.store('hyna_device_name', deviceName);
       await this.context.secrets.store('hyna_api_key', apiKey);
 
+      const config = vscode.workspace.getConfiguration('hyna');
+      const shared = getSharedCredentials();
+      const supabaseUrl = config.get<string>('supabaseUrl') || shared?.supabaseUrl || process.env.VITE_SUPABASE_URL || '';
+      const anonKey = config.get<string>('supabaseAnonKey') || shared?.supabaseAnonKey || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+      saveSharedCredentials({
+        userId: data.user_id,
+        tool: finalTool,
+        deviceName,
+        apiKey,
+        supabaseUrl,
+        supabaseAnonKey: anonKey,
+      });
+
       // Update integration state to connected
       await this.supabase
         .from('developer_integrations')
@@ -136,15 +291,51 @@ export class HynaClient {
   }
 
   public async getStoredUserId(): Promise<string | undefined> {
-    return this.context.secrets.get('hyna_user_id');
+    const fromSecret = await this.context.secrets.get('hyna_user_id');
+    if (fromSecret) return fromSecret;
+
+    const shared = getSharedCredentials();
+    if (shared?.userId) {
+      await this.context.secrets.store('hyna_user_id', shared.userId);
+      if (shared.tool) await this.context.secrets.store('hyna_tool', shared.tool);
+      if (shared.deviceName) await this.context.secrets.store('hyna_device_name', shared.deviceName);
+      if (shared.apiKey) await this.context.secrets.store('hyna_api_key', shared.apiKey);
+      return shared.userId;
+    }
+
+    const config = vscode.workspace.getConfiguration('hyna');
+    const fromConfig = config.get<string>('userId');
+    if (fromConfig) return fromConfig;
+
+    return undefined;
   }
 
   public async getStoredTool(): Promise<DeveloperTool | undefined> {
-    return (await this.context.secrets.get('hyna_tool')) as DeveloperTool | undefined;
+    const fromSecret = (await this.context.secrets.get('hyna_tool')) as DeveloperTool | undefined;
+    if (fromSecret) return fromSecret;
+
+    const shared = getSharedCredentials();
+    if (shared?.tool) return shared.tool;
+
+    return undefined;
   }
 
   public async getStoredDeviceName(): Promise<string | undefined> {
-    return this.context.secrets.get('hyna_device_name');
+    const fromSecret = await this.context.secrets.get('hyna_device_name');
+    if (fromSecret) return fromSecret;
+
+    const shared = getSharedCredentials();
+    if (shared?.deviceName) return shared.deviceName;
+
+    return (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Developer PC').trim();
+  }
+
+  public async getStoredApiKey(): Promise<string | undefined> {
+    const fromSecret = await this.context.secrets.get('hyna_api_key');
+    if (fromSecret) return fromSecret;
+
+    const shared = getSharedCredentials();
+    return shared?.apiKey;
   }
 
   /**
@@ -155,22 +346,26 @@ export class HynaClient {
     const userId = await this.getStoredUserId();
     const tool = await this.getStoredTool();
 
-    if (this.supabase && userId && tool) {
+    if (this.supabase && userId) {
       const nowIso = new Date().toISOString();
       try {
         // 1. Mark integration record as disconnected
-        await this.supabase
+        let query = this.supabase
           .from('developer_integrations')
           .update({
             status: 'disconnected',
             last_seen_at: nowIso,
             updated_at: nowIso,
           })
-          .eq('user_id', userId)
-          .eq('tool', tool);
+          .eq('user_id', userId);
+
+        if (tool) {
+          query = query.eq('tool', tool);
+        }
+        await query;
 
         // 2. Terminate any active or idle sessions in developer_sessions
-        await this.supabase
+        let sessQuery = this.supabase
           .from('developer_sessions')
           .update({
             status: 'ended',
@@ -178,10 +373,15 @@ export class HynaClient {
             last_activity_at: nowIso,
           })
           .eq('user_id', userId)
-          .eq('tool', tool)
           .in('status', ['active', 'idle']);
 
+        if (tool) {
+          sessQuery = sessQuery.eq('tool', tool);
+        }
+        await sessQuery;
+
         this.activeSessionId = null;
+        await this.context.globalState.update('hyna_active_session_id', undefined);
       } catch (e) {
         console.warn('[Hyna] setDisconnectedStatus warning:', e);
       }
@@ -189,7 +389,7 @@ export class HynaClient {
   }
 
   /**
-   * Complete disconnect - marks status disconnected and purges local secrets.
+   * Complete disconnect - marks status disconnected and purges local secrets and shared config.
    */
   public async disconnect(): Promise<void> {
     await this.setDisconnectedStatus();
@@ -197,13 +397,19 @@ export class HynaClient {
     await this.context.secrets.delete('hyna_tool');
     await this.context.secrets.delete('hyna_device_name');
     await this.context.secrets.delete('hyna_api_key');
+    await this.context.globalState.update('hyna_active_session_id', undefined);
+    clearSharedCredentials();
     this.activeSessionId = null;
   }
 
   /**
    * Sends activity event to Hyna backend. Queues locally if offline.
+   * Immediately updates presence in developer_sessions and developer_integrations.
    */
   public async sendActivityEvent(event: DeveloperActivityEvent): Promise<boolean> {
+    if (!this.supabase) {
+      this.initializeClient();
+    }
     if (!this.supabase) {
       this.enqueueOfflineEvent(event);
       return false;
@@ -211,16 +417,13 @@ export class HynaClient {
 
     try {
       const nowIso = new Date().toISOString();
+      const isEnded = event.eventType === 'session_ended';
 
       // 1. Maintain or update developer_sessions row
       if (event.eventType === 'session_started' || !this.activeSessionId) {
         this.activeSessionId = crypto.randomUUID();
-        const initialStatus =
-          event.eventType === 'session_ended'
-            ? 'ended'
-            : event.eventType === 'idle'
-            ? 'idle'
-            : 'active';
+        await this.context.globalState.update('hyna_active_session_id', this.activeSessionId);
+        const initialStatus = isEnded ? 'ended' : event.eventType === 'idle' ? 'idle' : 'active';
 
         const { error: sessErr } = await this.supabase
           .from('developer_sessions')
@@ -235,22 +438,17 @@ export class HynaClient {
             git_branch: event.gitBranch || '',
             started_at: nowIso,
             last_activity_at: nowIso,
-            ended_at: event.eventType === 'session_ended' ? nowIso : null,
+            ended_at: isEnded ? nowIso : null,
             status: initialStatus,
           });
 
         if (sessErr) {
-          console.warn('[Hyna] Developer session insert error:', sessErr);
+          console.warn('[Hyna] Developer session insert warning:', sessErr?.message || sessErr);
         }
       } else {
-        const status =
-          event.eventType === 'session_ended'
-            ? 'ended'
-            : event.eventType === 'idle'
-            ? 'idle'
-            : 'active';
+        const sessionStatus = isEnded ? 'ended' : event.eventType === 'idle' ? 'idle' : 'active';
 
-        await this.supabase
+        const { error: updateErr } = await this.supabase
           .from('developer_sessions')
           .update({
             project_id: event.projectId || null,
@@ -259,10 +457,14 @@ export class HynaClient {
             current_file: event.filePath || event.fileName || '',
             git_branch: event.gitBranch || '',
             last_activity_at: nowIso,
-            status,
-            ended_at: event.eventType === 'session_ended' ? nowIso : null,
+            status: sessionStatus,
+            ended_at: isEnded ? nowIso : null,
           })
           .eq('id', this.activeSessionId);
+
+        if (updateErr) {
+          console.warn('[Hyna] Developer session update warning:', updateErr?.message || updateErr);
+        }
       }
 
       // 2. Insert developer_activity_events
@@ -282,8 +484,8 @@ export class HynaClient {
       });
 
       // 3. Touch integration last_seen_at & status
-      const isEnded = event.eventType === 'session_ended';
-      await this.supabase
+      // First update matching user_id AND tool
+      const { data: updatedRows } = await this.supabase
         .from('developer_integrations')
         .update({
           last_seen_at: nowIso,
@@ -291,19 +493,103 @@ export class HynaClient {
           updated_at: nowIso,
         })
         .eq('user_id', event.userId)
-        .eq('tool', event.tool);
+        .eq('tool', event.tool)
+        .select('id');
+
+      // If no integration matched this specific tool (e.g. registered as antigravity but detected as vscode),
+      // update user's integration row so the Dashboard immediately recognizes the active presence!
+      if (!updatedRows || updatedRows.length === 0) {
+        await this.supabase
+          .from('developer_integrations')
+          .update({
+            last_seen_at: nowIso,
+            status: isEnded ? 'disconnected' : 'connected',
+            tool: event.tool,
+            updated_at: nowIso,
+          })
+          .eq('user_id', event.userId);
+      }
+
+      if (isEnded) {
+        this.activeSessionId = null;
+        await this.context.globalState.update('hyna_active_session_id', undefined);
+      }
+
+      // Reconnection check: if we were previously offline and now succeeded:
+      if (this.isNetworkOffline) {
+        this.isNetworkOffline = false;
+        if (this.connectivityTimer) {
+          clearInterval(this.connectivityTimer);
+          this.connectivityTimer = null;
+        }
+        if (this.onNetworkRestored) {
+          this.onNetworkRestored();
+        }
+      }
 
       // Drain any queued offline events
-      this.flushOfflineEvents();
+      await this.flushOfflineEvents();
       return true;
-    } catch (err) {
-      console.warn('[Hyna] Offline or network error, queuing event locally:', err);
+    } catch (err: any) {
+      console.warn('[Hyna] Offline or network error, queuing event locally:', err?.message || err);
+      this.isNetworkOffline = true;
+      this.startConnectivityCheck();
       this.enqueueOfflineEvent(event);
       return false;
     }
   }
 
+  private startConnectivityCheck() {
+    if (this.connectivityTimer) return;
+    this.connectivityTimer = setInterval(async () => {
+      if (!this.isNetworkOffline) {
+        if (this.connectivityTimer) {
+          clearInterval(this.connectivityTimer);
+          this.connectivityTimer = null;
+        }
+        return;
+      }
+      try {
+        const config = vscode.workspace.getConfiguration('hyna');
+        const shared = getSharedCredentials();
+        const supabaseUrl =
+          config.get<string>('supabaseUrl') ||
+          shared?.supabaseUrl ||
+          process.env.VITE_SUPABASE_URL ||
+          process.env.SUPABASE_URL ||
+          '';
+        const anonKey =
+          config.get<string>('supabaseAnonKey') ||
+          shared?.supabaseAnonKey ||
+          process.env.VITE_SUPABASE_ANON_KEY ||
+          process.env.SUPABASE_ANON_KEY ||
+          '';
+
+        if (!supabaseUrl || !anonKey) return;
+
+        const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+          method: 'HEAD',
+          headers: { apikey: anonKey },
+        });
+
+        if (res.ok || res.status < 500) {
+          this.isNetworkOffline = false;
+          if (this.connectivityTimer) {
+            clearInterval(this.connectivityTimer);
+            this.connectivityTimer = null;
+          }
+          if (this.onNetworkRestored) {
+            this.onNetworkRestored();
+          }
+        }
+      } catch {
+        // Still offline
+      }
+    }, 10000);
+  }
+
   public async fetchProjects(): Promise<{ id: string; name: string }[]> {
+    if (!this.supabase) this.initializeClient();
     if (!this.supabase) return [];
     try {
       const { data } = await this.supabase
@@ -317,6 +603,7 @@ export class HynaClient {
   }
 
   public async fetchTasks(projectId: string): Promise<{ id: string; title: string }[]> {
+    if (!this.supabase) this.initializeClient();
     if (!this.supabase) return [];
     try {
       const { data } = await this.supabase
@@ -361,7 +648,7 @@ export class HynaClient {
       }));
 
       await this.supabase.from('developer_activity_events').insert(rows);
-    } catch (err) {
+    } catch {
       // Re-queue on failure
       this.queuedEvents = [...batch, ...this.queuedEvents];
       this.saveQueuedEvents();
