@@ -80,6 +80,17 @@ export function MeetingRoom() {
 
   const isAudioOnly = meeting?.meetingType === 'audio';
 
+  // Pre-join camera and mic toggle state
+  const [prejoinVideoEnabled, setPrejoinVideoEnabled] = useState<boolean>(!isAudioOnly);
+  const [prejoinAudioEnabled, setPrejoinAudioEnabled] = useState<boolean>(true);
+
+  // Sync state if meeting type changes
+  useEffect(() => {
+    if (isAudioOnly) {
+      setPrejoinVideoEnabled(false);
+    }
+  }, [isAudioOnly]);
+
   // 2. Hardware Media Devices Hook
   const {
     cameras,
@@ -100,9 +111,9 @@ export function MeetingRoom() {
   // Pre-acquire camera/mic preview for PreJoinScreen
   useEffect(() => {
     if (meetingStage === 'prejoin' && !permissionError) {
-      requestMedia(!isAudioOnly, true).catch(() => {});
+      requestMedia(!isAudioOnly && prejoinVideoEnabled, prejoinAudioEnabled).catch(() => {});
     }
-  }, [meetingStage, isAudioOnly, permissionError, requestMedia]);
+  }, [meetingStage, isAudioOnly, permissionError, requestMedia, prejoinVideoEnabled, prejoinAudioEnabled]);
 
   const isHost = useMemo(() => {
     if (!meeting || !currentUser) return false;
@@ -134,8 +145,8 @@ export function MeetingRoom() {
     meeting,
     currentUser,
     isHost,
-    initialMicEnabled: true,
-    initialVideoEnabled: !isAudioOnly,
+    initialMicEnabled: prejoinAudioEnabled,
+    initialVideoEnabled: !isAudioOnly && prejoinVideoEnabled,
     selectedCameraId,
     selectedMicrophoneId,
     onMeetingEndedByHost: () => {
@@ -172,7 +183,7 @@ export function MeetingRoom() {
   const handleJoin = async () => {
     try {
       setMeetingStage('in-meeting');
-      await startMeetingSession();
+      await startMeetingSession(prejoinVideoEnabled, prejoinAudioEnabled);
       toast.success('Joined meeting session');
     } catch (err) {
       console.error('[MeetingRoom] handleJoin error:', err);
@@ -273,20 +284,32 @@ export function MeetingRoom() {
         localStream={localStream}
         permissionError={permissionError}
         isAudioOnly={isAudioOnly}
+        videoEnabled={prejoinVideoEnabled}
+        audioEnabled={prejoinAudioEnabled}
         onSelectCamera={switchCamera}
         onSelectMicrophone={switchMicrophone}
         onSelectSpeaker={switchSpeaker}
         onToggleVideo={() => {
-          if (localStream) {
-            const track = localStream.getVideoTracks()[0];
-            if (track) track.enabled = !track.enabled;
-          }
+          setPrejoinVideoEnabled(prev => {
+            const next = !prev;
+            if (localStream) {
+              localStream.getVideoTracks().forEach(t => {
+                t.enabled = next;
+              });
+            }
+            return next;
+          });
         }}
         onToggleAudio={() => {
-          if (localStream) {
-            const track = localStream.getAudioTracks()[0];
-            if (track) track.enabled = !track.enabled;
-          }
+          setPrejoinAudioEnabled(prev => {
+            const next = !prev;
+            if (localStream) {
+              localStream.getAudioTracks().forEach(t => {
+                t.enabled = next;
+              });
+            }
+            return next;
+          });
         }}
         onJoinMeeting={handleJoin}
         onCancel={() => {

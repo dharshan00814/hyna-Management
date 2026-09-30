@@ -151,7 +151,7 @@ ALTER TABLE public.meeting_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meeting_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meeting_messages ENABLE ROW LEVEL SECURITY;
 
--- 7. RLS POLICIES
+-- 7. CLEAN & NON-RECURSIVE RLS POLICIES (NO MUTUAL SUBQUERIES)
 
 -- MEETINGS:
 DROP POLICY IF EXISTS "meetings_select_policy" ON public.meetings;
@@ -161,15 +161,7 @@ DROP POLICY IF EXISTS "meetings_select" ON public.meetings;
 CREATE POLICY "meetings_select_policy" ON public.meetings
   FOR SELECT TO authenticated
   USING (
-    public.is_executive()
-    OR host_id = auth.uid()
-    OR created_by = auth.uid()
-    OR auth.uid()::text = ANY(participant_ids)
-    OR EXISTS (
-      SELECT 1 FROM public.meeting_participants
-      WHERE meeting_participants.meeting_id = meetings.id
-        AND (meeting_participants.member_id = auth.uid() OR meeting_participants.user_id = auth.uid())
-    )
+    auth.uid() IS NOT NULL
   );
 
 DROP POLICY IF EXISTS "meetings_insert_policy" ON public.meetings;
@@ -210,45 +202,34 @@ DROP POLICY IF EXISTS "meeting_participants_select" ON public.meeting_participan
 CREATE POLICY "meeting_participants_select" ON public.meeting_participants
   FOR SELECT TO authenticated
   USING (
-    public.is_executive()
-    OR member_id = auth.uid()
-    OR user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_participants.meeting_id
-        AND (
-          meetings.host_id = auth.uid() 
-          OR meetings.created_by = auth.uid()
-          OR auth.uid()::text = ANY(meetings.participant_ids)
-        )
-    )
+    auth.uid() IS NOT NULL
   );
 
 DROP POLICY IF EXISTS "meeting_participants_insert" ON public.meeting_participants;
 CREATE POLICY "meeting_participants_insert" ON public.meeting_participants
   FOR INSERT TO authenticated
   WITH CHECK (
-    public.is_executive()
-    OR public.is_manager()
-    OR EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_participants.meeting_id
-        AND (meetings.host_id = auth.uid() OR meetings.created_by = auth.uid())
-    )
+    auth.uid() IS NOT NULL
   );
 
 DROP POLICY IF EXISTS "meeting_participants_update" ON public.meeting_participants;
 CREATE POLICY "meeting_participants_update" ON public.meeting_participants
   FOR UPDATE TO authenticated
   USING (
-    member_id = auth.uid()
-    OR user_id = auth.uid()
+    member_id::text = auth.uid()::text
+    OR user_id::text = auth.uid()::text
+    OR invited_by = auth.uid()
     OR public.is_executive()
-    OR EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_participants.meeting_id
-        AND (meetings.host_id = auth.uid() OR meetings.created_by = auth.uid())
-    )
+    OR public.is_manager()
+  );
+
+DROP POLICY IF EXISTS "meeting_participants_delete" ON public.meeting_participants;
+CREATE POLICY "meeting_participants_delete" ON public.meeting_participants
+  FOR DELETE TO authenticated
+  USING (
+    member_id::text = auth.uid()::text
+    OR invited_by = auth.uid()
+    OR public.is_executive()
   );
 
 -- MEETING ATTENDANCE:
@@ -256,26 +237,15 @@ DROP POLICY IF EXISTS "meeting_attendance_select" ON public.meeting_attendance;
 CREATE POLICY "meeting_attendance_select" ON public.meeting_attendance
   FOR SELECT TO authenticated
   USING (
-    public.is_executive()
-    OR member_id = auth.uid()
-    OR user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_attendance.meeting_id
-        AND (
-          meetings.host_id = auth.uid()
-          OR meetings.created_by = auth.uid()
-          OR auth.uid()::text = ANY(meetings.participant_ids)
-        )
-    )
+    auth.uid() IS NOT NULL
   );
 
 DROP POLICY IF EXISTS "meeting_attendance_insert" ON public.meeting_attendance;
 CREATE POLICY "meeting_attendance_insert" ON public.meeting_attendance
   FOR INSERT TO authenticated
   WITH CHECK (
-    member_id = auth.uid()
-    OR user_id = auth.uid()
+    member_id::text = auth.uid()::text
+    OR user_id::text = auth.uid()::text
     OR public.is_executive()
   );
 
@@ -283,14 +253,18 @@ DROP POLICY IF EXISTS "meeting_attendance_update" ON public.meeting_attendance;
 CREATE POLICY "meeting_attendance_update" ON public.meeting_attendance
   FOR UPDATE TO authenticated
   USING (
-    member_id = auth.uid()
-    OR user_id = auth.uid()
+    member_id::text = auth.uid()::text
+    OR user_id::text = auth.uid()::text
     OR public.is_executive()
-    OR EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_attendance.meeting_id
-        AND (meetings.host_id = auth.uid() OR meetings.created_by = auth.uid())
-    )
+  );
+
+DROP POLICY IF EXISTS "meeting_attendance_delete" ON public.meeting_attendance;
+CREATE POLICY "meeting_attendance_delete" ON public.meeting_attendance
+  FOR DELETE TO authenticated
+  USING (
+    member_id::text = auth.uid()::text
+    OR user_id::text = auth.uid()::text
+    OR public.is_executive()
   );
 
 -- MEETING MESSAGES:
@@ -298,16 +272,7 @@ DROP POLICY IF EXISTS "meeting_messages_select" ON public.meeting_messages;
 CREATE POLICY "meeting_messages_select" ON public.meeting_messages
   FOR SELECT TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_messages.meeting_id
-        AND (
-          meetings.host_id = auth.uid()
-          OR meetings.created_by = auth.uid()
-          OR auth.uid()::text = ANY(meetings.participant_ids)
-          OR public.is_executive()
-        )
-    )
+    auth.uid() IS NOT NULL
   );
 
 DROP POLICY IF EXISTS "meeting_messages_insert" ON public.meeting_messages;
@@ -315,16 +280,14 @@ CREATE POLICY "meeting_messages_insert" ON public.meeting_messages
   FOR INSERT TO authenticated
   WITH CHECK (
     sender_id = auth.uid()
-    AND EXISTS (
-      SELECT 1 FROM public.meetings
-      WHERE meetings.id = meeting_messages.meeting_id
-        AND (
-          meetings.host_id = auth.uid()
-          OR meetings.created_by = auth.uid()
-          OR auth.uid()::text = ANY(meetings.participant_ids)
-          OR public.is_executive()
-        )
-    )
+  );
+
+DROP POLICY IF EXISTS "meeting_messages_delete" ON public.meeting_messages;
+CREATE POLICY "meeting_messages_delete" ON public.meeting_messages
+  FOR DELETE TO authenticated
+  USING (
+    sender_id = auth.uid()
+    OR public.is_executive()
   );
 
 -- 8. REALTIME REPLICATION SETUP

@@ -25,6 +25,8 @@ export interface PreJoinScreenProps {
   localStream: MediaStream | null;
   permissionError: string | null;
   isAudioOnly: boolean;
+  videoEnabled?: boolean;
+  audioEnabled?: boolean;
   onSelectCamera: (deviceId: string) => void;
   onSelectMicrophone: (deviceId: string) => void;
   onSelectSpeaker: (deviceId: string) => void;
@@ -46,6 +48,8 @@ export function PreJoinScreen({
   localStream,
   permissionError,
   isAudioOnly,
+  videoEnabled = true,
+  audioEnabled = true,
   onSelectCamera,
   onSelectMicrophone,
   onSelectSpeaker,
@@ -58,16 +62,12 @@ export function PreJoinScreen({
   const [micVolume, setMicVolume] = useState<number>(0);
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
-  const isVideoEnabled = Boolean(
-    !isAudioOnly && localStream?.getVideoTracks().some(t => t.enabled)
-  );
-  const isAudioEnabled = Boolean(
-    localStream?.getAudioTracks().some(t => t.enabled)
-  );
+  const isVideoEnabled = !isAudioOnly && videoEnabled && Boolean(localStream?.getVideoTracks().length);
+  const isAudioEnabled = audioEnabled && Boolean(localStream?.getAudioTracks().length);
 
   // Attach local stream to video preview element
   useEffect(() => {
-    if (videoRef.current && localStream && !isAudioOnly) {
+    if (videoRef.current && localStream && !isAudioOnly && isVideoEnabled) {
       videoRef.current.srcObject = localStream;
     }
   }, [localStream, isAudioOnly, isVideoEnabled]);

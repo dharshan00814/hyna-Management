@@ -106,10 +106,20 @@ export function useWebRTCMeeting({
   }, []);
 
   // 2. Initialize Media Stream and WebRTC Manager
-  const startMeetingSession = useCallback(async () => {
+  const startMeetingSession = useCallback(async (initialVideo?: boolean, initialAudio?: boolean) => {
     if (!meeting) return;
 
     const isAudioOnly = meeting.meetingType === 'audio';
+
+    const activeVideo = typeof initialVideo === 'boolean'
+      ? (!isAudioOnly && initialVideo)
+      : (!isAudioOnly && videoEnabled);
+    const activeAudio = typeof initialAudio === 'boolean'
+      ? initialAudio
+      : micEnabled;
+
+    setVideoEnabled(activeVideo);
+    setMicEnabled(activeAudio);
 
     try {
       const constraints: MediaStreamConstraints = {
@@ -134,10 +144,10 @@ export function useWebRTCMeeting({
 
       // Apply initial track enabled state
       stream.getAudioTracks().forEach(t => {
-        t.enabled = micEnabled;
+        t.enabled = activeAudio;
       });
       stream.getVideoTracks().forEach(t => {
-        t.enabled = !isAudioOnly && videoEnabled;
+        t.enabled = activeVideo;
       });
 
       setupSpeechDetection(stream);
@@ -208,6 +218,28 @@ export function useWebRTCMeeting({
           onPresenceJoin: (key, newPresences) => {
             // New participant joined
             if (key !== localUserId) {
+              const latest = newPresences?.[0];
+              if (latest) {
+                setParticipants(prev => {
+                  const next = new Map(prev);
+                  next.set(key, {
+                    memberId: key,
+                    name: latest.name || 'Team Member',
+                    avatar: latest.avatar || '',
+                    role: latest.role || 'member',
+                    designation: latest.designation || 'Software Engineer',
+                    micEnabled: latest.micEnabled ?? true,
+                    videoEnabled: latest.videoEnabled ?? true,
+                    isScreenSharing: latest.isScreenSharing ?? false,
+                    isSpeaking: false,
+                    isHost: latest.isHost ?? false,
+                    joinedAt: latest.joinedAt || new Date().toISOString(),
+                    connectionState: 'connecting',
+                  });
+                  return next;
+                });
+              }
+
               // Initiate WebRTC offer to the newly joined peer
               webrtcManagerRef.current?.createOffer(key).then(offer => {
                 signalingServiceRef.current?.sendSignal({
@@ -252,8 +284,8 @@ export function useWebRTCMeeting({
         avatar: localUserAvatar,
         role: localUserRole,
         designation: currentUser?.designation,
-        micEnabled,
-        videoEnabled: !isAudioOnly && videoEnabled,
+        micEnabled: activeAudio,
+        videoEnabled: activeVideo,
         isScreenSharing: false,
         isHost,
         joinedAt: new Date().toISOString(),
@@ -353,6 +385,21 @@ export function useWebRTCMeeting({
           const p = next.get(senderId);
           if (p) {
             next.set(senderId, { ...p, micEnabled: Boolean(msg.micEnabled) });
+          } else {
+            next.set(senderId, {
+              memberId: senderId,
+              name: msg.senderName || 'Team Member',
+              avatar: '',
+              role: 'member',
+              designation: '',
+              micEnabled: Boolean(msg.micEnabled),
+              videoEnabled: true,
+              isScreenSharing: false,
+              isSpeaking: false,
+              isHost: false,
+              joinedAt: new Date().toISOString(),
+              connectionState: 'connected',
+            });
           }
           return next;
         });
@@ -365,6 +412,21 @@ export function useWebRTCMeeting({
           const p = next.get(senderId);
           if (p) {
             next.set(senderId, { ...p, videoEnabled: Boolean(msg.videoEnabled) });
+          } else {
+            next.set(senderId, {
+              memberId: senderId,
+              name: msg.senderName || 'Team Member',
+              avatar: '',
+              role: 'member',
+              designation: '',
+              micEnabled: true,
+              videoEnabled: Boolean(msg.videoEnabled),
+              isScreenSharing: false,
+              isSpeaking: false,
+              isHost: false,
+              joinedAt: new Date().toISOString(),
+              connectionState: 'connected',
+            });
           }
           return next;
         });

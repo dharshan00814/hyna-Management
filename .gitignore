@@ -33,3 +33,5 @@ Thumbs.db
 *.sw?
 .kilo/
 
+# Vercel configuration
+vercel.json

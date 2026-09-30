@@ -85,6 +85,12 @@ export function ParticipantTile({
           <span className="text-[11px] text-white/40 truncate max-w-[80%]">
             {participant.designation || participant.role}
           </span>
+          {!participant.videoEnabled && (
+            <span className="mt-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-white/5 border border-white/10 text-white/50 flex items-center gap-1.5 shadow-sm">
+              <VideoOff className="w-3 h-3 text-red-400" />
+              Camera is off
+            </span>
+          )}
         </div>
       )}
 
@@ -157,7 +163,7 @@ export function ParticipantTile({
 
           {/* Video State Icon */}
           {!participant.videoEnabled && (
-            <div className="p-1 rounded-full bg-black/50 text-white/60" title="Camera Off">
+            <div className="p-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30" title="Camera Off">
               <VideoOff className="w-3 h-3" />
             </div>
           )}
