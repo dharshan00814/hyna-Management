@@ -369,6 +369,42 @@ export async function updateMember(id: string, updates: Partial<User>): Promise<
   return updateUserProfile(id, updates);
 }
 
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const fileExt = file.name.split('.').pop() || 'png';
+  const fileName = `${userId}_${Date.now()}.${fileExt}`;
+  const filePath = `avatars/${fileName}`;
+
+  if (!isSupabaseConfigured()) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from('files')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.warn('Storage avatar upload fallback to base64:', uploadError);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  return urlData?.publicUrl || '';
+}
+
 export async function deleteMember(id: string): Promise<void> {
   try {
     await supabase.from('developer_sessions').delete().eq('user_id', id);

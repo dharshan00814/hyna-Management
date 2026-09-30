@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   User,
   Sun,
@@ -14,13 +14,31 @@ import {
   Smartphone,
   Globe,
   Palette,
+  Camera,
+  Upload,
+  Trash2,
+  Image,
+  Sparkles,
+  Loader2,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Avatar } from '@/components/ui';
 import { useAuthStore, useThemeStore } from '@/stores';
-import { updateUserProfile } from '@/services/api';
+import { updateUserProfile, uploadAvatar } from '@/services/api';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+
+const PRESET_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&auto=format&fit=crop&q=80',
+];
 
 export function SettingsPage() {
   const { currentUser, currentRole, setUser } = useAuthStore();
@@ -35,6 +53,11 @@ export function SettingsPage() {
   const [designation, setDesignation] = useState(currentUser?.designation || '');
   const [department, setDepartment] = useState(currentUser?.department || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
+  const [avatar, setAvatar] = useState(currentUser?.avatar || '');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Notifications state
   const [emailAlerts, setEmailAlerts] = useState(true);
@@ -48,6 +71,99 @@ export function SettingsPage() {
   const [confirmPassword, setNewConfirmPassword] = useState('');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
+  useEffect(() => {
+    if (currentUser) {
+      setName(currentUser.name || '');
+      setEmail(currentUser.email || '');
+      setPhone(currentUser.phone || '');
+      setDesignation(currentUser.designation || '');
+      setDepartment(currentUser.department || '');
+      setBio(currentUser.bio || '');
+      setAvatar(currentUser.avatar || '');
+    }
+  }, [currentUser]);
+
+  const handleAvatarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser?.id) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file (PNG, JPG, WebP, etc.).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image file must be under 5MB.');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    const toastId = toast.loading('Uploading profile picture...');
+
+    try {
+      const publicUrl = await uploadAvatar(currentUser.id, file);
+      setAvatar(publicUrl);
+      const updated = await updateUserProfile(currentUser.id, { avatar: publicUrl });
+      setUser(updated);
+      toast.success('Profile picture updated successfully!', { id: toastId });
+    } catch (err: any) {
+      console.error('Avatar upload error:', err);
+      toast.error(err?.message || 'Failed to upload profile picture', { id: toastId });
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!currentUser?.id) return;
+    setIsUploadingAvatar(true);
+    try {
+      setAvatar('');
+      const updated = await updateUserProfile(currentUser.id, { avatar: '' });
+      setUser(updated);
+      toast.success('Profile picture removed. Reverted to initials.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to remove avatar');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleSelectPresetAvatar = async (presetUrl: string) => {
+    if (!currentUser?.id) return;
+    setIsUploadingAvatar(true);
+    try {
+      setAvatar(presetUrl);
+      const updated = await updateUserProfile(currentUser.id, { avatar: presetUrl });
+      setUser(updated);
+      toast.success('Profile picture updated!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to apply preset');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleApplyCustomUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customAvatarUrl.trim() || !currentUser?.id) return;
+    setIsUploadingAvatar(true);
+    try {
+      const url = customAvatarUrl.trim();
+      setAvatar(url);
+      const updated = await updateUserProfile(currentUser.id, { avatar: url });
+      setUser(updated);
+      setShowUrlInput(false);
+      setCustomAvatarUrl('');
+      toast.success('Custom avatar URL applied!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update avatar URL');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser?.id) return;
@@ -57,9 +173,12 @@ export function SettingsPage() {
         name,
         phone,
         bio,
+        designation,
+        department,
+        avatar,
       });
       setUser(updated);
-      toast.success('Profile updated in Supabase database!');
+      toast.success('Profile updated successfully!');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update profile');
     }
@@ -130,13 +249,152 @@ export function SettingsPage() {
       {activeTab === 'profile' && (
         <div className="space-y-6">
           <div className="card p-6 border border-[var(--color-border)] bg-[var(--color-card)] rounded-xl space-y-6">
-            <div className="flex items-center gap-4">
-              <Avatar name={currentUser?.name || 'User'} size="lg" />
-              <div>
-                <h3 className="font-semibold text-lg">{currentUser?.name}</h3>
-                <p className="text-xs text-[var(--color-muted-foreground)] capitalize">
-                  {currentUser?.designation} • {currentRole}
-                </p>
+            {/* Avatar & Photo Customization Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-5">
+                <div className="relative group">
+                  <Avatar name={currentUser?.name || 'User'} src={avatar} size="xl" className="ring-4 ring-[var(--color-primary)]/20 shadow-md" />
+                  
+                  {/* Quick Change Badge Button */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="absolute -bottom-1 -right-1 p-2 rounded-full bg-[var(--color-primary)] text-white shadow-lg hover:scale-110 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                    title="Upload new profile picture"
+                  >
+                    {isUploadingAvatar ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleAvatarFileSelect}
+                    accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                    className="hidden"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-lg text-[var(--color-foreground)]">{currentUser?.name}</h3>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+                      {currentRole}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">
+                    {currentUser?.designation || 'Team Member'} • {currentUser?.department || 'Hyna Studio'}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-muted-foreground)]/80 mt-1">
+                    PNG, JPG, WebP up to 5MB. Real-time synchronized across all pages.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons for Avatar */}
+              <div className="flex items-center gap-2 flex-wrap sm:self-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  className="cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5 mr-1.5" />
+                  Upload Photo
+                </Button>
+                
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className="cursor-pointer text-xs"
+                >
+                  <LinkIcon className="w-3.5 h-3.5 mr-1" />
+                  Image URL
+                </Button>
+
+                {avatar && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveAvatar}
+                    disabled={isUploadingAvatar}
+                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer text-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Custom URL Input Accordion */}
+            {showUrlInput && (
+              <form onSubmit={handleApplyCustomUrl} className="p-3 rounded-xl bg-[var(--color-muted)]/50 border border-[var(--color-border)] flex items-center gap-2 animate-slide-up">
+                <input
+                  type="url"
+                  placeholder="https://example.com/my-photo.jpg"
+                  value={customAvatarUrl}
+                  onChange={(e) => setCustomAvatarUrl(e.target.value)}
+                  className="flex-1 h-8 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                  required
+                />
+                <Button type="submit" size="sm" disabled={isUploadingAvatar || !customAvatarUrl.trim()} className="h-8 text-xs">
+                  Apply URL
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowUrlInput(false)} className="h-8 text-xs">
+                  Cancel
+                </Button>
+              </form>
+            )}
+
+            {/* Preset Avatars Selection Bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--color-foreground)] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  Or choose a preset avatar
+                </span>
+                <span className="text-[11px] text-[var(--color-muted-foreground)]">Click to apply instantly</span>
+              </div>
+              <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+                {PRESET_AVATARS.map((preset, index) => {
+                  const isSelected = avatar === preset;
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleSelectPresetAvatar(preset)}
+                      disabled={isUploadingAvatar}
+                      className={cn(
+                        'relative rounded-full p-0.5 transition-all shrink-0 cursor-pointer hover:scale-110 active:scale-95',
+                        isSelected
+                          ? 'ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-card)]'
+                          : 'hover:ring-2 hover:ring-[var(--color-border)]'
+                      )}
+                      title={`Select Preset Avatar ${index + 1}`}
+                    >
+                      <img
+                        src={preset}
+                        alt={`Preset ${index + 1}`}
+                        className="w-10 h-10 rounded-full object-cover shadow-xs"
+                      />
+                      {isSelected && (
+                        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-[8px] font-bold">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

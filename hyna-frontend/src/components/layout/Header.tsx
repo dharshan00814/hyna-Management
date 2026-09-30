@@ -6,6 +6,7 @@ import { useAuthStore, useSidebarStore, useThemeStore } from '@/stores';
 import { usePWA } from '@/hooks/usePWA';
 import { InstallAppModal } from '@/components/common/InstallAppModal';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getTodayAttendance } from '@/services/api';
+import { Avatar } from '@/components/ui';
 import type { UserRole, Notification, AttendanceRecord } from '@/types';
 
 export function Header() {
@@ -292,28 +293,26 @@ export function Header() {
       <div ref={profileRef} className="relative ml-2">
         <button
           onClick={() => { setShowProfile(!showProfile); setShowNotifications(false); }}
-          className="flex items-center gap-2 p-1 rounded-lg hover:bg-[var(--color-muted)] transition-colors"
+          className="flex items-center gap-2 p-1 rounded-lg hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
         >
           {currentUser && (
-            <div className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium',
-              getAvatarColor(currentUser.name),
-            )}>
-              {getInitials(currentUser.name)}
-            </div>
+            <Avatar name={currentUser.name} src={currentUser.avatar} size="sm" />
           )}
           <ChevronDown className="w-3.5 h-3.5 text-[var(--color-muted-foreground)] hidden sm:block" />
         </button>
 
         {showProfile && (
-          <div className="absolute right-0 top-full mt-2 w-56 card rounded-xl shadow-lg animate-scale-in overflow-hidden">
+          <div className="absolute right-0 top-full mt-2 w-64 card rounded-xl shadow-lg animate-scale-in overflow-hidden">
             {currentUser && (
-              <div className="px-4 py-3 border-b border-[var(--color-border)]">
-                <p className="text-sm font-semibold truncate">{currentUser.name}</p>
-                <p className="text-xs text-[var(--color-muted-foreground)] truncate">{currentUser.email}</p>
-                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
-                  {currentUser.designation || currentRole}
-                </span>
+              <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-3">
+                <Avatar name={currentUser.name} src={currentUser.avatar} size="md" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{currentUser.name}</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] truncate">{currentUser.email}</p>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+                    {currentUser.designation || currentRole}
+                  </span>
+                </div>
               </div>
             )}
             <div className="py-1">
