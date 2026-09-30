@@ -4,10 +4,11 @@ import { io, Socket } from 'socket.io-client';
 import { 
   Video, VideoOff, Mic, MicOff, PhoneOff, 
   MonitorUp, MessageSquare, Users,
-  UserPlus, Loader2, Send
+  UserPlus, Loader2, Send, CheckCircle2, XCircle
 } from 'lucide-react';
 import { Button, Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores';
+import { getMeeting } from '@/services/api';
 import { toast } from 'sonner';
 
 // Type definitions
@@ -42,7 +43,6 @@ const ICE_SERVERS = {
   ]
 };
 
-// Replace with your actual signaling server URL (can be from env)
 const SIGNALING_SERVER_URL = import.meta.env.VITE_WEBRTC_URL || 'http://localhost:5000';
 
 export function MeetingRoom() {
@@ -54,11 +54,13 @@ export function MeetingRoom() {
   // App States
   const [hasJoined, setHasJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [canSpeak, setCanSpeak] = useState(false); // Host control
   
   // Media States
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
-  const [micEnabled, setMicEnabled] = useState(true);
+  const [micEnabled, setMicEnabled] = useState(false); // Default false for everyone, will enable if host
   const [videoEnabled, setVideoEnabled] = useState(true);
   
   // UI States
@@ -74,6 +76,38 @@ export function MeetingRoom() {
   const socketRef = useRef<Socket | null>(null);
   const peersRef = useRef<Map<string, PeerConnectionObj>>(new Map());
   const localVideoRef = useRef<HTMLVideoElement>(null);
+
+  // --- Fetch Meeting details to identify host ---
+  useEffect(() => {
+    async function loadMeetingDetails() {
+      if (!id) return;
+      // Strip 'HYNA-MTG-' for DB lookup if necessary, or pass the full string if stored as meeting_link
+      const meetingId = id.startsWith('HYNA-MTG-') ? id : id; 
+      // We will assume the API can fetch by ID or we just rely on effectiveRole for simplicity if API fails
+      try {
+        const meeting = await getMeeting(meetingId);
+        // If we created it, or we are the host, or we are an admin
+        if (meeting?.hostId === currentUser?.id || effectiveRole === 'admin') {
+          setIsHost(true);
+          setCanSpeak(true);
+          setMicEnabled(true);
+        } else {
+          setIsHost(false);
+          setCanSpeak(false);
+          setMicEnabled(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch meeting", err);
+        // Fallback: admin is host
+        if (effectiveRole === 'admin') {
+          setIsHost(true);
+          setCanSpeak(true);
+          setMicEnabled(true);
+        }
+      }
+    }
+    loadMeetingDetails();
+  }, [id, currentUser, effectiveRole]);
 
   // --- Pre-Join Media Setup ---
   useEffect(() => {
@@ -154,7 +188,7 @@ export function MeetingRoom() {
             userId,
             name,
             stream: event.streams[0],
-            isMuted: false,
+            isMuted: true, // Default remote users to muted until state sync
             hasVideo: true,
             isScreenSharing: false
           }];
@@ -176,21 +210,26 @@ export function MeetingRoom() {
         userId: currentUser?.id || 'unknown',
         name: currentUser?.name || 'Guest'
       });
+      // Send initial state immediately
+      setTimeout(() => {
+        socket.emit('media-state-change', {
+          videoEnabled,
+          micEnabled,
+          screenSharing: !!screenStream
+        });
+      }, 1000);
     });
 
-    // We get a list of existing users when we join
     socket.on('room-users', async (users: any[]) => {
-      // Add them to state first
       setParticipants(users.map(u => ({
         id: u.socketId,
         userId: u.userId,
         name: u.name,
-        isMuted: false,
+        isMuted: true,
         hasVideo: true,
         isScreenSharing: false
       })));
 
-      // Initiate connection to all existing users
       for (const user of users) {
         const pc = createPeerConnection(user.socketId, user.name, user.userId);
         const offer = await pc.createOffer();
@@ -199,29 +238,26 @@ export function MeetingRoom() {
       }
     });
 
-    // Handle new user joining (they will send us an offer, so we just add them to state)
     socket.on('user-joined', (user: any) => {
       toast.info(`${user.name} joined the meeting`);
       setParticipants(prev => [...prev, {
         id: user.socketId,
         userId: user.userId,
         name: user.name,
-        isMuted: false,
+        isMuted: true,
         hasVideo: true,
         isScreenSharing: false
       }]);
     });
 
-    // Handle incoming offer
     socket.on('offer', async (payload: any) => {
-      const pc = createPeerConnection(payload.caller, payload.name, payload.caller); // We don't have perfect userId here, fallback to socketId
+      const pc = createPeerConnection(payload.caller, payload.name, payload.caller);
       await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('answer', { target: payload.caller, sdp: pc.localDescription });
     });
 
-    // Handle incoming answer
     socket.on('answer', async (payload: any) => {
       const peerObj = peersRef.current.get(payload.caller);
       if (peerObj) {
@@ -229,7 +265,6 @@ export function MeetingRoom() {
       }
     });
 
-    // Handle ICE candidates
     socket.on('ice-candidate', async (payload: any) => {
       const peerObj = peersRef.current.get(payload.caller);
       if (peerObj) {
@@ -241,7 +276,6 @@ export function MeetingRoom() {
       }
     });
 
-    // Handle disconnections
     socket.on('user-disconnected', (socketId: string) => {
       const peerObj = peersRef.current.get(socketId);
       if (peerObj) {
@@ -251,7 +285,6 @@ export function MeetingRoom() {
       setParticipants(prev => prev.filter(p => p.id !== socketId));
     });
 
-    // Handle Chat
     socket.on('chat-message', (msg: ChatMessage) => {
       setMessages(prev => [...prev, msg]);
       if (!showChat) {
@@ -259,7 +292,6 @@ export function MeetingRoom() {
       }
     });
 
-    // Handle Media States
     socket.on('user-media-state', (payload: any) => {
       setParticipants(prev => prev.map(p => {
         if (p.id === payload.socketId) {
@@ -268,10 +300,21 @@ export function MeetingRoom() {
         return p;
       }));
     });
+
+    // Handle Host actions (Allow/Revoke speak)
+    socket.on('host-action', (action: string) => {
+      if (action === 'allow-speak') {
+        setCanSpeak(true);
+        toast.success("Host has enabled your microphone! You can now speak.");
+      } else if (action === 'revoke-speak') {
+        setCanSpeak(false);
+        setMicEnabled(false);
+        toast.error("Host has muted your microphone.");
+      }
+    });
   };
 
   const handleLeave = () => {
-    // Cleanup
     if (socketRef.current) socketRef.current.disconnect();
     peersRef.current.forEach(peer => peer.peerConnection.close());
     if (localStream) localStream.getTracks().forEach(t => t.stop());
@@ -281,10 +324,8 @@ export function MeetingRoom() {
 
   const toggleScreenShare = async () => {
     if (screenStream) {
-      // Stop sharing
       screenStream.getTracks().forEach(t => t.stop());
       setScreenStream(null);
-      // Replace tracks with local camera
       if (localStream) {
         const videoTrack = localStream.getVideoTracks()[0];
         peersRef.current.forEach(peer => {
@@ -296,9 +337,7 @@ export function MeetingRoom() {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         setScreenStream(stream);
-        
         const screenTrack = stream.getVideoTracks()[0];
-        // Listen for browser UI "stop sharing"
         screenTrack.onended = () => {
           setScreenStream(null);
           if (localStream) {
@@ -309,8 +348,6 @@ export function MeetingRoom() {
             });
           }
         };
-
-        // Replace track for peers
         peersRef.current.forEach(peer => {
           const sender = peer.peerConnection.getSenders().find(s => s.track?.kind === 'video');
           if (sender) sender.replaceTrack(screenTrack);
@@ -328,6 +365,13 @@ export function MeetingRoom() {
     setChatMessage('');
   };
 
+  const handleHostAction = (targetSocketId: string, action: 'allow-speak' | 'revoke-speak') => {
+    if (socketRef.current) {
+      socketRef.current.emit('host-action', { targetSocketId, action });
+      toast.success(action === 'allow-speak' ? 'Allowed participant to speak' : 'Muted participant');
+    }
+  };
+
   // Participant Video Component Helper
   const RemoteVideo = ({ participant }: { participant: Participant }) => {
     const ref = useRef<HTMLVideoElement>(null);
@@ -339,7 +383,7 @@ export function MeetingRoom() {
 
     return (
       <div className={`relative bg-gray-900 rounded-xl overflow-hidden border ${participant.isScreenSharing ? 'border-[#2F3EFF] shadow-[0_0_15px_rgba(47,62,255,0.2)]' : 'border-gray-800'}`}>
-        {/* We ALWAYS mount the video element so the audio track continues to play, we just hide it when video is off */}
+        {/* ALWAYS mount video so audio plays, hide visually if video off */}
         <video 
           ref={ref} 
           autoPlay 
@@ -382,7 +426,8 @@ export function MeetingRoom() {
             <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-4">
               <Button 
                 onClick={() => setMicEnabled(!micEnabled)} 
-                className={`h-12 w-12 rounded-full flex items-center justify-center ${micEnabled ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'} border border-gray-700 backdrop-blur-md`}
+                disabled={!canSpeak}
+                className={`h-12 w-12 rounded-full flex items-center justify-center ${micEnabled ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'} border border-gray-700 backdrop-blur-md disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {micEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
               </Button>
@@ -393,12 +438,20 @@ export function MeetingRoom() {
                 {videoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
               </Button>
             </div>
+            {!canSpeak && (
+              <div className="absolute top-4 left-0 right-0 flex justify-center">
+                <span className="bg-black/80 px-3 py-1 rounded-full text-xs font-medium text-yellow-400 border border-yellow-500/30">
+                  Microphone muted by Host
+                </span>
+              </div>
+            )}
           </div>
           
           <div className="flex flex-col gap-6">
             <div>
               <h1 className="text-3xl font-bold mb-2">Ready to join?</h1>
               <p className="text-gray-400">Meeting Room: {id}</p>
+              {isHost && <p className="text-[#2F3EFF] text-sm mt-1 font-medium">You are the Host</p>}
             </div>
             {error && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg text-sm">
@@ -447,6 +500,7 @@ export function MeetingRoom() {
           <span className="text-gray-400 bg-gray-800 px-3 py-1 rounded-md text-sm font-mono">{id}</span>
         </div>
         <div className="flex items-center gap-4">
+          {isHost && <span className="bg-[#2F3EFF]/20 text-[#2F3EFF] text-xs font-semibold px-2 py-1 rounded">HOST</span>}
           <div className="flex items-center text-green-400 gap-1.5 text-sm">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -471,16 +525,16 @@ export function MeetingRoom() {
                 autoPlay 
                 playsInline 
                 muted 
-                className={`w-full h-full object-cover ${!videoEnabled && !screenSharing ? 'hidden' : ''}`}
+                className={`w-full h-full object-cover ${!videoEnabled && !!!screenStream ? 'hidden' : ''}`}
               />
             )}
-            {!videoEnabled && !screenSharing && (
+            {!videoEnabled && !!!screenStream && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900">
                 <Avatar name={currentUser?.name || 'You'} size="xl" />
               </div>
             )}
             <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1.5 rounded-lg flex items-center gap-2 backdrop-blur-sm">
-              <span className="text-sm font-medium">You {screenSharing ? '(Sharing Screen)' : ''}</span>
+              <span className="text-sm font-medium">You {!!screenStream ? '(Sharing Screen)' : ''}</span>
               {!micEnabled && <MicOff className="w-3.5 h-3.5 text-red-400" />}
             </div>
           </div>
@@ -507,7 +561,7 @@ export function MeetingRoom() {
                   <div className="flex items-center justify-between p-2 rounded-lg bg-gray-800/50">
                     <div className="flex items-center gap-3">
                       <Avatar name={currentUser?.name || 'You'} size="sm" />
-                      <span className="text-sm font-medium">You</span>
+                      <span className="text-sm font-medium">You (Host)</span>
                     </div>
                     <div className="flex gap-2 text-gray-400">
                       {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 text-red-400" />}
@@ -515,15 +569,38 @@ export function MeetingRoom() {
                     </div>
                   </div>
                   {participants.map(p => (
-                    <div key={p.id} className="flex items-center justify-between p-2">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={p.name} size="sm" />
-                        <span className="text-sm">{p.name}</span>
+                    <div key={p.id} className="flex flex-col gap-2 p-2 bg-gray-900/50 rounded-lg border border-gray-800">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={p.name} size="sm" />
+                          <span className="text-sm truncate w-24">{p.name}</span>
+                        </div>
+                        <div className="flex gap-2 text-gray-400">
+                          {p.isMuted ? <MicOff className="w-4 h-4 text-red-400" /> : <Mic className="w-4 h-4" />}
+                          {!p.hasVideo ? <VideoOff className="w-4 h-4 text-red-400" /> : <Video className="w-4 h-4" />}
+                        </div>
                       </div>
-                      <div className="flex gap-2 text-gray-400">
-                        {p.isMuted ? <MicOff className="w-4 h-4 text-red-400" /> : <Mic className="w-4 h-4" />}
-                        {!p.hasVideo ? <VideoOff className="w-4 h-4 text-red-400" /> : <Video className="w-4 h-4" />}
-                      </div>
+                      {/* Host Actions */}
+                      {isHost && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-7 text-xs flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                            onClick={() => handleHostAction(p.id, 'allow-speak')}
+                          >
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Allow Speak
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-7 text-xs flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            onClick={() => handleHostAction(p.id, 'revoke-speak')}
+                          >
+                            <XCircle className="w-3 h-3 mr-1" /> Mute
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <Button className="w-full mt-4 bg-gray-800 hover:bg-gray-700 text-white border-none" onClick={() => {
@@ -573,7 +650,8 @@ export function MeetingRoom() {
       <footer className="h-20 bg-[#0f1015] border-t border-gray-800 flex items-center justify-center gap-4 px-6 relative">
         <Button 
           onClick={() => setMicEnabled(!micEnabled)} 
-          className={`h-12 w-12 rounded-full flex items-center justify-center ${micEnabled ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'} border-none transition-colors`}
+          disabled={!canSpeak}
+          className={`h-12 w-12 rounded-full flex items-center justify-center ${micEnabled ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'} border-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {micEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
         </Button>
@@ -585,7 +663,7 @@ export function MeetingRoom() {
         </Button>
         <Button 
           onClick={toggleScreenShare} 
-          className={`h-12 w-12 rounded-full flex items-center justify-center ${screenSharing ? 'bg-[#2F3EFF] hover:bg-[#2F3EFF]/80' : 'bg-gray-800 hover:bg-gray-700'} text-white border-none transition-colors`}
+          className={`h-12 w-12 rounded-full flex items-center justify-center ${!!screenStream ? 'bg-[#2F3EFF] hover:bg-[#2F3EFF]/80' : 'bg-gray-800 hover:bg-gray-700'} text-white border-none transition-colors`}
         >
           <MonitorUp className="w-5 h-5" />
         </Button>
