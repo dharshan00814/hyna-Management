@@ -23,43 +23,141 @@ const css = `
   color: #f2f2f2;
   position: relative;
   overflow: hidden;
-  background-color: #c1f267;
+  background-color: #08090c;
   background-image: 
-    radial-gradient(circle at 18% 18%, #e0faa3 0%, transparent 42%),
-    radial-gradient(circle at 82% 28%, #cdf379 0%, transparent 48%),
-    radial-gradient(circle at 50% 88%, #b2e646 0%, transparent 55%),
-    linear-gradient(140deg, #dcf89d 0%, #c1f267 52%, #b5ea4f 100%);
+    radial-gradient(ellipse at 50% 0%, #11141a 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 100%, #0c0f14 0%, transparent 70%),
+    linear-gradient(180deg, #090a0d 0%, #050608 100%);
 }
 
-/* Background Ambient Elements */
-.su-ambient {
+/* Glowing Ambient Lime Bubbles */
+.su-bubbles-container {
   position: absolute;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
-}
-.su-ambient-circle {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.35;
-}
-.su-ambient-1 {
-  width: 480px;
-  height: 480px;
-  background: #e4fcab;
-  top: -120px;
-  left: -80px;
-}
-.su-ambient-2 {
-  width: 420px;
-  height: 420px;
-  background: #a9e43b;
-  bottom: -100px;
-  right: -80px;
+  z-index: 1;
 }
 
-/* Main Login Card - Faithful to Image */
+.su-bubble {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Core backlight glow directly behind login card */
+.su-bubble-center {
+  width: 540px;
+  height: 540px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(193, 242, 103, 0.28) 0%, rgba(160, 230, 60, 0.12) 48%, transparent 70%);
+  filter: blur(65px);
+  animation: pulseCoreGlow 8s ease-in-out infinite alternate;
+}
+
+/* Top-left vibrant lime bubble */
+.su-bubble-1 {
+  width: 460px;
+  height: 460px;
+  top: -80px;
+  left: -80px;
+  background: radial-gradient(circle, rgba(200, 246, 115, 0.42) 0%, rgba(180, 235, 75, 0.18) 50%, transparent 70%);
+  filter: blur(60px);
+  animation: floatBubble1 13s ease-in-out infinite;
+}
+
+/* Bottom-right vibrant lime bubble */
+.su-bubble-2 {
+  width: 480px;
+  height: 480px;
+  bottom: -110px;
+  right: -90px;
+  background: radial-gradient(circle, rgba(193, 242, 103, 0.38) 0%, rgba(165, 230, 55, 0.16) 52%, transparent 70%);
+  filter: blur(65px);
+  animation: floatBubble2 15s ease-in-out infinite;
+}
+
+/* Top-right floating lime bubble */
+.su-bubble-3 {
+  width: 340px;
+  height: 340px;
+  top: 12%;
+  right: 8%;
+  background: radial-gradient(circle, rgba(220, 248, 140, 0.32) 0%, rgba(193, 242, 103, 0.12) 50%, transparent 70%);
+  filter: blur(52px);
+  animation: floatBubble3 11s ease-in-out infinite;
+}
+
+/* Bottom-left floating lime bubble */
+.su-bubble-4 {
+  width: 380px;
+  height: 380px;
+  bottom: 8%;
+  left: 6%;
+  background: radial-gradient(circle, rgba(185, 240, 80, 0.34) 0%, rgba(160, 225, 50, 0.14) 50%, transparent 70%);
+  filter: blur(58px);
+  animation: floatBubble1 17s ease-in-out infinite reverse;
+}
+
+/* Subtle top-center floating lime bubble */
+.su-bubble-5 {
+  width: 260px;
+  height: 260px;
+  top: 5%;
+  left: 45%;
+  background: radial-gradient(circle, rgba(210, 250, 130, 0.28) 0%, transparent 70%);
+  filter: blur(48px);
+  animation: floatBubble2 9s ease-in-out infinite;
+}
+
+@keyframes floatBubble1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(55px, -40px) scale(1.08);
+  }
+  66% {
+    transform: translate(-35px, 30px) scale(0.96);
+  }
+}
+
+@keyframes floatBubble2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(-65px, -45px) scale(1.1);
+  }
+  80% {
+    transform: translate(40px, 25px) scale(0.94);
+  }
+}
+
+@keyframes floatBubble3 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(45px, 50px) scale(1.12);
+  }
+}
+
+@keyframes pulseCoreGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+}
+
+/* Main Login Card */
 .su-card-container {
   width: 100%;
   max-width: 450px;
@@ -81,8 +179,8 @@ const css = `
 
 .su-card {
   width: 100%;
-  background: #141416;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 19, 23, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 36px;
   display: flex;
   flex-direction: column;
@@ -90,10 +188,12 @@ const css = `
   justify-content: center;
   padding: 48px 38px 44px;
   position: relative;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
   box-shadow: 
-    0 36px 85px -18px rgba(25, 45, 10, 0.38),
-    0 16px 36px -8px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(0, 0, 0, 0.15);
+    0 36px 90px -18px rgba(0, 0, 0, 0.8),
+    0 0 50px -15px rgba(193, 242, 103, 0.18),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
   transition: all 0.3s ease;
 }
 
@@ -103,16 +203,16 @@ const css = `
   height: 44px;
   object-fit: contain;
   margin-bottom: 24px;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
 }
 .su-badge {
   font: 500 11px 'JetBrains Mono', monospace;
-  background: #232326;
+  background: rgba(34, 34, 38, 0.85);
   color: #b0b0b8;
   padding: 7px 15px;
   border-radius: 10px;
   margin-bottom: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   letter-spacing: -0.2px;
   white-space: nowrap;
 }
@@ -170,8 +270,8 @@ const css = `
 .su-field input {
   width: 100%;
   height: 100%;
-  background: #1c1c20;
-  border: 1px solid #2d2d34;
+  background: rgba(28, 28, 33, 0.85);
+  border: 1px solid #2d2d35;
   border-radius: 14px;
   padding: 0 46px 0 16px;
   font: 400 13px 'Manrope', sans-serif;
@@ -184,8 +284,8 @@ const css = `
 }
 .su-field input:focus-visible {
   border-color: #c1f267;
-  background: #202025;
-  box-shadow: 0 0 0 3px rgba(193, 242, 103, 0.16);
+  background: #202026;
+  box-shadow: 0 0 0 3px rgba(193, 242, 103, 0.18);
 }
 .su-eye {
   position: absolute;
@@ -261,12 +361,12 @@ const css = `
   gap: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 .su-submit:hover:not(:disabled) {
   background: #ffffff;
   transform: translateY(-1.5px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 20px rgba(193, 242, 103, 0.25);
 }
 .su-submit:active:not(:disabled) {
   transform: translateY(0);
@@ -411,10 +511,14 @@ export function LoginPage() {
     <div className="su-root">
       <style>{css}</style>
 
-      {/* Ambient background glows */}
-      <div className="su-ambient" aria-hidden="true">
-        <div className="su-ambient-circle su-ambient-1" />
-        <div className="su-ambient-circle su-ambient-2" />
+      {/* Dark background with glowing floating lime bubbles */}
+      <div className="su-bubbles-container" aria-hidden="true">
+        <div className="su-bubble su-bubble-center" />
+        <div className="su-bubble su-bubble-1" />
+        <div className="su-bubble su-bubble-2" />
+        <div className="su-bubble su-bubble-3" />
+        <div className="su-bubble su-bubble-4" />
+        <div className="su-bubble su-bubble-5" />
       </div>
 
       <div className="su-card-container">
