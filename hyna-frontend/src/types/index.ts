@@ -50,6 +50,7 @@ export interface Project {
   modules: Module[];
   color: string;
   tags: string[];
+  projectType?: 'team' | 'solo';
 }
 
 // --- Module ---

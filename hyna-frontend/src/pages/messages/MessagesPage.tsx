@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import EmojiPicker from 'emoji-picker-react';
 import { Globe, Send, Smile, Paperclip, FileText, X, Loader2, Hand } from 'lucide-react';
 import { Avatar, LoadingState } from '@/components/ui';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import { cn, formatRelativeTime, formatFileSize } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getChannelMessages, sendMessage, getUsers } from '@/services/api';
 import type { ChatMessage, User } from '@/types';
@@ -33,7 +33,7 @@ export function MessagesPage() {
           setUsers(usrs.filter(u => u.id !== currentUser?.id));
         }
       } catch (err) {
-        console.error(err);
+        console.error('Failed to load chat data:', err);
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -42,6 +42,14 @@ export function MessagesPage() {
     return () => { isMounted = false; };
   }, [currentUser]);
 
+  // Ensure a channel is always selected
+  useEffect(() => {
+    if (channels.length > 0 && (!selectedChannel || !channels.some(c => c.id === selectedChannel))) {
+      setSelectedChannel(channels[0].id);
+    }
+  }, [channels, selectedChannel]);
+
+  // Load messages & subscribe to realtime changes
   useEffect(() => {
     let isMounted = true;
     if (!activeChat || !currentUser?.id) return;
@@ -195,7 +203,7 @@ export function MessagesPage() {
                   'flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors rounded-md mx-1',
                   activeChat === user.id ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium' : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
                 )}
-                style={{ width: 'calc(100% - 8px)' }}
+                title="Toggle Team Roster"
               >
                 <Avatar name={user.name} src={user.avatar} size="xs" />
                 <span className="truncate">{user.name}</span>
@@ -243,6 +251,10 @@ export function MessagesPage() {
                 // Find sender in users array, or if it's our own message, use currentUser context
                 const sender = users.find(u => u.id === msg.senderId) || (currentUser?.id === msg.senderId ? currentUser : null);
                 const isOwn = msg.senderId === currentUser?.id;
+                const senderName = isOwn ? (currentUser?.name || 'You') : (sender?.name || 'Team Member');
+                const senderRole = isOwn ? (currentUser?.role || 'member') : (sender?.role || 'member');
+                const senderDesignation = isOwn ? (currentUser?.designation || '') : (sender?.designation || '');
+
                 return (
                   <div key={msg.id} className={cn('flex gap-3', isOwn && 'flex-row-reverse')}>
                     <Avatar name={sender?.name || 'User'} src={sender?.avatar} size="sm" />
@@ -264,6 +276,75 @@ export function MessagesPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* Reactions bar */}
+                      {msg.reactions && msg.reactions.length > 0 && (
+                        <div className={cn('flex flex-wrap gap-1 mt-1.5', isOwn && 'justify-end')}>
+                          {msg.reactions.map((react, rIdx) => {
+                            const hasReacted = currentUser?.id ? react.userIds.includes(currentUser.id) : false;
+                            return (
+                              <button
+                                key={rIdx}
+                                onClick={() => handleReaction(msg.id, react.emoji)}
+                                className={cn(
+                                  'h-5 px-1.5 rounded-full text-xs flex items-center gap-1 border transition-colors',
+                                  hasReacted 
+                                    ? 'bg-[var(--color-primary)]/15 border-[var(--color-primary)]/40 text-[var(--color-primary)] font-semibold' 
+                                    : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]'
+                                )}
+                              >
+                                <span>{react.emoji}</span>
+                                <span className="text-[10px]">{react.userIds.length}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hover action toolbar */}
+                    <div
+                      className={cn(
+                        'opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 bg-[var(--color-card)] border border-[var(--color-border)] shadow-md rounded-lg p-1 absolute top-2',
+                        isOwn ? 'left-4' : 'right-4'
+                      )}
+                    >
+                      <button
+                        onClick={() => handleReaction(msg.id, '👍')}
+                        className="p-1 rounded hover:bg-[var(--color-muted)] text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                        title="React 👍"
+                      >
+                        👍
+                      </button>
+                      <button
+                        onClick={() => handleReaction(msg.id, '❤️')}
+                        className="p-1 rounded hover:bg-[var(--color-muted)] text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                        title="React ❤️"
+                      >
+                        ❤️
+                      </button>
+                      <button
+                        onClick={() => handleReaction(msg.id, '🚀')}
+                        className="p-1 rounded hover:bg-[var(--color-muted)] text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                        title="React 🚀"
+                      >
+                        🚀
+                      </button>
+                      <button
+                        onClick={() => handleReaction(msg.id, '🔥')}
+                        className="p-1 rounded hover:bg-[var(--color-muted)] text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                        title="React 🔥"
+                      >
+                        🔥
+                      </button>
+                      <div className="w-px h-3 bg-[var(--color-border)] mx-0.5" />
+                      <button
+                        onClick={() => handleCopy(msg)}
+                        className="p-1 rounded hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                        title="Copy message"
+                      >
+                        {copiedMessageId === msg.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
                     </div>
                   </div>
                 );
@@ -337,18 +418,106 @@ export function MessagesPage() {
                 )}
               </div>
               <button
+                type="button"
                 onClick={handleSend}
                 disabled={(typeof newMessage === 'string' && !newMessage.trim() && pendingAttachments.length === 0) || isUploading}
                 className={cn(
                   'p-2 rounded-lg transition-colors',
                   (newMessage.trim() || pendingAttachments.length > 0) && !isUploading ? 'text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10' : 'text-[var(--color-muted-foreground)]',
                 )}
+                title="Send message (Enter)"
               >
                 <Send className="w-4 h-4" />
               </button>
             </div>
+
+            <div className="flex items-center justify-between px-2 pt-1.5 text-[10px] text-[var(--color-muted-foreground)]">
+              <span>Press <kbd className="px-1 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[9px]">Enter</kbd> to send, <kbd className="px-1 py-0.5 rounded bg-[var(--color-muted)] font-mono text-[9px]">Shift + Enter</kbd> for newline</span>
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live synchronized
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* Collapsible Studio Team Roster Side Panel */}
+        {showMembersPanel && (
+          <div className="w-72 border-l border-[var(--color-border)] bg-[var(--color-card)] hidden lg:flex flex-col shrink-0 animate-fade-in">
+            {/* Panel Header */}
+            <div className="px-4 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                  Studio Team ({teamMembers.length})
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowMembersPanel(false)}
+                className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] p-1 rounded-md"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Members List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1 divide-y divide-[var(--color-border)]/20">
+              {teamMembers.map(member => {
+                const isCurrentUser = member.id === currentUser?.id;
+                return (
+                  <div
+                    key={member.id}
+                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--color-muted)]/50 transition-colors group"
+                  >
+                    <div className="relative shrink-0">
+                      <Avatar name={member.name} size="md" />
+                      <div 
+                        className={cn(
+                          'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[var(--color-card)]',
+                          member.status === 'active' || isCurrentUser ? 'bg-emerald-500' : 'bg-slate-400'
+                        )}
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold truncate text-[var(--color-foreground)]">
+                          {member.name}
+                        </span>
+                        {isCurrentUser && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-[var(--color-primary)]/15 text-[var(--color-primary)] font-medium">
+                            You
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[var(--color-muted-foreground)] truncate">
+                        {member.designation || member.department || 'Engineer'}
+                      </p>
+                    </div>
+
+                    {member.role === 'admin' ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-purple-500/10 text-purple-400">
+                        ADMIN
+                      </span>
+                    ) : member.role === 'manager' ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-amber-500/10 text-amber-400">
+                        MGR
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Studio Info Footer */}
+            <div className="p-3 border-t border-[var(--color-border)] bg-[var(--color-muted)]/20 text-center">
+              <p className="text-[11px] text-[var(--color-muted-foreground)] flex items-center justify-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                <span>All team members share this room</span>
+              </p>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

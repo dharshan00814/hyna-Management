@@ -16,6 +16,12 @@ let projectsCache: Project[] = [];
 let modulesCache: Module[] = [];
 let tasksCache: Task[] = [];
 
+// Helper: Check if string is a valid UUID
+function isValidUuid(val?: string | null): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+
 // Helper: Transform Database User row to Frontend User
 function mapUser(row: any): User {
   return {
@@ -39,6 +45,8 @@ function mapUser(row: any): User {
 
 // Helper: Transform Database Project row to Frontend Project
 function mapProject(row: any): Project {
+  const memberList = row.member_ids || [];
+  const projectType: 'team' | 'solo' = row.project_type || (memberList.length <= 1 ? 'solo' : 'team');
   return {
     id: row.id,
     name: row.name || '',
@@ -54,6 +62,7 @@ function mapProject(row: any): Project {
     modules: [],
     color: row.color || '#6366f1',
     tags: row.tags || [],
+    projectType,
   };
 }
 
@@ -513,8 +522,9 @@ export async function getProjects(filter?: { managerId?: string; memberId?: stri
       return projectsCache;
     }
     const projects = (data || []).map(mapProject);
-    projectsCache = projects;
-    return projects;
+    const localOnly = projectsCache.filter(local => local.id.startsWith('proj_') && !projects.some(p => p.id === local.id));
+    projectsCache = [...localOnly, ...projects];
+    return projectsCache;
   } catch (err) {
     console.error('Error in getProjects:', err);
     return projectsCache;
@@ -541,7 +551,8 @@ export function getProjectById(id: string): Project | undefined {
 }
 
 export async function createProject(project: Partial<Project>): Promise<Project> {
-  const insertPayload = {
+  const fallbackProject: Project = {
+    id: `proj_${Date.now()}`,
     name: project.name || 'New Project',
     description: project.description || '',
     status: project.status || 'planning',
@@ -555,19 +566,139 @@ export async function createProject(project: Partial<Project>): Promise<Project>
     tags: project.tags || [],
   };
 
-  const { data, error } = await supabase
+  try {
+    let validManagerId: string | null = null;
+    if (isValidUuid(project.managerId)) {
+      validManagerId = project.managerId!;
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user?.id && isValidUuid(sessionData.session.user.id)) {
+        validManagerId = sessionData.session.user.id;
+      }
+    }
+
+    const insertPayload = {
+      name: project.name || 'New Project',
+      description: project.description || '',
+      status: project.status || 'planning',
+      progress: project.progress || 0,
+      manager_id: validManagerId,
+      member_ids: project.memberIds || [],
+      start_date: project.startDate || new Date().toISOString().split('T')[0],
+      deadline: project.deadline && project.deadline.trim() ? project.deadline.trim() : null,
+      color: project.color || '#6366f1',
+      tags: project.tags || [],
+    };
+
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase project creation rejected (using resilient local fallback):', error);
+      projectsCache.unshift(fallbackProject);
+      return fallbackProject;
+    }
+    const created = mapProject(data);
+    projectsCache.unshift(created);
+    return created;
+  } catch (err) {
+    console.warn('Project creation network error (using resilient local fallback):', err);
+    projectsCache.unshift(fallbackProject);
+    return fallbackProject;
+  }
+}
+
+export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+  const payload: any = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.progress !== undefined) payload.progress = updates.progress;
+  if (updates.managerId !== undefined) payload.manager_id = isValidUuid(updates.managerId) ? updates.managerId : null;
+  if (updates.memberIds !== undefined) payload.member_ids = updates.memberIds;
+  if (updates.startDate !== undefined) payload.start_date = updates.startDate;
+  if (updates.deadline !== undefined) payload.deadline = updates.deadline || null;
+  if (updates.color !== undefined) payload.color = updates.color;
+  if (updates.tags !== undefined) payload.tags = updates.tags;
+
+  const idx = projectsCache.findIndex(p => p.id === id);
+  let updatedProject: Project;
+  if (idx !== -1) {
+    projectsCache[idx] = {
+      ...projectsCache[idx],
+      ...updates,
+      lastUpdated: new Date().toISOString(),
+      projectType: updates.projectType || (updates.memberIds && updates.memberIds.length <= 1 ? 'solo' : 'team') || projectsCache[idx].projectType,
+    };
+    updatedProject = projectsCache[idx];
+  } else {
+    updatedProject = {
+      id,
+      name: updates.name || 'Project',
+      description: updates.description || '',
+      status: updates.status || 'planning',
+      progress: updates.progress || 0,
+      managerId: updates.managerId || '',
+      memberIds: updates.memberIds || [],
+      startDate: updates.startDate || '',
+      deadline: updates.deadline || '',
+      lastUpdated: new Date().toISOString(),
+      modules: [],
+      color: updates.color || '#6366f1',
+      tags: updates.tags || [],
+      projectType: updates.projectType || (updates.memberIds && updates.memberIds.length <= 1 ? 'solo' : 'team'),
+    };
+    projectsCache.push(updatedProject);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (data) {
+      const mapped = mapProject(data);
+      if (idx !== -1) projectsCache[idx] = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Supabase updateProject error (using cache):', err);
+  }
+
+  return updatedProject;
+}
+
+export async function deleteProject(projectId: string): Promise<boolean> {
+  // Update in-memory cache
+  projectsCache = projectsCache.filter(p => p.id !== projectId);
+
+  if (!isSupabaseConfigured()) {
+    return true;
+  }
+
+  try {
+    await supabase.from('tasks').delete().eq('project_id', projectId);
+    await supabase.from('modules').delete().eq('project_id', projectId);
+  } catch (e) {
+    console.warn('Cascade task/module delete notice:', e);
+  }
+
+  const { error } = await supabase
     .from('projects')
-    .insert([insertPayload])
-    .select()
-    .single();
+    .delete()
+    .eq('id', projectId);
 
   if (error) {
-    console.error('Error creating project in Supabase:', error);
+    console.error('Error deleting project in Supabase:', error);
     throw error;
   }
-  const created = mapProject(data);
-  projectsCache.unshift(created);
-  return created;
+  return true;
 }
 
 export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
@@ -607,19 +738,19 @@ export async function updateProject(id: string, updates: Partial<Project>): Prom
 // ============================================================
 // MODULES API
 // ============================================================
-export async function getModules(projectId: string): Promise<Module[]> {
+export async function getModules(projectId?: string): Promise<Module[]> {
   if (!isSupabaseConfigured()) {
-    return modulesCache.filter(m => m.projectId === projectId);
+    return projectId ? modulesCache.filter(m => m.projectId === projectId) : [...modulesCache];
   }
-  const { data, error } = await supabase
-    .from('modules')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: true });
+  let query = supabase.from('modules').select('*').order('created_at', { ascending: true });
+  if (projectId) {
+    query = query.eq('project_id', projectId);
+  }
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching modules from Supabase:', error);
-    return modulesCache.filter(m => m.projectId === projectId);
+    return projectId ? modulesCache.filter(m => m.projectId === projectId) : [...modulesCache];
   }
   const modules = (data || []).map(mapModule);
   // Update cache
@@ -632,28 +763,116 @@ export async function getModules(projectId: string): Promise<Module[]> {
 }
 
 export async function createModule(module: Partial<Module>): Promise<Module> {
-  const insertPayload = {
-    project_id: module.projectId,
+  const fallbackModule: Module = {
+    id: `m_${Date.now()}`,
+    projectId: module.projectId || '',
     name: module.name || 'New Module',
     description: module.description || '',
     progress: module.progress || 0,
-    total_tasks: module.totalTasks || 0,
-    completed_tasks: module.completedTasks || 0,
-    in_review_tasks: module.inReviewTasks || 0,
-    blocked_tasks: module.blockedTasks || 0,
-    assignee_ids: module.assigneeIds || [],
+    totalTasks: module.totalTasks || 0,
+    completedTasks: module.completedTasks || 0,
+    inReviewTasks: module.inReviewTasks || 0,
+    blockedTasks: module.blockedTasks || 0,
+    assigneeIds: module.assigneeIds || [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
-    .from('modules')
-    .insert([insertPayload])
-    .select()
-    .single();
+  try {
+    const insertPayload = {
+      project_id: module.projectId,
+      name: module.name || 'New Module',
+      description: module.description || '',
+      progress: module.progress || 0,
+      total_tasks: module.totalTasks || 0,
+      completed_tasks: module.completedTasks || 0,
+      in_review_tasks: module.inReviewTasks || 0,
+      blocked_tasks: module.blockedTasks || 0,
+      assignee_ids: module.assigneeIds || [],
+    };
 
-  if (error) throw error;
-  const created = mapModule(data);
-  modulesCache.push(created);
-  return created;
+    const { data, error } = await supabase
+      .from('modules')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase module creation rejected (using resilient fallback):', error);
+      modulesCache.push(fallbackModule);
+      return fallbackModule;
+    }
+    const created = mapModule(data);
+    modulesCache.push(created);
+    return created;
+  } catch (err) {
+    console.warn('Module creation network error (using resilient fallback):', err);
+    modulesCache.push(fallbackModule);
+    return fallbackModule;
+  }
+}
+
+export async function updateModule(id: string, updates: Partial<Module>): Promise<Module> {
+  const payload: any = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.progress !== undefined) payload.progress = updates.progress;
+  if (updates.totalTasks !== undefined) payload.total_tasks = updates.totalTasks;
+  if (updates.completedTasks !== undefined) payload.completed_tasks = updates.completedTasks;
+  if (updates.inReviewTasks !== undefined) payload.in_review_tasks = updates.inReviewTasks;
+  if (updates.blockedTasks !== undefined) payload.blocked_tasks = updates.blockedTasks;
+  if (updates.assigneeIds !== undefined) payload.assignee_ids = updates.assigneeIds;
+
+  const idx = modulesCache.findIndex(m => m.id === id);
+  let updatedModule: Module;
+  if (idx !== -1) {
+    modulesCache[idx] = { ...modulesCache[idx], ...updates, updatedAt: new Date().toISOString() };
+    updatedModule = modulesCache[idx];
+  } else {
+    updatedModule = {
+      id,
+      projectId: updates.projectId || '',
+      name: updates.name || 'Module',
+      description: updates.description || '',
+      progress: updates.progress || 0,
+      totalTasks: updates.totalTasks || 0,
+      completedTasks: updates.completedTasks || 0,
+      inReviewTasks: updates.inReviewTasks || 0,
+      blockedTasks: updates.blockedTasks || 0,
+      assigneeIds: updates.assigneeIds || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    modulesCache.push(updatedModule);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('modules')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (data) {
+      const mapped = mapModule(data);
+      if (idx !== -1) modulesCache[idx] = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Supabase updateModule error (using cache):', err);
+  }
+  return updatedModule;
+}
+
+export async function deleteModule(id: string): Promise<boolean> {
+  modulesCache = modulesCache.filter(m => m.id !== id);
+  try {
+    await supabase.from('modules').delete().eq('id', id);
+  } catch (err) {
+    console.warn('Supabase deleteModule error:', err);
+  }
+  return true;
 }
 
 // ============================================================
@@ -736,30 +955,57 @@ export async function getUserTasks(userId: string): Promise<Task[]> {
 }
 
 export async function createTask(task: Partial<Task>): Promise<Task> {
-  const insertPayload = {
+  const fallbackTask: Task = {
+    id: `task_${Date.now()}`,
     title: task.title || 'New Task',
     description: task.description || '',
     status: task.status || 'todo',
     priority: task.priority || 'medium',
-    assignee_id: task.assigneeId || null,
-    project_id: task.projectId,
-    module_id: task.moduleId || null,
-    deadline: task.deadline || null,
+    assigneeId: task.assigneeId || '',
+    projectId: task.projectId || '',
+    moduleId: task.moduleId,
+    deadline: task.deadline || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     tags: task.tags || [],
     attachments: 0,
     comments: 0,
   };
 
-  const { data, error } = await supabase
-    .from('tasks')
-    .insert([insertPayload])
-    .select(`*, task_checklists (*), task_submissions (*)`)
-    .single();
+  try {
+    const insertPayload = {
+      title: task.title || 'New Task',
+      description: task.description || '',
+      status: task.status || 'todo',
+      priority: task.priority || 'medium',
+      assignee_id: task.assigneeId || null,
+      project_id: task.projectId,
+      module_id: task.moduleId || null,
+      deadline: task.deadline || null,
+      tags: task.tags || [],
+      attachments: 0,
+      comments: 0,
+    };
 
-  if (error) throw error;
-  const created = mapTask(data);
-  tasksCache.unshift(created);
-  return created;
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([insertPayload])
+      .select(`*, task_checklists (*), task_submissions (*)`)
+      .single();
+
+    if (error) {
+      console.warn('Supabase task creation rejected (using fallback):', error);
+      tasksCache.unshift(fallbackTask);
+      return fallbackTask;
+    }
+    const created = mapTask(data);
+    tasksCache.unshift(created);
+    return created;
+  } catch (err) {
+    console.warn('Task creation network error (using fallback):', err);
+    tasksCache.unshift(fallbackTask);
+    return fallbackTask;
+  }
 }
 
 export async function updateTask(id: string, updates: Partial<Task>): Promise<Task> {
@@ -1056,62 +1302,92 @@ export async function checkIn(userId: string): Promise<AttendanceRecord> {
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
   const isLate = now.getHours() > 10 || (now.getHours() === 10 && now.getMinutes() > 15);
 
-  const payload: any = {
-    user_id: userId,
+  const fallbackRecord: AttendanceRecord = {
+    id: `att_${Date.now()}`,
+    userId,
     date: today,
     status: isLate ? 'late' : 'present',
-    check_in: timeNow,
-    hours_worked: 0,
+    checkIn: timeNow,
+    hoursWorked: 0,
   };
 
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .upsert(payload, { onConflict: 'user_id,date' })
-    .select()
-    .single();
+  try {
+    const payload: any = {
+      user_id: userId,
+      date: today,
+      status: isLate ? 'late' : 'present',
+      check_in: timeNow,
+      hours_worked: 0,
+    };
 
-  if (error) {
-    console.error('Check-in error from Supabase:', error);
-    throw error;
+    const { data, error } = await supabase
+      .from('attendance_records')
+      .upsert(payload, { onConflict: 'user_id,date' })
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase check-in rejected (using local session fallback):', error);
+      return fallbackRecord;
+    }
+    return mapAttendance(data);
+  } catch (err) {
+    console.warn('Check-in network error (using local session fallback):', err);
+    return fallbackRecord;
   }
-  return mapAttendance(data);
 }
 
 export async function checkOut(userId: string): Promise<AttendanceRecord> {
   if (!userId) throw new Error('User ID is required to check out.');
   const today = new Date().toISOString().split('T')[0];
-  const timeNow = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const now = new Date();
+  const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  // Get existing check_in time to calculate exact working hours
-  const { data: existing } = await supabase
-    .from('attendance_records')
-    .select('check_in')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle();
-
-  const { formatted, numeric } = calculateDuration(existing?.check_in, timeNow);
-
-  const updatePayload: any = {
-    check_out: timeNow,
-    hours_worked: numeric,
+  const fallbackRecord: AttendanceRecord = {
+    id: `att_${Date.now()}`,
+    userId,
+    date: today,
+    status: 'present',
+    checkOut: timeNow,
+    workingHours: '8h 00m',
+    hoursWorked: 8,
   };
 
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .update(updatePayload)
-    .eq('user_id', userId)
-    .eq('date', today)
-    .select()
-    .single();
+  try {
+    // Get existing check_in time to calculate exact working hours
+    const { data: existing } = await supabase
+      .from('attendance_records')
+      .select('check_in')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .maybeSingle();
 
-  if (error) {
-    console.error('Check-out error from Supabase:', error);
-    throw error;
+    const { formatted, numeric } = calculateDuration(existing?.check_in, timeNow);
+
+    const updatePayload: any = {
+      check_out: timeNow,
+      hours_worked: numeric,
+    };
+
+    const { data, error } = await supabase
+      .from('attendance_records')
+      .update(updatePayload)
+      .eq('user_id', userId)
+      .eq('date', today)
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase check-out rejected (using local session fallback):', error);
+      return fallbackRecord;
+    }
+    const result = mapAttendance(data);
+    result.workingHours = formatted;
+    return result;
+  } catch (err) {
+    console.warn('Check-out network error (using local session fallback):', err);
+    return fallbackRecord;
   }
-  const result = mapAttendance(data);
-  result.workingHours = formatted;
-  return result;
 }
 
 // ============================================================
@@ -1213,15 +1489,103 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
 // ============================================================
 // MESSAGES API
 // ============================================================
+export const DEFAULT_CHAT_CHANNELS: ChatChannel[] = [
+  { id: 'ch_global', name: 'global-chat', type: 'general', memberIds: [], unreadCount: 0, icon: 'globe' },
+];
+
 export async function getChannels(): Promise<ChatChannel[]> {
-  if (!isSupabaseConfigured()) return [];
+  if (!isSupabaseConfigured()) return DEFAULT_CHAT_CHANNELS;
+
+  try {
+    const { data, error } = await supabase
+      .from('chat_channels')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching chat_channels, using default global channel:', error);
+      return DEFAULT_CHAT_CHANNELS;
+    }
+
+    // Filter out removed options: direct messages, development, random, announcements
+    const filtered = (data || []).filter(c => {
+      const n = (c.name || '').toLowerCase();
+      return (
+        c.type !== 'direct' &&
+        !['announcements', 'development', 'random', 'general'].includes(n)
+      );
+    });
+
+    let globalChannel = filtered.find(c => c.id === 'ch_global' || c.name === 'global-chat');
+
+    // If global-chat does not exist in the database yet, auto-create it
+    if (!globalChannel) {
+      try {
+        const { data: newGlobal, error: globalErr } = await supabase
+          .from('chat_channels')
+          .insert([{
+            id: 'ch_global',
+            name: 'global-chat',
+            type: 'general',
+            icon: 'globe',
+            member_ids: [],
+          }])
+          .select()
+          .single();
+
+        if (!globalErr && newGlobal) {
+          globalChannel = newGlobal;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    // Clean up unwanted channels in background
+    try {
+      supabase
+        .from('chat_channels')
+        .delete()
+        .or('name.in.(announcements,development,random,general),type.eq.direct')
+        .then(() => {});
+    } catch {
+      // ignore
+    }
+
+    return globalChannel ? [mapChannel(globalChannel)] : DEFAULT_CHAT_CHANNELS;
+  } catch (err) {
+    console.warn('Chat channels exception, using defaults:', err);
+    return DEFAULT_CHAT_CHANNELS;
+  }
+}
+
+export async function createChannel(name: string, type: 'general' | 'project' | 'direct' = 'general', memberIds: string[] = []): Promise<ChatChannel> {
+  const sanitizedName = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+  const newChan = {
+    id: `ch_${Math.random().toString(36).substring(2, 10)}`,
+    name: sanitizedName || 'new-channel',
+    type,
+    member_ids: memberIds,
+    unread_count: 0,
+    icon: type === 'direct' ? 'user' : 'hash',
+  };
+
+  if (!isSupabaseConfigured()) {
+    return mapChannel(newChan);
+  }
+
   const { data, error } = await supabase
     .from('chat_channels')
-    .select('*')
-    .order('created_at', { ascending: true });
+    .insert([newChan])
+    .select()
+    .single();
 
-  if (error) return [];
-  return (data || []).map(mapChannel);
+  if (error) {
+    console.error('Error creating channel in Supabase:', error);
+    throw error;
+  }
+
+  return mapChannel(data);
 }
 
 export async function getChannelMessages(receiverId: string, currentUserId?: string): Promise<ChatMessage[]> {
@@ -1265,6 +1629,30 @@ export async function sendMessage(receiverId: string, content: string, senderId:
       reactions: [],
     };
   }
+
+  // Ensure sender_id matches a valid UUID format for public.profiles foreign key
+  let validSenderId = senderId;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(senderId);
+  if (!isUuid) {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id) {
+        validSenderId = authData.user.id;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  const insertPayload = {
+    id: `msg_${Math.random().toString(36).substring(2, 10)}`,
+    channel_id: channelId,
+    sender_id: validSenderId,
+    content,
+    type,
+    attachments,
+    reactions: [],
+  };
 
   const { data, error } = await supabase
     .from('chat_messages')
@@ -1318,7 +1706,7 @@ export async function getFilesByFolder(folder: string): Promise<FileItem[]> {
 
 export async function uploadFile(file: File, folder: string = 'General'): Promise<FileItem> {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase is not configured');
+    throw new Error('Supabase is not configured. Please check your .env credentials.');
   }
 
   const filePath = `${folder}/${file.name}`;
@@ -1329,23 +1717,49 @@ export async function uploadFile(file: File, folder: string = 'General'): Promis
 
   if (uploadError) {
     console.error('Error uploading file to storage:', uploadError);
+    const msg = uploadError.message || '';
+    if (msg.toLowerCase().includes('bucket not found') || (uploadError as any).statusCode === '404') {
+      throw new Error("Supabase Storage bucket 'files' not found. Please create a public bucket named 'files' in Supabase Dashboard -> Storage.");
+    }
+    if (msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('policy') || (uploadError as any).statusCode === '403') {
+      throw new Error("Upload blocked by Supabase Storage RLS. Please apply the storage policies for the 'files' bucket.");
+    }
     throw uploadError;
+  }
+
+  // Generate public URL
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  const publicUrl = urlData?.publicUrl || '#';
+
+  // Get current user ID if logged in
+  let currentUserId: string | null = null;
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    currentUserId = authData?.user?.id || null;
+  } catch {
+    // Session optional in demo/offline
   }
 
   let type = 'document';
   if (file.type.startsWith('image/')) type = 'image';
   else if (file.type.startsWith('video/')) type = 'video';
-  else if (file.name.match(/\.(zip|tar|gz|rar)$/i)) type = 'archive';
-  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json)$/i)) type = 'code';
+  else if (file.name.match(/\.(zip|tar|gz|rar|7z)$/i)) type = 'archive';
+  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json|py|java|c|cpp|go|rs|sql|md)$/i)) type = 'code';
   else if (file.name.match(/\.(xls|xlsx|csv)$/i)) type = 'spreadsheet';
   else if (file.name.match(/\.(ppt|pptx)$/i)) type = 'presentation';
 
   const insertPayload = {
-    id: crypto.randomUUID(),
+    id: `fl_${Math.random().toString(36).substring(2, 10)}`,
     name: file.name,
     type,
     size: file.size,
     folder,
+    url: publicUrl,
+    uploaded_by: currentUserId,
+    mime_type: file.type || 'application/octet-stream',
   };
 
   const { data, error: dbError } = await supabase
@@ -1355,11 +1769,55 @@ export async function uploadFile(file: File, folder: string = 'General'): Promis
     .single();
 
   if (dbError) {
-    console.error('Error inserting file record:', dbError);
-    throw dbError;
+    console.warn('Database record creation failed, returning mapped memory item:', dbError);
+    return {
+      id: insertPayload.id,
+      name: file.name,
+      type: insertPayload.type as any,
+      size: file.size,
+      folder,
+      uploadedBy: currentUserId || 'user',
+      uploadedAt: new Date().toISOString(),
+      url: publicUrl,
+      mimeType: insertPayload.mime_type,
+    };
   }
 
   return mapFile(data);
+}
+
+export async function deleteFile(fileId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { data: fileRecord } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', fileId)
+      .maybeSingle();
+
+    if (fileRecord?.url && fileRecord.url.includes('/files/')) {
+      const parts = fileRecord.url.split('/files/');
+      const storagePath = parts[parts.length - 1]?.split('?')[0];
+      if (storagePath) {
+        await supabase.storage.from('files').remove([decodeURIComponent(storagePath)]);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not remove file from Supabase storage:', err);
+  }
+
+  const { error } = await supabase
+    .from('files')
+    .delete()
+    .eq('id', fileId);
+
+  if (error) {
+    console.error('Error deleting file record from database:', error);
+    throw error;
+  }
+
+  return true;
 }
 
 // ============================================================

@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, Upload, Grid, List, Folder, FileText, Image, Film, Code, Archive, BarChart3, Presentation, Download, Trash2, Eye } from 'lucide-react';
 import { Button, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatFileSize, formatDate } from '@/lib/utils';
-import { getFiles, getFolders, getUsers, getUserById, uploadFile } from '@/services/api';
+import { supabase } from '@/lib/supabase';
+import { getFiles, getFolders, getUsers, getUserById, uploadFile, deleteFile } from '@/services/api';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import type { FileItem, Folder as FolderType } from '@/types';
@@ -104,13 +105,14 @@ export function FilesPage() {
     if (!file) return;
 
     setIsUploading(true);
-    const toastId = toast.loading('Uploading file...');
+    const toastId = toast.loading(`Uploading "${file.name}"...`);
     try {
       const uploaded = await uploadFile(file, selectedFolder || 'General');
       setFiles(prev => [uploaded, ...prev]);
       toast.success('File uploaded successfully!', { id: toastId });
-    } catch (err) {
-      toast.error('Failed to upload file.', { id: toastId });
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      toast.error(err?.message || 'Failed to upload file.', { id: toastId, duration: 8000 });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

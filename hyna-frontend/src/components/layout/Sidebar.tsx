@@ -2,7 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Users, CalendarClock,
   Video, BarChart3, MessageCircle, FolderOpen, Settings, ChevronLeft,
-  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop, Download
+  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop, Download,
+  CreditCard
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import { useSidebarStore, useAuthStore } from '@/stores';
@@ -48,6 +49,7 @@ const getNavItems = (prefix: string, role: string): NavItem[] => [
   { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
   { label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] },
   { label: 'Leave', icon: CalendarOff, path: `${prefix}/leave`, roles: ['admin', 'manager', 'member'] },
+  { label: 'Payroll', icon: CreditCard, path: `${prefix}/payroll`, roles: ['admin', 'manager', 'member'] },
   { label: 'Announcements', icon: Megaphone, path: `${prefix}/announcements`, roles: ['admin', 'manager'] },
 ];
 
