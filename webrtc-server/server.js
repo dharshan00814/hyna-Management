@@ -15,37 +15,106 @@ const io = new Server(server, {
   },
 });
 
+const rooms = new Map(); // roomId -> Set of users
+const userSockets = new Map(); // socketId -> { userId, roomId, name }
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('join-room', (roomId, userId) => {
+  socket.on('join-room', ({ roomId, userId, name }) => {
     socket.join(roomId);
-    console.log(`User ${userId} joined room ${roomId}`);
+    
+    userSockets.set(socket.id, { userId, roomId, name });
+    
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, new Set());
+    }
+    
+    const roomUsers = rooms.get(roomId);
+    
+    // Get array of existing users before adding current
+    const existingUsers = Array.from(roomUsers).map(id => {
+      const u = userSockets.get(id);
+      return { socketId: id, userId: u.userId, name: u.name };
+    });
+    
+    roomUsers.add(socket.id);
+    console.log(`User ${userId} (${socket.id}) joined room ${roomId}`);
 
-    // Notify others in the room
-    socket.to(roomId).emit('user-connected', userId);
+    // Tell the new user about existing users so they can initiate connections
+    socket.emit('room-users', existingUsers);
 
-    socket.on('disconnect', () => {
-      console.log(`User ${userId} disconnected from room ${roomId}`);
-      socket.to(roomId).emit('user-disconnected', userId);
+    // Notify others
+    socket.to(roomId).emit('user-joined', {
+      socketId: socket.id,
+      userId,
+      name
     });
   });
 
   // WebRTC Signaling Events
   socket.on('offer', (payload) => {
-    // Send offer to the specific user
-    io.to(payload.target).emit('offer', payload);
+    io.to(payload.target).emit('offer', {
+      caller: socket.id,
+      sdp: payload.sdp,
+      name: userSockets.get(socket.id)?.name
+    });
   });
 
   socket.on('answer', (payload) => {
-    // Send answer back to the offerer
-    io.to(payload.target).emit('answer', payload);
+    io.to(payload.target).emit('answer', {
+      caller: socket.id,
+      sdp: payload.sdp
+    });
   });
 
-  socket.on('ice-candidate', (incoming) => {
-    // Send ICE candidate to the peer
-    io.to(incoming.target).emit('ice-candidate', incoming.candidate);
+  socket.on('ice-candidate', (payload) => {
+    io.to(payload.target).emit('ice-candidate', {
+      caller: socket.id,
+      candidate: payload.candidate
+    });
+  });
+
+  // Chat and Meeting State
+  socket.on('chat-message', (payload) => {
+    const user = userSockets.get(socket.id);
+    if (user) {
+      io.to(user.roomId).emit('chat-message', {
+        id: Date.now().toString(),
+        senderId: user.userId,
+        senderName: user.name,
+        message: payload.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  socket.on('media-state-change', (payload) => {
+    const user = userSockets.get(socket.id);
+    if (user) {
+      socket.to(user.roomId).emit('user-media-state', {
+        socketId: socket.id,
+        videoEnabled: payload.videoEnabled,
+        micEnabled: payload.micEnabled,
+        screenSharing: payload.screenSharing
+      });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const user = userSockets.get(socket.id);
+    if (user) {
+      console.log(`User ${user.userId} disconnected from room ${user.roomId}`);
+      const roomUsers = rooms.get(user.roomId);
+      if (roomUsers) {
+        roomUsers.delete(socket.id);
+        if (roomUsers.size === 0) {
+          rooms.delete(user.roomId);
+        }
+      }
+      socket.to(user.roomId).emit('user-disconnected', socket.id);
+      userSockets.delete(socket.id);
+    }
   });
 });
 

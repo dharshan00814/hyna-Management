@@ -54,16 +54,18 @@ export function MeetingsPage() {
       return;
     }
     try {
-      const roomId = uuidv4();
-      const generatedLink = `${window.location.origin}/meeting/${roomId}`;
+      const randomString = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const roomId = `HYNA-MTG-${randomString}`;
+      
       const created = await createMeeting({
         ...newMeeting,
-        meetingLink: generatedLink,
+        meetingLink: roomId, // Using meetingLink field to store our internal room ID for compatibility
         hostId: currentUser?.id || 'u1',
         participantIds: [currentUser?.id || 'u1'],
       });
+      
       setMeetings(prev => [...prev, created]);
-      setCreatedLink(generatedLink);
+      setCreatedLink(roomId);
       setShowCreate(false);
       setShowSuccess(true);
       setNewMeeting({
@@ -159,8 +161,7 @@ export function MeetingsPage() {
                   {meeting.meetingLink ? (
                     <Button variant="outline" size="sm" onClick={(e) => {
                       e.stopPropagation();
-                      const roomId = meeting.meetingLink?.split('/').pop();
-                      navigate(`/meeting/${roomId}`);
+                      navigate(`/meeting/${meeting.meetingLink}`);
                     }}>
                       <Video className="w-3.5 h-3.5 mr-1" /> Join
                     </Button>
@@ -244,10 +245,9 @@ export function MeetingsPage() {
           <>
             <Button variant="outline" onClick={() => setShowSuccess(false)}>Done</Button>
             <Button onClick={() => {
-              const roomId = createdLink.split('/').pop();
-              navigate(`/meeting/${roomId}`);
+              navigate(`/meeting/${createdLink}`);
             }}>
-              Start Meeting
+              Join Meeting
             </Button>
           </>
         }
@@ -258,25 +258,24 @@ export function MeetingsPage() {
           </div>
           <h3 className="text-lg font-medium">Your meeting is ready</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">
-            Share this link with participants to invite them to the meeting.
+            Share this Room ID with participants inside Hyna Studio.
           </p>
-          <div className="flex items-center gap-2 mt-4 p-2 bg-[var(--color-muted)] rounded-lg border border-[var(--color-border)]">
-            <input
-              type="text"
-              readOnly
-              value={createdLink}
-              className="flex-1 bg-transparent border-none focus:outline-none text-sm px-2"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(createdLink);
-                toast.success('Link copied to clipboard');
-              }}
-            >
-              <Copy className="w-4 h-4 mr-1" /> Copy
-            </Button>
+          <div className="flex flex-col items-center gap-2 mt-4 p-4 bg-[var(--color-muted)] rounded-lg border border-[var(--color-border)]">
+            <span className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider font-semibold">Meeting Room ID</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xl font-mono font-bold tracking-widest">{createdLink}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  navigator.clipboard.writeText(createdLink);
+                  toast.success('Room ID copied to clipboard');
+                }}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>
