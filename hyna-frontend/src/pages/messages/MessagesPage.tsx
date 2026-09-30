@@ -23,7 +23,7 @@ const EMOJI_CATEGORIES = [
 import { Avatar, LoadingState } from '@/components/ui';
 import { cn, formatRelativeTime, formatFileSize } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getChannelMessages, sendMessage, getUsers } from '@/services/api';
+import { getChannelMessages, sendMessage, getUsers, updateMessageReactions } from '@/services/api';
 import type { ChatMessage, User } from '@/types';
 import { supabase } from '@/lib/supabase';
 
@@ -72,6 +72,7 @@ export function MessagesPage() {
 
   const handleReaction = async (messageId: string, emoji: string) => {
     if (!currentUser?.id) return;
+    let updatedReactions: any[] = [];
     setMessages(prev => prev.map(m => {
       if (m.id !== messageId) return m;
       let reactions = [...(m.reactions || [])];
@@ -85,8 +86,13 @@ export function MessagesPage() {
       } else {
         reactions.push({ emoji, userIds: [currentUser.id] });
       }
-      return { ...m, reactions: reactions.filter(r => r.userIds.length > 0) };
+      updatedReactions = reactions.filter(r => r.userIds.length > 0);
+      return { ...m, reactions: updatedReactions };
     }));
+
+    if (messageId && !messageId.startsWith('temp-')) {
+      updateMessageReactions(messageId, updatedReactions).catch(() => {});
+    }
   };
 
   // Load messages & subscribe to realtime changes
