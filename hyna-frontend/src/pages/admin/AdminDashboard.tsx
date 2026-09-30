@@ -332,10 +332,21 @@ export function AdminDashboard() {
             </div>
             <div className="space-y-3">
               {upcomingMeetings.map(meeting => (
-                <div key={meeting.id} className="p-3 rounded-xl border border-[var(--color-border)] hover:border-[var(--color-muted-foreground)] transition-colors">
-                  <p className="text-sm font-medium">{meeting.title}</p>
+                <div 
+                  key={meeting.id} 
+                  onClick={() => navigate(`/admin/meetings/${meeting.id}`)}
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] hover:border-indigo-500/50 hover:bg-[var(--color-muted)]/40 hover:shadow-sm transition-all cursor-pointer group"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      {meeting.title}
+                    </p>
+                    <Badge className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                      {meeting.type}
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--color-muted-foreground)]">
-                    <Clock className="w-3.5 h-3.5" />
+                    <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                     <span>{formatDate(meeting.date)} • {formatTime(meeting.startTime)}</span>
                   </div>
                   <div className="flex items-center justify-between mt-3">
@@ -347,9 +358,37 @@ export function AdminDashboard() {
                       {meeting.participantIds.length} participants
                     </span>
                   </div>
-                  {meeting.meetingLink && (
-                    <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => window.open(meeting.meetingLink, '_blank')}>
-                      <Video className="w-3.5 h-3.5 mr-1" /> Join Meeting
+                  {meeting.meetingLink ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full mt-3 text-xs" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const link = (meeting.meetingLink || '').trim();
+                        if (link.startsWith('http://') || link.startsWith('https://')) {
+                          window.open(link, '_blank', 'noopener,noreferrer');
+                        } else if (link.includes('meet.google.com') || link.includes('zoom.us')) {
+                          window.open(`https://${link}`, '_blank', 'noopener,noreferrer');
+                        } else {
+                          navigate(`/admin/meetings/${meeting.id}`);
+                        }
+                      }}
+                    >
+                      <Video className="w-3.5 h-3.5 mr-1" />
+                      {meeting.meetingLink.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="w-full mt-2.5 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/admin/meetings/${meeting.id}`);
+                      }}
+                    >
+                      View Details & Notes →
                     </Button>
                   )}
                 </div>
