@@ -117,6 +117,8 @@ function mapUser(row: any): User {
     lastActive: row.last_active || row.updated_at || new Date().toISOString(),
     bio: row.bio || '',
     skills: row.skills || [],
+    bankAccountNumber: row.bank_account_number || row.bankAccountNumber || '',
+    ifsc: row.ifsc_code || row.ifsc || '',
   };
 }
 
@@ -428,6 +430,8 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
   if (updates.bio !== undefined) payload.bio = updates.bio;
   if (updates.skills !== undefined) payload.skills = updates.skills;
   if (updates.avatar !== undefined) payload.avatar = updates.avatar;
+  if (updates.bankAccountNumber !== undefined) payload.bank_account_number = updates.bankAccountNumber;
+  if (updates.ifsc !== undefined) payload.ifsc_code = updates.ifsc;
 
   const { data, error } = await supabase
     .from('profiles')
@@ -552,6 +556,8 @@ export interface AddMemberInput {
   designation?: string;
   employeeId?: string;
   phone?: string;
+  bankAccountNumber?: string;
+  ifsc?: string;
 }
 
 export async function addMember(input: AddMemberInput): Promise<User> {
@@ -612,6 +618,12 @@ export async function addMember(input: AddMemberInput): Promise<User> {
   if (employeeId) {
     profilePayload.employee_id = employeeId;
   }
+  if (input.bankAccountNumber !== undefined) {
+    profilePayload.bank_account_number = input.bankAccountNumber.trim();
+  }
+  if (input.ifsc !== undefined) {
+    profilePayload.ifsc_code = input.ifsc.trim().toUpperCase();
+  }
 
   const { data: savedProfile, error: profileError } = await supabase
     .from('profiles')
@@ -639,6 +651,8 @@ export async function addMember(input: AddMemberInput): Promise<User> {
     lastActive: new Date().toISOString(),
     bio: '',
     skills: [],
+    bankAccountNumber: input.bankAccountNumber?.trim() || '',
+    ifsc: input.ifsc?.trim().toUpperCase() || '',
   };
 
   usersCache.unshift(newUser);

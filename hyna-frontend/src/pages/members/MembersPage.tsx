@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X, Star } from 'lucide-react';
+import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X, Star, Landmark } from 'lucide-react';
 import { Button, Avatar, Modal, Input, Select, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -33,6 +33,8 @@ export function MembersPage() {
     designation: 'Software Engineer',
     phone: '',
     password: 'Password@123',
+    bankAccountNumber: '',
+    ifsc: '',
   });
 
   // Edit Member Modal State
@@ -96,6 +98,8 @@ export function MembersPage() {
       designation: 'Software Engineer',
       phone: '',
       password: 'Password@123',
+      bankAccountNumber: '',
+      ifsc: '',
     });
     setShowPassword(false);
     setShowAddModal(true);
@@ -127,6 +131,8 @@ export function MembersPage() {
         designation: formData.designation.trim(),
         phone: formData.phone.trim(),
         password: formData.password,
+        bankAccountNumber: formData.bankAccountNumber.trim() || undefined,
+        ifsc: formData.ifsc.trim().toUpperCase() || undefined,
       });
 
       toast.success(`Member "${newMember.name}" added successfully!`);
@@ -278,6 +284,11 @@ export function MembersPage() {
                         <Phone className="w-3.5 h-3.5 hover:text-[var(--color-foreground)]" />
                       </span>
                     )}
+                    {user.bankAccountNumber && (
+                      <span title={`Bank A/C: •••• ${user.bankAccountNumber.slice(-4)} (${user.ifsc || 'IFSC registered'})`} className="inline-flex text-emerald-500">
+                        <Landmark className="w-3.5 h-3.5" />
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -379,6 +390,30 @@ export function MembersPage() {
               value={formData.phone}
               onChange={(e) => setFormData(f => ({ ...f, phone: e.target.value }))}
             />
+          </div>
+
+          <div className="pt-2 border-t border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Landmark className="w-4 h-4 text-[var(--color-primary)]" />
+              <span className="text-xs font-semibold text-[var(--color-foreground)] uppercase tracking-wider">
+                Banking Details (Optional)
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Bank Account Number"
+                placeholder="e.g. 123456789012"
+                value={formData.bankAccountNumber}
+                onChange={(e) => setFormData(f => ({ ...f, bankAccountNumber: e.target.value }))}
+              />
+              <Input
+                label="IFSC Code"
+                placeholder="e.g. HDFC0001234"
+                value={formData.ifsc}
+                onChange={(e) => setFormData(f => ({ ...f, ifsc: e.target.value.toUpperCase() }))}
+                maxLength={11}
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">

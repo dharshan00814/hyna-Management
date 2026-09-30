@@ -41,6 +41,7 @@ export interface PayrollRecord {
   payDate: string;
   status: 'Paid' | 'Processing' | 'Pending';
   bankAccount: string;
+  ifsc?: string;
   email?: string;
 }
 
@@ -391,6 +392,8 @@ export function PayrollPage() {
                   ...existing,
                   userId: user.id,
                   email: user.email || existing.email,
+                  bankAccount: user.bankAccountNumber || existing.bankAccount,
+                  ifsc: user.ifsc || existing.ifsc,
                 });
               }
             });
@@ -535,10 +538,17 @@ export function PayrollPage() {
         netSalary: 93500,
         payDate: new Date().toISOString().split('T')[0],
         status: 'Paid',
-        bankAccount: '•••• ' + (currentUser.phone ? currentUser.phone.slice(-4) : '4821'),
+        bankAccount: currentUser.bankAccountNumber ? (currentUser.bankAccountNumber.length > 4 ? '•••• ' + currentUser.bankAccountNumber.slice(-4) : currentUser.bankAccountNumber) : '•••• ' + (currentUser.phone ? currentUser.phone.slice(-4) : '4821'),
+        ifsc: currentUser.ifsc,
         email: currentUser.email,
       };
       matched = [personalRecord];
+    } else if (matched.length > 0 && currentUser && (currentUser.bankAccountNumber || currentUser.ifsc)) {
+      matched = matched.map(m => ({
+        ...m,
+        bankAccount: currentUser.bankAccountNumber || m.bankAccount,
+        ifsc: currentUser.ifsc || m.ifsc,
+      }));
     }
 
     return matched;
@@ -629,6 +639,12 @@ export function PayrollPage() {
               <span class="meta-label">Bank Account</span>
               <span class="meta-val">${record.bankAccount}</span>
             </div>
+            ${record.ifsc ? `
+            <div class="meta-item">
+              <span class="meta-label">IFSC Code</span>
+              <span class="meta-val" style="font-family: monospace;">${record.ifsc}</span>
+            </div>
+            ` : ''}
           </div>
 
           <table class="salary-table">
@@ -1256,6 +1272,9 @@ export function PayrollPage() {
               <div>
                 <p className="text-xs text-[var(--color-muted-foreground)]">Disbursal Target</p>
                 <p className="text-sm font-semibold">{selectedRecord.bankAccount} (Direct Deposit)</p>
+                {selectedRecord.ifsc && (
+                  <p className="text-xs font-mono text-[var(--color-muted-foreground)] mt-0.5">IFSC: {selectedRecord.ifsc}</p>
+                )}
               </div>
               <Badge variant="outline">{selectedRecord.status}</Badge>
             </div>

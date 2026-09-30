@@ -32,6 +32,8 @@ export interface User {
   lastActive: string;
   bio?: string;
   skills?: string[];
+  bankAccountNumber?: string;
+  ifsc?: string;
 }
 
 // --- Project ---

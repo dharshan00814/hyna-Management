@@ -26,6 +26,7 @@ import {
   AlertCircle,
   Clock,
   ShieldAlert,
+  Landmark,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Avatar } from '@/components/ui';
@@ -65,6 +66,8 @@ export function SettingsPage() {
   const [department, setDepartment] = useState(currentUser?.department || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
+  const [bankAccountNumber, setBankAccountNumber] = useState(currentUser?.bankAccountNumber || '');
+  const [ifsc, setIfsc] = useState(currentUser?.ifsc || '');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
@@ -133,6 +136,8 @@ export function SettingsPage() {
       setDepartment(currentUser.department || '');
       setBio(currentUser.bio || '');
       setAvatar(currentUser.avatar || '');
+      setBankAccountNumber(currentUser.bankAccountNumber || '');
+      setIfsc(currentUser.ifsc || '');
     }
   }, [currentUser]);
 
@@ -229,6 +234,8 @@ export function SettingsPage() {
         designation,
         department,
         avatar,
+        bankAccountNumber: bankAccountNumber.trim(),
+        ifsc: ifsc.trim().toUpperCase(),
       });
       setUser(updated);
       toast.success('Profile updated successfully!');
@@ -526,6 +533,50 @@ export function SettingsPage() {
                   onChange={(e) => setBio(e.target.value)}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
                 />
+              </div>
+
+              {/* Banking & Payout Details */}
+              <div className="pt-4 border-t border-[var(--color-border)]">
+                <div className="flex items-center gap-2 mb-3">
+                  <Landmark className="w-4 h-4 text-[var(--color-primary)]" />
+                  <h4 className="text-xs font-semibold text-[var(--color-foreground)] uppercase tracking-wider">
+                    Banking & Payout Details
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-[var(--color-foreground)]">
+                      Bank Account Number
+                    </label>
+                    <input
+                      type="text"
+                      value={bankAccountNumber}
+                      onChange={(e) => setBankAccountNumber(e.target.value)}
+                      placeholder="e.g. 123456789012"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] font-mono"
+                    />
+                    <p className="text-[11px] text-[var(--color-muted-foreground)] mt-1">
+                      Account number for direct deposit and salary payouts.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-[var(--color-foreground)]">
+                      IFSC Code
+                    </label>
+                    <input
+                      type="text"
+                      value={ifsc}
+                      onChange={(e) => setIfsc(e.target.value.toUpperCase())}
+                      placeholder="e.g. HDFC0001234"
+                      maxLength={11}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] font-mono uppercase"
+                    />
+                    <p className="text-[11px] text-[var(--color-muted-foreground)] mt-1">
+                      11-character Indian Financial System Code.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end pt-2">
