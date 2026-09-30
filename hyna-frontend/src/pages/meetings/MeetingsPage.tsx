@@ -6,6 +6,8 @@ import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getMeetings, createMeeting, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
+import { v4 as uuidv4 } from 'uuid';
+import { Copy } from 'lucide-react';
 import type { Meeting, MeetingType } from '@/types';
 
 export function MeetingsPage() {
@@ -17,6 +19,9 @@ export function MeetingsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
 
+  const [createdLink, setCreatedLink] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+
   const [newMeeting, setNewMeeting] = useState({
     title: '',
     description: '',
@@ -24,7 +29,6 @@ export function MeetingsPage() {
     type: 'team' as MeetingType,
     startTime: '10:00',
     endTime: '11:00',
-    meetingLink: '',
   });
 
   const loadData = async () => {
@@ -49,13 +53,18 @@ export function MeetingsPage() {
       return;
     }
     try {
+      const roomId = uuidv4();
+      const generatedLink = `${window.location.origin}/meeting/${roomId}`;
       const created = await createMeeting({
         ...newMeeting,
+        meetingLink: generatedLink,
         hostId: currentUser?.id || 'u1',
         participantIds: [currentUser?.id || 'u1'],
       });
       setMeetings(prev => [...prev, created]);
+      setCreatedLink(generatedLink);
       setShowCreate(false);
+      setShowSuccess(true);
       setNewMeeting({
         title: '',
         description: '',
@@ -63,7 +72,6 @@ export function MeetingsPage() {
         type: 'team',
         startTime: '10:00',
         endTime: '11:00',
-        meetingLink: '',
       });
       toast.success('Meeting created!');
     } catch (err) {
@@ -147,11 +155,15 @@ export function MeetingsPage() {
                     {host && <Avatar name={host.name} size="xs" />}
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
-                  {meeting.meetingLink && (
-                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); window.open(meeting.meetingLink, '_blank'); }}>
+                  {meeting.meetingLink ? (
+                    <Button variant="outline" size="sm" onClick={(e) => { 
+                      e.stopPropagation(); 
+                      const roomId = meeting.meetingLink?.split('/').pop();
+                      navigate(`/meeting/${roomId}`);
+                    }}>
                       <Video className="w-3.5 h-3.5 mr-1" /> Join
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
@@ -219,12 +231,51 @@ export function MeetingsPage() {
               onChange={(e) => setNewMeeting(m => ({ ...m, endTime: e.target.value }))}
             />
           </div>
-          <Input
-            label="Meeting Link"
-            placeholder="https://meet.hynastudio.com/..."
-            value={newMeeting.meetingLink}
-            onChange={(e) => setNewMeeting(m => ({ ...m, meetingLink: e.target.value }))}
-          />
+      </Modal>
+
+      <Modal
+        isOpen={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        title="Meeting Created Successfully"
+        size="md"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowSuccess(false)}>Done</Button>
+            <Button onClick={() => {
+              const roomId = createdLink.split('/').pop();
+              navigate(`/meeting/${roomId}`);
+            }}>
+              Start Meeting
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6 text-center">
+          <div className="mx-auto w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mb-4">
+            <Video className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-medium">Your meeting is ready</h3>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            Share this link with participants to invite them to the meeting.
+          </p>
+          <div className="flex items-center gap-2 mt-4 p-2 bg-[var(--color-muted)] rounded-lg border border-[var(--color-border)]">
+            <input 
+              type="text" 
+              readOnly 
+              value={createdLink} 
+              className="flex-1 bg-transparent border-none focus:outline-none text-sm px-2"
+            />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                navigator.clipboard.writeText(createdLink);
+                toast.success('Link copied to clipboard');
+              }}
+            >
+              <Copy className="w-4 h-4 mr-1" /> Copy
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>
