@@ -113,9 +113,102 @@ export function MeetingDetailPage() {
               <div><span className="text-[var(--color-muted-foreground)]">Host</span><br /><div className="flex items-center gap-2 mt-1">{host && <Avatar name={host.name} size="xs" />}<span className="font-medium">{host?.name || 'Host'}</span></div></div>
               <div><span className="text-[var(--color-muted-foreground)]">Type</span><br /><span className="font-medium capitalize">{meeting.type}</span></div>
             </div>
-            <Button className="w-full sm:w-auto" onClick={handleJoinMeeting}>
-              <Video className="w-4 h-4 mr-2" /> Join Meeting
-            </Button>
+            {/* Meeting Link Section */}
+            <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-muted)]/30 space-y-3 mb-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-indigo-500" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                    Meeting Link
+                  </span>
+                  {isGoogleMeet && (
+                    <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">
+                      Google Meet
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                  onClick={() => {
+                    setMeetLinkInput(meeting.meetingLink || '');
+                    setIsEditingLink(true);
+                  }}
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  {meeting.meetingLink ? 'Change Link' : 'Add Google Meet Link'}
+                </Button>
+              </div>
+
+              {meeting.meetingLink ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)]">
+                  <a
+                    href={meeting.meetingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-mono text-indigo-600 dark:text-indigo-400 hover:underline truncate max-w-md flex items-center gap-1.5"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{meeting.meetingLink}</span>
+                  </a>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1 shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(meeting.meetingLink || '');
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                      toast.success('Meeting link copied to clipboard');
+                    }}
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-xs text-[var(--color-muted-foreground)] flex items-center justify-between py-1">
+                  <span>No meeting link added yet.</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => {
+                      setMeetLinkInput('');
+                      setIsEditingLink(true);
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Google Meet Link
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button 
+                className={cn(
+                  "w-full sm:w-auto font-medium",
+                  isGoogleMeet ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                )} 
+                onClick={handleJoinMeeting}
+              >
+                <Video className="w-4 h-4 mr-2" />
+                {isGoogleMeet ? 'Join Google Meet' : meeting.meetingLink ? 'Join Meeting' : '+ Add Google Meet Link'}
+              </Button>
+              {meeting.meetingLink && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMeetLinkInput(meeting.meetingLink || '');
+                    setIsEditingLink(true);
+                  }}
+                  className="text-xs h-9"
+                >
+                  <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Edit Link
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="card p-6">
