@@ -339,13 +339,20 @@ export function MeetingRoom() {
 
     return (
       <div className={`relative bg-gray-900 rounded-xl overflow-hidden border ${participant.isScreenSharing ? 'border-[#2F3EFF] shadow-[0_0_15px_rgba(47,62,255,0.2)]' : 'border-gray-800'}`}>
-        {participant.hasVideo || participant.isScreenSharing ? (
-          <video ref={ref} autoPlay playsInline className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center">
+        {/* We ALWAYS mount the video element so the audio track continues to play, we just hide it when video is off */}
+        <video 
+          ref={ref} 
+          autoPlay 
+          playsInline 
+          className={`w-full h-full object-cover ${(!participant.hasVideo && !participant.isScreenSharing) ? 'hidden' : ''}`} 
+        />
+        
+        {(!participant.hasVideo && !participant.isScreenSharing) && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900">
             <Avatar name={participant.name} size="xl" />
           </div>
         )}
+        
         <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1.5 rounded-lg flex items-center gap-2 backdrop-blur-sm">
           <span className="text-sm font-medium">{participant.name}</span>
           {participant.isMuted && <MicOff className="w-3.5 h-3.5 text-red-400" />}
