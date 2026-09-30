@@ -10,7 +10,7 @@ import {
 import { Button, Avatar, Badge, Modal } from '@/components/ui';
 import { useAuthStore } from '@/stores';
 import { supabase } from '@/lib/supabase';
-import { getUsers, getUserById } from '@/services/api';
+import { getUsers, getUserById, getMeeting } from '@/services/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { User, Meeting } from '@/types';
@@ -151,6 +151,16 @@ export function MeetingRoom() {
       if (!roomId) return;
       try {
         await getUsers();
+        const fromApi = await getMeeting(roomId);
+        if (isMounted && fromApi) {
+          setMeetingInfo(fromApi);
+          const users = (fromApi.participantIds || [])
+            .map((pId: string) => getUserById(pId))
+            .filter(Boolean) as User[];
+          setInvitedUsers(users);
+          return;
+        }
+
         const { data: byLink } = await supabase
           .from('meetings')
           .select('*')
@@ -168,7 +178,20 @@ export function MeetingRoom() {
         }
 
         if (isMounted && meeting) {
-          setMeetingInfo(meeting);
+          setMeetingInfo({
+            id: meeting.id,
+            title: meeting.title,
+            description: meeting.description || '',
+            date: meeting.date,
+            startTime: meeting.start_time,
+            endTime: meeting.end_time,
+            hostId: meeting.host_id,
+            participantIds: meeting.participant_ids || [],
+            type: meeting.type || 'team',
+            isRecurring: meeting.is_recurring || false,
+            meetingLink: meeting.meeting_link || '',
+            status: meeting.status || 'scheduled',
+          });
           if (meeting.participant_ids && Array.isArray(meeting.participant_ids)) {
             const users = meeting.participant_ids
               .map((pId: string) => getUserById(pId))
@@ -177,7 +200,7 @@ export function MeetingRoom() {
           }
         }
       } catch (err) {
-        console.error('Failed to load meeting details from DB:', err);
+        console.error('Failed to load meeting details:', err);
       }
     }
     loadMeeting();
