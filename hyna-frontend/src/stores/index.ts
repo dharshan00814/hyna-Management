@@ -152,36 +152,6 @@ export const useAuthStore = create<AuthState>()(
       login: async (identifier: string, password: string) => {
         try {
           set({ isLoading: true });
-          
-          if (!isSupabaseConfigured()) {
-            console.warn('Supabase not configured, using mock login bypass.');
-            const mockUser: User = {
-              id: 'mock-user-id',
-              employeeId: 'EMP-001',
-              name: 'Mock Admin',
-              email: 'mock@example.com',
-              avatar: '',
-              role: 'admin',
-              department: 'Management',
-              designation: 'CEO',
-              phone: '',
-              joinDate: new Date().toISOString().split('T')[0],
-              status: 'active',
-              activeProjects: 0,
-              lastActive: new Date().toISOString(),
-              bio: '',
-              skills: []
-            };
-            set({
-              currentUser: mockUser,
-              currentRole: 'admin',
-              effectiveRole: 'admin',
-              isAuthenticated: true,
-              isLoading: false
-            });
-            return { success: true, role: 'admin' };
-          }
-
           const rawId = identifier.trim();
           let emailToUse = rawId;
 
@@ -528,16 +498,6 @@ export const useAuthStore = create<AuthState>()(
       initializeAuth: async () => {
         try {
           set({ isLoading: true });
-          if (!isSupabaseConfigured()) {
-            const state = get();
-            if (state.isAuthenticated && state.currentUser) {
-              set({ isLoading: false });
-              return;
-            } else {
-              set({ isLoading: false, isAuthenticated: false });
-              return;
-            }
-          }
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
           if (sessionError || !session?.user) {
