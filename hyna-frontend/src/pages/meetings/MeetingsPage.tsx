@@ -8,7 +8,25 @@ import { getMeetings, createMeeting, getUsers, getUserById, createNotification }
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { Copy } from 'lucide-react';
-import type { Meeting, MeetingType } from '@/types';
+import type { Meeting, MeetingType, User } from '@/types';
+
+const generateTimeOptions = () => {
+  const options = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const hh = h.toString().padStart(2, '0');
+      const mm = m.toString().padStart(2, '0');
+      const value = `${hh}:${mm}`;
+      const isPM = h >= 12;
+      const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const label = `${displayH}:${mm} ${isPM ? 'PM' : 'AM'}`;
+      options.push({ value, label });
+    }
+  }
+  return options;
+};
+
+const TIME_OPTIONS = generateTimeOptions();
 
 export function MeetingsPage() {
   const navigate = useNavigate();
@@ -30,6 +48,7 @@ export function MeetingsPage() {
     type: 'team' as MeetingType,
     startTime: '10:00',
     endTime: '11:00',
+    participantIds: [] as string[],
   });
 
   const loadData = async () => {
@@ -57,6 +76,7 @@ export function MeetingsPage() {
     try {
       const roomId = uuidv4();
       const generatedLink = `${window.location.origin}/meeting/${roomId}`;
+      const allParticipants = Array.from(new Set([...newMeeting.participantIds, currentUser?.id || 'u1']));
       const created = await createMeeting({
         ...newMeeting,
         meetingLink: generatedLink,
@@ -88,6 +108,7 @@ export function MeetingsPage() {
         type: 'team',
         startTime: '10:00',
         endTime: '11:00',
+        participantIds: [],
       });
       toast.success('Meeting created!');
     } catch (err) {
@@ -255,6 +276,37 @@ export function MeetingsPage() {
               onChange={(val) => setNewMeeting(m => ({ ...m, endTime: val }))}
             />
           </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Participants</label>
+            <div className="flex flex-wrap gap-2 p-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] max-h-40 overflow-y-auto">
+              {users.filter(u => u.id !== currentUser?.id).map((user) => {
+                const isSelected = newMeeting.participantIds.includes(user.id);
+                return (
+                  <label key={user.id} className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs cursor-pointer border transition-colors",
+                    isSelected ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)]" : "border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]"
+                  )}>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={isSelected}
+                      onChange={() => {
+                        setNewMeeting(m => ({
+                          ...m,
+                          participantIds: isSelected 
+                            ? m.participantIds.filter(id => id !== user.id)
+                            : [...m.participantIds, user.id]
+                        }));
+                      }}
+                    />
+                    <Avatar name={user.name} src={user.avatar} size="xs" />
+                    <span>{user.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </Modal>
 
       <Modal
