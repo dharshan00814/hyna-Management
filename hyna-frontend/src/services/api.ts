@@ -1409,6 +1409,20 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
         const idx = meetingsCache.findIndex(m => m.id === newId);
         if (idx !== -1) meetingsCache[idx] = mapped;
         persistMeetingsCache(meetingsCache);
+
+        if (insertPayload.participant_ids?.length) {
+          const attendees = insertPayload.participant_ids.filter((id: string) => id !== currentUserId);
+          if (attendees.length > 0) {
+            notifyMeetingScheduled({
+              id: data.id,
+              title: data.title,
+              date: data.date,
+              time: data.start_time,
+              attendeeIds: attendees,
+            }).catch(console.error);
+          }
+        }
+
         return mapped;
       }
     } catch (err) {
@@ -1416,32 +1430,7 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
     }
   }
 
-<<<<<<< HEAD
-  const { data, error } = await supabase
-    .from('meetings')
-    .insert([insertPayload])
-    .select()
-    .single();
-
-  if (error) throw error;
-  
-  if (insertPayload.participant_ids?.length) {
-    const attendees = insertPayload.participant_ids.filter((id: string) => id !== currentUserId);
-    if (attendees.length > 0) {
-      notifyMeetingScheduled({
-        id: data.id,
-        title: data.title,
-        date: data.date,
-        time: data.start_time,
-        attendeeIds: attendees,
-      }).catch(console.error);
-    }
-  }
-
-  return mapMeeting(data);
-=======
   return newMeeting;
->>>>>>> ccfdd724fd0532df1a8cec916868ca638777d0fa
 }
 
 export async function updateMeeting(id: string, updates: Partial<Meeting>): Promise<Meeting> {
