@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Video, Users, Check } from 'lucide-react';
+import { Plus, Clock, Video, Users, Check, Copy, ExternalLink, Link2 } from 'lucide-react';
 import { Button, Avatar, Badge, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getMeetings, createMeeting, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
-import { Copy } from 'lucide-react';
 import type { Meeting, MeetingType, User } from '@/types';
 
 export function MeetingsPage() {
@@ -30,6 +29,7 @@ export function MeetingsPage() {
     type: 'team' as MeetingType,
     startTime: '10:00',
     endTime: '11:00',
+    meetingLink: '',
   });
 
   const loadData = async () => {
@@ -55,24 +55,22 @@ export function MeetingsPage() {
       return;
     }
     try {
-      const roomId = typeof crypto !== 'undefined' && crypto.randomUUID 
-        ? crypto.randomUUID() 
-        : `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const generatedLink = `${window.location.origin}/meeting/${roomId}`;
-      
       const hostId = currentUser?.id || 'u1';
       const participants = Array.from(new Set([hostId, ...selectedParticipantIds]));
+      const finalMeetingLink = newMeeting.meetingLink.trim();
 
       const created = await createMeeting({
         ...newMeeting,
-        meetingLink: generatedLink,
+        meetingLink: finalMeetingLink,
         hostId,
         participantIds: participants,
       });
       setMeetings(prev => [...prev, created]);
-      setCreatedLink(generatedLink);
+      setCreatedLink(finalMeetingLink);
       setShowCreate(false);
-      setShowSuccess(true);
+      if (finalMeetingLink) {
+        setShowSuccess(true);
+      }
       setSelectedParticipantIds([]);
       setNewMeeting({
         title: '',
@@ -81,8 +79,9 @@ export function MeetingsPage() {
         type: 'team',
         startTime: '10:00',
         endTime: '11:00',
+        meetingLink: '',
       });
-      toast.success('Meeting created!');
+      toast.success('Meeting created successfully!');
     } catch (err) {
       toast.error('Failed to create meeting');
     }
@@ -165,13 +164,32 @@ export function MeetingsPage() {
                     {host && <Avatar name={host.name} size="xs" />}
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
-                  <Button variant="outline" size="sm" onClick={(e) => { 
-                    e.stopPropagation(); 
-                    const roomId = meeting.meetingLink ? meeting.meetingLink.trim().split('/').pop() : meeting.id;
-                    navigate(`/meeting/${roomId || meeting.id}`);
-                  }}>
-                    <Video className="w-3.5 h-3.5 mr-1" /> Join
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {meeting.meetingLink && meeting.meetingLink.includes('meet.google.com') && (
+                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] py-0 px-1.5 font-normal">
+                        Google Meet
+                      </Badge>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (meeting.meetingLink && (meeting.meetingLink.startsWith('http://') || meeting.meetingLink.startsWith('https://'))) {
+                          window.open(meeting.meetingLink, '_blank', 'noopener,noreferrer');
+                        } else {
+                          navigate(`${prefix}/meetings/${meeting.id}`);
+                        }
+                      }}
+                      className={cn(
+                        "text-xs h-7",
+                        meeting.meetingLink?.includes('meet.google.com') && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                      )}
+                    >
+                      <Video className="w-3.5 h-3.5 mr-1" />
+                      {meeting.meetingLink?.includes('meet.google.com') ? 'Google Meet' : 'Join'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
@@ -240,6 +258,32 @@ export function MeetingsPage() {
             />
           </div>
 
+          {/* Meeting Link (Google Meet / Video Link) Field */}
+          <div className="space-y-1.5 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-muted)]/30">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-[var(--color-foreground)] flex items-center gap-1.5">
+                <Link2 className="w-3.5 h-3.5 text-indigo-500" /> Meeting Link (Google Meet / Video Call)
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[11px] gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-medium"
+                onClick={() => window.open('https://meet.google.com/new', '_blank')}
+              >
+                <ExternalLink className="w-3 h-3" /> New Google Meet
+              </Button>
+            </div>
+            <Input
+              placeholder="https://meet.google.com/abc-defg-hij"
+              value={newMeeting.meetingLink}
+              onChange={(e) => setNewMeeting(m => ({ ...m, meetingLink: e.target.value }))}
+            />
+            <p className="text-[11px] text-[var(--color-muted-foreground)]">
+              Paste your Google Meet link here, or click "New Google Meet" to create one in Google.
+            </p>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
               Invite Team Members ({selectedParticipantIds.length} selected)
@@ -294,10 +338,15 @@ export function MeetingsPage() {
           <>
             <Button variant="outline" onClick={() => setShowSuccess(false)}>Done</Button>
             <Button onClick={() => {
-              const roomId = createdLink.split('/').pop();
-              navigate(`/meeting/${roomId}`);
+              if (createdLink.startsWith('http://') || createdLink.startsWith('https://')) {
+                window.open(createdLink, '_blank', 'noopener,noreferrer');
+              } else if (createdLink) {
+                const roomId = createdLink.split('/').pop();
+                navigate(`/meeting/${roomId}`);
+              }
+              setShowSuccess(false);
             }}>
-              Start Meeting
+              {createdLink.includes('meet.google.com') ? 'Open Google Meet' : 'Start Meeting'}
             </Button>
           </>
         }
