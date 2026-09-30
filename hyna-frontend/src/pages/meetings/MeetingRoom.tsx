@@ -57,7 +57,6 @@ function playChime(type: 'join' | 'leave' | 'mute' | 'unmute') {
     const now = ctx.currentTime;
 
     if (type === 'join') {
-      // Ascending Discord-style chime (two bright tones)
       osc.type = 'sine';
       osc.frequency.setValueAtTime(440, now);
       osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
@@ -66,7 +65,6 @@ function playChime(type: 'join' | 'leave' | 'mute' | 'unmute') {
       osc.start(now);
       osc.stop(now + 0.35);
     } else if (type === 'leave') {
-      // Descending Discord-style leave chime
       osc.type = 'sine';
       osc.frequency.setValueAtTime(660, now);
       osc.frequency.exponentialRampToValueAtTime(330, now + 0.18);
@@ -83,7 +81,7 @@ function playChime(type: 'join' | 'leave' | 'mute' | 'unmute') {
       osc.stop(now + 0.08);
     }
   } catch {
-    // Ignore browser autoplay restrictions before interaction
+    // Ignore audio restrictions
   }
 }
 
@@ -92,6 +90,25 @@ export function MeetingRoom() {
   const navigate = useNavigate();
   const { currentUser, effectiveRole } = useAuthStore();
   const rolePrefix = effectiveRole === 'admin' ? '/admin' : effectiveRole === 'manager' ? '/manager' : '/member';
+
+  // Guest lobby state if accessing via direct link without login
+  const [guestName, setGuestName] = useState(() => {
+    return localStorage.getItem('hyna_guest_name') || '';
+  });
+  const [hasEnteredLobby, setHasEnteredLobby] = useState(Boolean(currentUser));
+
+  const currentUserId = useMemo(() => {
+    if (currentUser?.id) return currentUser.id;
+    let stored = sessionStorage.getItem('hyna_guest_id');
+    if (!stored) {
+      stored = 'guest-' + Math.random().toString(36).slice(2, 9);
+      sessionStorage.setItem('hyna_guest_id', stored);
+    }
+    return stored;
+  }, [currentUser]);
+
+  const currentUserName = currentUser?.name || guestName.trim() || 'You';
+  const currentUserAvatar = currentUser?.avatar || '';
 
   // Meeting metadata from database
   const [meetingInfo, setMeetingInfo] = useState<Meeting | null>(null);
@@ -118,6 +135,7 @@ export function MeetingRoom() {
 
   // References
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const lobbyVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -127,17 +145,14 @@ export function MeetingRoom() {
   const audioAnalysersRef = useRef<Record<string, AnalyserNode>>({});
   const animationFrameRef = useRef<number | null>(null);
 
-  const currentUserId = currentUser?.id || 'guest-' + Math.random().toString(36).slice(2, 8);
-  const currentUserName = currentUser?.name || 'You';
-  const currentUserAvatar = currentUser?.avatar || '';
-
-  // 1. Elapsed Call Timer
+  // 1. Call timer
   useEffect(() => {
+    if (!hasEnteredLobby) return;
     const timer = setInterval(() => {
       setCallDuration(d => d + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [hasEnteredLobby]);
 
   const formattedCallTime = useMemo(() => {
     const mins = Math.floor(callDuration / 60);
@@ -152,7 +167,6 @@ export function MeetingRoom() {
       if (!roomId) return;
       try {
         await getUsers();
-        // Look up by meeting_link containing roomId or matching id
         const { data: byLink } = await supabase
           .from('meetings')
           .select('*')
@@ -227,7 +241,6 @@ export function MeetingRoom() {
           sum += dataArray[i];
         }
         const avg = sum / dataArray.length;
-        // Speaking threshold (RMS average)
         if (avg > 18) {
           activeSpeakers.add(uId);
         }
@@ -266,18 +279,19 @@ export function MeetingRoom() {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = localStream;
         }
+        if (lobbyVideoRef.current) {
+          lobbyVideoRef.current.srcObject = localStream;
+        }
 
-        // Setup audio analyzer for self speaking indicator
         setupAudioAnalyser(localStream, currentUserId);
       } catch (err: any) {
-        console.warn('Could not acquire audio/video stream with defaults:', err);
-        // Fallback: try audio only
+        console.warn('Could not acquire audio/video stream:', err);
         try {
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           localStreamRef.current = localStream;
           setVideoEnabled(false);
           setupAudioAnalyser(localStream, currentUserId);
-          toast.warning('Camera unavailable or permission denied. Joined with microphone only.');
+          toast.warning('Camera unavailable. Joined with microphone only.');
         } catch (audioErr) {
           console.error('No media devices available:', audioErr);
           toast.error('Unable to access camera or microphone.');
@@ -299,7 +313,6 @@ export function MeetingRoom() {
 
   // 5. WebRTC Peer Connection Helper
   const createPeerConnection = useCallback((remoteUserId: string) => {
-    // Return existing if already established
     if (peerConnectionsRef.current[remoteUserId]) {
       return peerConnectionsRef.current[remoteUserId];
     }
@@ -308,7 +321,6 @@ export function MeetingRoom() {
     peerConnectionsRef.current[remoteUserId] = pc;
     iceCandidatesQueueRef.current[remoteUserId] = [];
 
-    // Add local tracks (microphone and webcam/screen) to this peer connection
     const currentStream = screenStreamRef.current || localStreamRef.current;
     if (currentStream) {
       currentStream.getTracks().forEach(track => {
@@ -316,18 +328,15 @@ export function MeetingRoom() {
       });
     }
 
-    // Handle remote tracks coming in
     pc.ontrack = (event) => {
       const stream = event.streams[0] || new MediaStream([event.track]);
       setRemoteStreams(prev => ({
         ...prev,
         [remoteUserId]: stream,
       }));
-      // Setup speaking detection on remote audio stream
       setupAudioAnalyser(stream, remoteUserId);
     };
 
-    // Send local ICE candidates through Supabase Broadcast signaling
     pc.onicecandidate = (event) => {
       if (event.candidate && channelRef.current) {
         channelRef.current.send({
@@ -345,7 +354,6 @@ export function MeetingRoom() {
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        // Clean up remote stream
         setRemoteStreams(prev => {
           const next = { ...prev };
           delete next[remoteUserId];
@@ -357,9 +365,9 @@ export function MeetingRoom() {
     return pc;
   }, [currentUserId, setupAudioAnalyser]);
 
-  // 6. Connect to Supabase Realtime Channel (Presence + Broadcast Signaling)
+  // 6. Connect to Supabase Realtime Channel
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !hasEnteredLobby) return;
 
     const channelName = `meeting_room_${roomId}`;
     const channel = supabase.channel(channelName, {
@@ -376,7 +384,6 @@ export function MeetingRoom() {
 
     channelRef.current = channel;
 
-    // Track presence changes: ONLY actively joined participants exist here
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState<PresenceUser>();
@@ -388,13 +395,11 @@ export function MeetingRoom() {
           }
         });
 
-        // Filter out duplicates and sort
         const uniqueActive = Array.from(
           new Map(activeList.map(u => [u.userId, u])).values()
         );
 
         setConnectedUsers(prev => {
-          // Play Discord join chime if a new remote user entered
           const prevIds = new Set(prev.map(p => p.userId));
           uniqueActive.forEach(u => {
             if (u.userId !== currentUserId && !prevIds.has(u.userId)) {
@@ -405,10 +410,8 @@ export function MeetingRoom() {
           return uniqueActive;
         });
 
-        // Initiate WebRTC peer connections with deterministic polite/caller logic
         uniqueActive.forEach(remoteUser => {
           if (remoteUser.userId !== currentUserId) {
-            // Lexicographical tie-breaker: smaller userId creates the offer
             if (currentUserId < remoteUser.userId) {
               const pc = createPeerConnection(remoteUser.userId);
               pc.createOffer()
@@ -431,10 +434,8 @@ export function MeetingRoom() {
         });
       })
       .on('presence', { event: 'leave' }, ({ key }) => {
-        // Someone left the call
         if (key && key !== currentUserId) {
           playChime('leave');
-          // Close their peer connection
           if (peerConnectionsRef.current[key]) {
             peerConnectionsRef.current[key].close();
             delete peerConnectionsRef.current[key];
@@ -451,7 +452,6 @@ export function MeetingRoom() {
         }
       })
       .on('broadcast', { event: 'webrtc-signal' }, async ({ payload }) => {
-        // Process signals addressed to us
         if (payload.to !== currentUserId) return;
         const senderId = payload.from;
 
@@ -460,7 +460,6 @@ export function MeetingRoom() {
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
 
-            // Flush any queued ICE candidates for this sender
             const queue = iceCandidatesQueueRef.current[senderId] || [];
             while (queue.length > 0) {
               const candidate = queue.shift();
@@ -488,7 +487,6 @@ export function MeetingRoom() {
           if (pc) {
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-              // Flush queued candidates
               const queue = iceCandidatesQueueRef.current[senderId] || [];
               while (queue.length > 0) {
                 const candidate = queue.shift();
@@ -507,7 +505,6 @@ export function MeetingRoom() {
               console.error('Error adding ICE candidate:', err);
             }
           } else {
-            // Queue until remote description is set
             if (!iceCandidatesQueueRef.current[senderId]) {
               iceCandidatesQueueRef.current[senderId] = [];
             }
@@ -516,7 +513,6 @@ export function MeetingRoom() {
         }
       })
       .on('broadcast', { event: 'media-toggle' }, ({ payload }) => {
-        // Update connected user's mic or video status in real time
         setConnectedUsers(prev =>
           prev.map(u => (u.userId === payload.userId ? { ...u, ...payload } : u))
         );
@@ -528,7 +524,6 @@ export function MeetingRoom() {
         }
       });
 
-    // Subscribe and broadcast presence
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await channel.track({
@@ -546,16 +541,15 @@ export function MeetingRoom() {
     });
 
     return () => {
-      // Teardown connections on leave
       Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
       peerConnectionsRef.current = {};
       iceCandidatesQueueRef.current = {};
       audioAnalysersRef.current = {};
       channel.unsubscribe();
     };
-  }, [roomId, currentUserId, currentUserName, currentUserAvatar, currentUser?.designation, effectiveRole, createPeerConnection]);
+  }, [roomId, hasEnteredLobby, currentUserId, currentUserName, currentUserAvatar, currentUser?.designation, effectiveRole, createPeerConnection]);
 
-  // 7. Toggle Microphone
+  // 7. Toggle Mic
   const toggleMic = () => {
     const nextState = !micEnabled;
     setMicEnabled(nextState);
@@ -587,7 +581,7 @@ export function MeetingRoom() {
     }
   };
 
-  // 8. Toggle Camera
+  // 8. Toggle Video
   const toggleVideo = () => {
     const nextState = !videoEnabled;
     setVideoEnabled(nextState);
@@ -630,7 +624,6 @@ export function MeetingRoom() {
         screenStreamRef.current = screenStream;
         setScreenSharing(true);
 
-        // Replace video track in all active peer connections
         Object.values(peerConnectionsRef.current).forEach(pc => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'video');
           if (sender) {
@@ -638,7 +631,6 @@ export function MeetingRoom() {
           }
         });
 
-        // Update local preview
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
@@ -656,7 +648,7 @@ export function MeetingRoom() {
         }
         toast.success('Sharing your screen');
       } catch (err) {
-        console.warn('Screen sharing cancelled or failed:', err);
+        console.warn('Screen sharing cancelled:', err);
       }
     } else {
       stopScreenShare();
@@ -670,7 +662,6 @@ export function MeetingRoom() {
     }
     setScreenSharing(false);
 
-    // Revert back to webcam track
     const camTrack = localStreamRef.current?.getVideoTracks()[0] || null;
     if (camTrack) {
       Object.values(peerConnectionsRef.current).forEach(pc => {
@@ -694,7 +685,7 @@ export function MeetingRoom() {
     toast.info('Stopped screen sharing');
   };
 
-  // 10. Deafen Toggle (Mute incoming sounds)
+  // 10. Deafen
   const toggleDeafen = () => {
     setIsDeafened(prev => !prev);
   };
@@ -737,21 +728,19 @@ export function MeetingRoom() {
   // 13. Leave Meeting
   const handleLeave = () => {
     playChime('leave');
-    // Stop all media tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
     }
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(t => t.stop());
     }
-    // Close peer connections
     Object.values(peerConnectionsRef.current).forEach(pc => pc.close());
     peerConnectionsRef.current = {};
 
     navigate(`${rolePrefix}/meetings`);
   };
 
-  // Compute offline invited participants (invited users who have NOT joined yet)
+  // Offline invited users calculation
   const connectedUserIds = useMemo(() => {
     return new Set(connectedUsers.map(u => u.userId));
   }, [connectedUsers]);
@@ -760,7 +749,6 @@ export function MeetingRoom() {
     return invitedUsers.filter(u => !connectedUserIds.has(u.id) && u.id !== currentUserId);
   }, [invitedUsers, connectedUserIds, currentUserId]);
 
-  // Is anyone sharing their screen?
   const screenSharer = useMemo(() => {
     if (screenSharing) {
       return { userId: currentUserId, name: 'You', stream: screenStreamRef.current };
@@ -775,6 +763,72 @@ export function MeetingRoom() {
     }
     return null;
   }, [screenSharing, connectedUsers, currentUserId, remoteStreams]);
+
+  // PRE-JOIN LOBBY FOR GUEST USERS JOINING VIA LINK
+  if (!hasEnteredLobby && !currentUser) {
+    return (
+      <div className="h-screen w-full bg-[#111214] flex flex-col items-center justify-center p-4 text-white font-sans">
+        <div className="w-full max-w-md bg-[#1e1f22] border border-[#2b2d31] rounded-3xl p-6 shadow-2xl flex flex-col items-center animate-in fade-in zoom-in-95">
+          <div className="w-14 h-14 rounded-2xl bg-[#5865F2] flex items-center justify-center text-white mb-4 shadow-lg shadow-[#5865F2]/25">
+            <Radio className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-100">Join Meeting</h2>
+          <p className="text-xs text-gray-400 mt-1 text-center">
+            {meetingInfo?.title || `Room: #${roomId?.slice(0, 10)}`}
+          </p>
+
+          <div className="w-full aspect-video rounded-2xl bg-[#2b2d31] border border-[#383a40] overflow-hidden my-5 relative flex items-center justify-center shadow-inner">
+            {videoEnabled ? (
+              <video ref={lobbyVideoRef} autoPlay playsInline muted className="w-full h-full object-cover -scale-x-100" />
+            ) : (
+              <Avatar name={guestName || 'You'} size="lg" className="w-16 h-16 text-lg" />
+            )}
+            <div className="absolute bottom-2 right-2 flex gap-2">
+              <button 
+                type="button" 
+                onClick={toggleMic} 
+                className={cn("p-2 rounded-xl text-xs transition-colors shadow-md", micEnabled ? "bg-[#313338] text-white" : "bg-red-500 text-white")}
+              >
+                {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 text-white" />}
+              </button>
+              <button 
+                type="button" 
+                onClick={toggleVideo} 
+                className={cn("p-2 rounded-xl text-xs transition-colors shadow-md", videoEnabled ? "bg-[#313338] text-white" : "bg-red-500 text-white")}
+              >
+                {videoEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4 text-white" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="w-full space-y-3">
+            <label className="text-xs text-gray-400 block font-medium">Your Name</label>
+            <input 
+              type="text" 
+              placeholder="e.g. Jashwin" 
+              value={guestName} 
+              onChange={e => setGuestName(e.target.value)}
+              className="w-full bg-[#2b2d31] border border-[#383a40] rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#5865F2]"
+              autoFocus
+            />
+            <Button
+              className="w-full h-11 bg-[#5865F2] hover:bg-[#4752c4] text-white rounded-xl font-semibold shadow-lg shadow-[#5865F2]/25 mt-2"
+              onClick={() => {
+                if (!guestName.trim()) {
+                  toast.error("Please enter your name to join");
+                  return;
+                }
+                localStorage.setItem('hyna_guest_name', guestName.trim());
+                setHasEnteredLobby(true);
+              }}
+            >
+              Join Voice & Video
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full bg-[#111214] flex flex-col overflow-hidden text-white font-sans select-none">
@@ -848,7 +902,6 @@ export function MeetingRoom() {
 
               {/* Strip of participants below screen share */}
               <div className="h-28 flex gap-3 overflow-x-auto pb-1 justify-center">
-                {/* Local user tile in strip */}
                 <div className="w-44 h-full relative rounded-xl overflow-hidden bg-[#2b2d31] border border-[#383a40]">
                   {videoEnabled ? (
                     <video
@@ -868,7 +921,6 @@ export function MeetingRoom() {
                   </div>
                 </div>
 
-                {/* Remote users in strip */}
                 {connectedUsers
                   .filter(u => u.userId !== currentUserId)
                   .map(user => (
@@ -1036,7 +1088,6 @@ export function MeetingRoom() {
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#2b2d31] to-[#1e1f22]">
-                          {/* Audio tag so voice continues playing when camera is off */}
                           {stream && (
                             <audio
                               ref={audioEl => {
@@ -1130,14 +1181,12 @@ export function MeetingRoom() {
             {/* Participants View */}
             {activeSidePanel === 'participants' && (
               <div className="flex-1 p-4 overflow-y-auto space-y-6">
-                {/* 1. Actively Connected in Room */}
                 <div>
                   <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-[#23a55a]" />
                     In Meeting — {connectedUsers.length}
                   </h4>
                   <div className="space-y-2">
-                    {/* Self */}
                     <div className="flex items-center justify-between p-2 rounded-xl bg-[#2b2d31]/60 border border-[#383a40]">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar name={currentUserName} size="sm" />
@@ -1146,7 +1195,7 @@ export function MeetingRoom() {
                             {currentUserName}
                             <span className="text-[10px] text-[#5865F2] font-semibold">(You)</span>
                           </p>
-                          <p className="text-[10px] text-gray-400">{currentUser?.designation || 'Host'}</p>
+                          <p className="text-[10px] text-gray-400">{currentUser?.designation || 'Participant'}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 text-gray-400">
@@ -1155,7 +1204,6 @@ export function MeetingRoom() {
                       </div>
                     </div>
 
-                    {/* Remote Connected Users */}
                     {connectedUsers
                       .filter(u => u.userId !== currentUserId)
                       .map(user => (
@@ -1176,7 +1224,6 @@ export function MeetingRoom() {
                   </div>
                 </div>
 
-                {/* 2. Invited But Not Joined Yet (Offline) */}
                 {offlineInvitedUsers.length > 0 && (
                   <div>
                     <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
@@ -1200,7 +1247,6 @@ export function MeetingRoom() {
                   </div>
                 )}
 
-                {/* Invite Link Action Box */}
                 <div className="p-3 bg-[#2b2d31]/80 rounded-xl border border-[#383a40] space-y-2">
                   <p className="text-xs font-semibold text-gray-200">Share Meeting Room</p>
                   <p className="text-[11px] text-gray-400">Invite anyone by copying this direct room link.</p>
@@ -1271,7 +1317,6 @@ export function MeetingRoom() {
 
       {/* Discord Style Bottom Control Dock */}
       <footer className="h-20 bg-[#1e1f22] border-t border-[#202225] flex items-center justify-center gap-3 px-6 relative z-30">
-        {/* Microphone Toggle */}
         <button
           onClick={toggleMic}
           title={micEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
@@ -1285,7 +1330,6 @@ export function MeetingRoom() {
           {micEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
         </button>
 
-        {/* Camera Toggle */}
         <button
           onClick={toggleVideo}
           title={videoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
@@ -1299,7 +1343,6 @@ export function MeetingRoom() {
           {videoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
         </button>
 
-        {/* Screen Share Toggle */}
         <button
           onClick={toggleScreenShare}
           title={screenSharing ? 'Stop Sharing Screen' : 'Share Screen'}
@@ -1313,7 +1356,6 @@ export function MeetingRoom() {
           <MonitorUp className="w-5 h-5" />
         </button>
 
-        {/* Deafen (Incoming Audio Mute) */}
         <button
           onClick={toggleDeafen}
           title={isDeafened ? 'Undeafen' : 'Deafen'}
@@ -1329,7 +1371,6 @@ export function MeetingRoom() {
 
         <div className="w-px h-8 bg-[#313338] mx-2" />
 
-        {/* Participants Side Panel Toggle */}
         <button
           onClick={() => setActiveSidePanel(p => (p === 'participants' ? null : 'participants'))}
           title="Participants"
@@ -1346,7 +1387,6 @@ export function MeetingRoom() {
           </span>
         </button>
 
-        {/* Live Chat Side Panel Toggle */}
         <button
           onClick={() => {
             setActiveSidePanel(p => (p === 'chat' ? null : 'chat'));
@@ -1368,7 +1408,6 @@ export function MeetingRoom() {
           )}
         </button>
 
-        {/* Leave Meeting (Discord Red Button) */}
         <button
           onClick={handleLeave}
           title="Leave Meeting"
@@ -1382,7 +1421,6 @@ export function MeetingRoom() {
   );
 }
 
-// Dedicated Sub-component for rendering incoming WebRTC video feeds with sound
 function VideoFeed({
   stream,
   isMuted,
