@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Video, Mic, MicOff, VideoOff, Monitor, Phone, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Clock, Video } from 'lucide-react';
 import { Button, Avatar, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -14,9 +14,7 @@ export function MeetingDetailPage() {
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showVideoCall, setShowVideoCall] = useState(false);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -48,46 +46,15 @@ export function MeetingDetailPage() {
 
   const host = getUserById(meeting.hostId);
 
-  if (showVideoCall) {
-    return (
-      <div className="fixed inset-0 z-50 bg-zinc-900 flex flex-col">
-        <div className="flex items-center justify-between px-6 py-3 bg-zinc-800">
-          <div className="flex items-center gap-3">
-            <h2 className="text-white text-sm font-medium">{meeting.title}</h2>
-            <Badge className="bg-red-500 text-white animate-pulse-soft">Live</Badge>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-400 text-sm">
-            <Clock className="w-4 h-4" />
-            <span>07:42</span>
-          </div>
-        </div>
-        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-2 p-4">
-          {meeting.participantIds.slice(0, 6).map((pId) => {
-            const participant = getUserById(pId);
-            return (
-              <div key={pId} className="relative rounded-xl bg-zinc-800 flex items-center justify-center overflow-hidden">
-                <Avatar name={participant?.name || ''} size="xl" />
-                <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md">
-                  {participant?.name?.split(' ')[0] || 'Member'}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex items-center justify-center gap-3 py-4 bg-zinc-800">
-          <button onClick={() => setMicOn(!micOn)} className={cn('w-12 h-12 rounded-full flex items-center justify-center transition-colors', micOn ? 'bg-zinc-700 text-white hover:bg-zinc-600' : 'bg-red-500 text-white')}>
-            {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-          </button>
-          <button onClick={() => setCamOn(!camOn)} className={cn('w-12 h-12 rounded-full flex items-center justify-center transition-colors', camOn ? 'bg-zinc-700 text-white hover:bg-zinc-600' : 'bg-red-500 text-white')}>
-            {camOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-          </button>
-          <button className="w-12 h-12 rounded-full bg-zinc-700 text-white flex items-center justify-center hover:bg-zinc-600"><Monitor className="w-5 h-5" /></button>
-          <button className="w-12 h-12 rounded-full bg-zinc-700 text-white flex items-center justify-center hover:bg-zinc-600"><MessageSquare className="w-5 h-5" /></button>
-          <button onClick={() => setShowVideoCall(false)} className="w-12 h-12 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"><Phone className="w-5 h-5 rotate-[135deg]" /></button>
-        </div>
-      </div>
-    );
-  }
+  const handleJoinMeeting = () => {
+    let roomId = meeting.id;
+    if (meeting.meetingLink) {
+      const parts = meeting.meetingLink.split('/');
+      const last = parts[parts.length - 1];
+      if (last) roomId = last;
+    }
+    navigate(`/meeting/${roomId}`);
+  };
 
   return (
     <div className="page-container">
@@ -113,7 +80,7 @@ export function MeetingDetailPage() {
               <div><span className="text-[var(--color-muted-foreground)]">Type</span><br /><span className="font-medium capitalize">{meeting.type}</span></div>
             </div>
             {meeting.meetingLink && (
-              <Button className="w-full sm:w-auto" onClick={() => setShowVideoCall(true)}>
+              <Button className="w-full sm:w-auto" onClick={handleJoinMeeting}>
                 <Video className="w-4 h-4 mr-2" /> Join Meeting
               </Button>
             )}

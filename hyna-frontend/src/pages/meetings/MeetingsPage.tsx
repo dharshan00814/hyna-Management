@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Video, Users } from 'lucide-react';
+import { Plus, Clock, Video, Users, Check } from 'lucide-react';
 import { Button, Avatar, Badge, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getMeetings, createMeeting, getUsers, getUserById } from '@/services/api';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { Copy } from 'lucide-react';
-import type { Meeting, MeetingType } from '@/types';
+import type { Meeting, MeetingType, User } from '@/types';
 
 export function MeetingsPage() {
   const navigate = useNavigate();
   const { currentRole, currentUser, effectiveRole } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
@@ -22,6 +22,7 @@ export function MeetingsPage() {
   const [createdLink, setCreatedLink] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
 
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [newMeeting, setNewMeeting] = useState({
     title: '',
     description: '',
@@ -33,7 +34,8 @@ export function MeetingsPage() {
 
   const loadData = async () => {
     try {
-      await getUsers();
+      const usersList = await getUsers();
+      setAllUsers(usersList);
       const ms = await getMeetings();
       setMeetings(ms);
     } catch (err) {
@@ -53,18 +55,25 @@ export function MeetingsPage() {
       return;
     }
     try {
-      const roomId = uuidv4();
+      const roomId = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const generatedLink = `${window.location.origin}/meeting/${roomId}`;
+      
+      const hostId = currentUser?.id || 'u1';
+      const participants = Array.from(new Set([hostId, ...selectedParticipantIds]));
+
       const created = await createMeeting({
         ...newMeeting,
         meetingLink: generatedLink,
-        hostId: currentUser?.id || 'u1',
-        participantIds: [currentUser?.id || 'u1'],
+        hostId,
+        participantIds: participants,
       });
       setMeetings(prev => [...prev, created]);
       setCreatedLink(generatedLink);
       setShowCreate(false);
       setShowSuccess(true);
+      setSelectedParticipantIds([]);
       setNewMeeting({
         title: '',
         description: '',
@@ -78,6 +87,7 @@ export function MeetingsPage() {
       toast.error('Failed to create meeting');
     }
   };
+
 
   const todayStr = new Date().toISOString().split('T')[0];
   const userMeetings = currentRole === 'member'
@@ -230,6 +240,49 @@ export function MeetingsPage() {
               value={newMeeting.endTime}
               onChange={(e) => setNewMeeting(m => ({ ...m, endTime: e.target.value }))}
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+              Invite Team Members ({selectedParticipantIds.length} selected)
+            </label>
+            <div className="max-h-44 overflow-y-auto border border-[var(--color-border)] rounded-lg p-2 space-y-1.5 bg-[var(--color-background)]">
+              {allUsers.filter(u => u.id !== currentUser?.id).length === 0 ? (
+                <p className="text-xs text-[var(--color-muted-foreground)] p-2">No other members found.</p>
+              ) : (
+                allUsers.filter(u => u.id !== currentUser?.id).map(user => {
+                  const isSelected = selectedParticipantIds.includes(user.id);
+                  return (
+                    <div
+                      key={user.id}
+                      onClick={() => {
+                        setSelectedParticipantIds(prev => 
+                          isSelected ? prev.filter(id => id !== user.id) : [...prev, user.id]
+                        );
+                      }}
+                      className={cn(
+                        'flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors text-xs',
+                        isSelected ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200' : 'hover:bg-[var(--color-muted)]'
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Avatar name={user.name} size="xs" />
+                        <div className="truncate">
+                          <p className="font-medium truncate">{user.name}</p>
+                          <p className="text-[10px] text-[var(--color-muted-foreground)] truncate">{user.designation || user.role}</p>
+                        </div>
+                      </div>
+                      <div className={cn(
+                        'w-4 h-4 rounded border flex items-center justify-center transition-colors',
+                        isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-400'
+                      )}>
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </Modal>
