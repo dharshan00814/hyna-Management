@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Radio, Users, Clock, Laptop, Filter, RefreshCw, Search,
   CheckCircle2, AlertCircle, Coffee, PowerOff, FileCode, GitBranch,
-  Layers, ChevronRight, Eye, Calendar, Sparkles, ShieldCheck, Terminal
+  Layers, ChevronRight, Eye, Calendar, Sparkles, ShieldCheck, Terminal, X, Play, Activity, Folder, ClipboardList, FileEdit
 } from 'lucide-react';
 import { StatCard, Avatar, Badge, Button, LoadingState, EmptyState } from '@/components/ui';
 import { useAuthStore } from '@/stores';
@@ -235,9 +235,9 @@ export function LiveDeveloperActivityPage() {
                 className="w-full text-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-foreground)]"
               >
                 <option value="all">All States ({cards.length})</option>
-                <option value="active">🟢 Active Only ({metrics.activeCount})</option>
-                <option value="idle">🟡 Idle Only ({metrics.idleCount})</option>
-                <option value="offline">⚪ Offline ({metrics.offlineCount})</option>
+                <option value="active">Active Only ({metrics.activeCount})</option>
+                <option value="idle">Idle Only ({metrics.idleCount})</option>
+                <option value="offline">Offline ({metrics.offlineCount})</option>
               </select>
             </div>
 
@@ -338,9 +338,9 @@ export function LiveDeveloperActivityPage() {
                         card.status === 'offline' && 'bg-zinc-500/10 text-zinc-500'
                       )}
                     >
-                      {card.status === 'active' && '🟢 Active'}
-                      {card.status === 'idle' && '🟡 Idle'}
-                      {card.status === 'offline' && '⚪ Offline'}
+                      {card.status === 'active' && <span className="flex items-center justify-center gap-1.5"><Radio className="w-3 h-3" /> Active</span>}
+                      {card.status === 'idle' && <span className="flex items-center justify-center gap-1.5"><Coffee className="w-3 h-3" /> Idle</span>}
+                      {card.status === 'offline' && <span className="flex items-center justify-center gap-1.5"><PowerOff className="w-3 h-3" /> Offline</span>}
                     </span>
                     <span className="block text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
                       {card.lastActivityAgo}
@@ -551,7 +551,7 @@ export function LiveDeveloperActivityPage() {
                 onClick={() => setTimelineUser(null)}
                 className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -584,14 +584,14 @@ export function LiveDeveloperActivityPage() {
                         />
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-[var(--color-foreground)]">
-                            {evt.eventType === 'session_started' && '🟢 Session started'}
-                            {evt.eventType === 'session_heartbeat' && '⚡ Heartbeat'}
-                            {evt.eventType === 'file_activity' && '📝 File activity'}
-                            {evt.eventType === 'workspace_changed' && '📂 Workspace changed'}
-                            {evt.eventType === 'task_started' && '📋 Task started'}
-                            {evt.eventType === 'idle' && '🟡 Idle status entered'}
-                            {evt.eventType === 'active' && '🟢 Active status resumed'}
-                            {evt.eventType === 'session_ended' && '⚪ Session ended'}
+                            {evt.eventType === 'session_started' && <span className="flex items-center gap-1.5"><Play className="w-3.5 h-3.5 text-emerald-500" /> Session started</span>}
+                            {evt.eventType === 'session_heartbeat' && <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-[var(--color-primary)]" /> Heartbeat</span>}
+                            {evt.eventType === 'file_activity' && <span className="flex items-center gap-1.5"><FileEdit className="w-3.5 h-3.5 text-amber-500" /> File activity</span>}
+                            {evt.eventType === 'workspace_changed' && <span className="flex items-center gap-1.5"><Folder className="w-3.5 h-3.5 text-blue-500" /> Workspace changed</span>}
+                            {evt.eventType === 'task_started' && <span className="flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5 text-violet-500" /> Task started</span>}
+                            {evt.eventType === 'idle' && <span className="flex items-center gap-1.5"><Coffee className="w-3.5 h-3.5 text-amber-500" /> Idle status entered</span>}
+                            {evt.eventType === 'active' && <span className="flex items-center gap-1.5"><Radio className="w-3.5 h-3.5 text-emerald-500" /> Active status resumed</span>}
+                            {evt.eventType === 'session_ended' && <span className="flex items-center gap-1.5"><PowerOff className="w-3.5 h-3.5 text-zinc-400" /> Session ended</span>}
                           </span>
                           <span className="text-[11px] text-[var(--color-muted-foreground)] font-mono">
                             {timeStr}

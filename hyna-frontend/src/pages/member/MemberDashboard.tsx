@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckSquare, Clock, CheckCircle2, Send, Video, ArrowRight,
-  Check, Edit3, Calendar,
+  Check, Edit3, Calendar, Hand, PartyPopper
 } from 'lucide-react';
 import { StatCard, AvatarGroup, Badge, Button, Textarea, LoadingState } from '@/components/ui';
 import { cn, getGreeting, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
@@ -116,7 +116,10 @@ export function MemberDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'} 👋</h1>
+        <h1 className="page-title flex items-center gap-2">
+          {getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'}
+          <Hand className="w-6 h-6 text-yellow-500" />
+        </h1>
         <p className="page-description">Here's your work overview for today.</p>
       </div>
 
@@ -132,7 +135,7 @@ export function MemberDashboard() {
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Today's tasks */}
-          <div className="card p-6 animate-slide-up">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold">Today's Tasks</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/member/tasks')}>
@@ -141,7 +144,9 @@ export function MemberDashboard() {
             </div>
             <div className="space-y-1">
               {todayTasks.length === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)] py-4 text-center">No tasks for today 🎉</p>
+                <p className="text-sm text-[var(--color-muted-foreground)] py-4 flex items-center justify-center gap-2">
+                  No tasks for today <PartyPopper className="w-4 h-4 text-emerald-500" />
+                </p>
               ) : (
                 todayTasks.map((task) => (
                   <div
@@ -181,7 +186,7 @@ export function MemberDashboard() {
           </div>
 
           {/* Daily work report */}
-          <div className="card p-6 animate-slide-up stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center gap-2 mb-4">
               <Edit3 className="w-4 h-4 text-[var(--color-primary)]" />
               <h2 className="text-base font-semibold">Today's Work Report</h2>
@@ -204,7 +209,7 @@ export function MemberDashboard() {
         {/* Right column */}
         <div className="space-y-6">
           {/* Daily check-in */}
-          <div className="card p-6 animate-slide-in-right">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
             <div className="text-center py-4">
               {isCheckedIn ? (
@@ -256,7 +261,7 @@ export function MemberDashboard() {
           </div>
 
           {/* Upcoming meetings */}
-          <div className="card p-6 animate-slide-in-right stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
             </div>
@@ -292,7 +297,7 @@ export function MemberDashboard() {
           </div>
 
           {/* My activity summary */}
-          <div className="card p-6 animate-slide-in-right stagger-2">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
             <h2 className="text-base font-semibold mb-4">Activity Summary</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">

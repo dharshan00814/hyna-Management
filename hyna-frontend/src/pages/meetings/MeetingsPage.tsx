@@ -4,9 +4,27 @@ import { Plus, Clock, Video, Users, Check, Copy, ExternalLink, Link2 } from 'luc
 import { Button, Avatar, Badge, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getMeetings, createMeeting, getUsers, getUserById } from '@/services/api';
+import { getMeetings, createMeeting, getUsers, getUserById, createNotification } from '@/services/api';
 import { toast } from 'sonner';
 import type { Meeting, MeetingType, User } from '@/types';
+
+const generateTimeOptions = () => {
+  const options = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const hh = h.toString().padStart(2, '0');
+      const mm = m.toString().padStart(2, '0');
+      const value = `${hh}:${mm}`;
+      const isPM = h >= 12;
+      const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const label = `${displayH}:${mm} ${isPM ? 'PM' : 'AM'}`;
+      options.push({ value, label });
+    }
+  }
+  return options;
+};
+
+const TIME_OPTIONS = generateTimeOptions();
 
 export function MeetingsPage() {
   const navigate = useNavigate();
@@ -66,6 +84,20 @@ export function MeetingsPage() {
         hostId,
         participantIds: participants,
       });
+
+      // Create notifications for invited members
+      for (const pId of participants) {
+        if (pId !== currentUser?.id) {
+          await createNotification({
+            userId: pId,
+            title: 'New Meeting Invitation',
+            message: `You have been invited to ${newMeeting.title} at ${newMeeting.startTime}`,
+            actionUrl: `${prefix}/meetings`,
+            type: 'calendar'
+          }).catch(() => {});
+        }
+      }
+
       setMeetings(prev => [...prev, created]);
       setCreatedLink(finalMeetingLink);
       setShowCreate(false);
@@ -324,17 +356,25 @@ export function MeetingsPage() {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <Select
               label="Start Time"
-              type="time"
               value={newMeeting.startTime}
-              onChange={(e) => setNewMeeting(m => ({ ...m, startTime: e.target.value }))}
+              options={TIME_OPTIONS}
+              onChange={(val) => {
+                const [hours, minutes] = val.split(':').map(Number);
+                const date = new Date();
+                date.setHours(hours, minutes + 30);
+                const endH = date.getHours().toString().padStart(2, '0');
+                const endM = date.getMinutes().toString().padStart(2, '0');
+                const endVal = `${endH}:${endM}`;
+                setNewMeeting(m => ({ ...m, startTime: val, endTime: endVal }));
+              }}
             />
-            <Input
+            <Select
               label="End Time"
-              type="time"
               value={newMeeting.endTime}
-              onChange={(e) => setNewMeeting(m => ({ ...m, endTime: e.target.value }))}
+              options={TIME_OPTIONS}
+              onChange={(val) => setNewMeeting(m => ({ ...m, endTime: val }))}
             />
           </div>
 
