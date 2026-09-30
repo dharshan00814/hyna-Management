@@ -143,6 +143,13 @@ CREATE POLICY "meeting_messages_delete" ON public.meeting_messages
   USING (
     sender_id = auth.uid()
     OR public.is_executive()
-  );
-
 COMMIT;
+
+-- 6. ENSURE meeting_status ENUM ACCEPTS 'live'
+DO $$
+BEGIN
+  ALTER TYPE public.meeting_status ADD VALUE IF NOT EXISTS 'live';
+EXCEPTION
+  WHEN others THEN null;
+END $$;
+

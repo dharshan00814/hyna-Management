@@ -292,6 +292,18 @@ export class WebRTCManager {
     }
   }
 
+  // Replace video track across all active peer connections (or clear if null)
+  public async replaceVideoTrack(newTrack: MediaStreamTrack | null): Promise<void> {
+    for (const [peerId, pc] of this.peerConnections) {
+      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (videoSender) {
+        await videoSender.replaceTrack(newTrack).catch(err => {
+          this.callbacks.onError(err, `replaceVideoTrack for ${peerId}`);
+        });
+      }
+    }
+  }
+
   // Cleanup a single peer
   public cleanupPeer(peerId: string): void {
     const pc = this.peerConnections.get(peerId);

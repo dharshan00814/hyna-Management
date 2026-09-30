@@ -194,13 +194,16 @@ export async function createNewMeeting(input: CreateMeetingInput): Promise<Meeti
         }));
 
         if (participantsToInsert.length > 0) {
-          await supabase
-            .from('meeting_participants')
-            .upsert(participantsToInsert, { onConflict: 'meeting_id,member_id' })
-            .catch(() => {
-              // Fallback retry with just meeting_id, member_id
-              supabase.from('meeting_participants').insert(participantsToInsert).catch(() => {});
-            });
+          try {
+            await supabase
+              .from('meeting_participants')
+              .upsert(participantsToInsert, { onConflict: 'meeting_id,member_id' });
+          } catch (partErr) {
+            console.warn('[MeetingService] Upsert participants failed, trying insert:', partErr);
+            try {
+              await supabase.from('meeting_participants').insert(participantsToInsert);
+            } catch (_) {}
+          }
         }
 
         // Notify invited participants
@@ -230,8 +233,11 @@ export async function updateMeetingStatus(meetingId: string, status: MeetingStat
   if (!isSupabaseConfigured() || !meetingId) return false;
 
   try {
+    // PostgreSQL enum meeting_status: ('scheduled', 'in-progress', 'completed', 'cancelled')
+    const dbStatus = (status as string) === 'live' ? 'in-progress' : status;
+
     const updates: Record<string, any> = {
-      status,
+      status: dbStatus,
       updated_at: new Date().toISOString(),
     };
 
@@ -317,12 +323,13 @@ export async function recordParticipantJoined(meetingId: string, memberId: strin
         .single();
 
       // Also update participant status in meeting_participants
-      await supabase
-        .from('meeting_participants')
-        .update({ status: 'joined', joined_at: now })
-        .eq('meeting_id', meetingId)
-        .or(`member_id.eq.${memberId},user_id.eq.${memberId}`)
-        .catch(() => {});
+      try {
+        await supabase
+          .from('meeting_participants')
+          .update({ status: 'joined', joined_at: now })
+          .eq('meeting_id', meetingId)
+          .or(`member_id.eq.${memberId},user_id.eq.${memberId}`);
+      } catch (_) {}
 
       if (!error && data) {
         return {
@@ -374,15 +381,16 @@ export async function recordParticipantLeft(meetingId: string, memberId: string)
       .eq('id', record.id);
 
     // Update meeting_participants
-    await supabase
-      .from('meeting_participants')
-      .update({
-        status: 'left',
-        left_at: leftTime.toISOString(),
-      })
-      .eq('meeting_id', meetingId)
-      .or(`member_id.eq.${memberId},user_id.eq.${memberId}`)
-      .catch(() => {});
+    try {
+      await supabase
+        .from('meeting_participants')
+        .update({
+          status: 'left',
+          left_at: leftTime.toISOString(),
+        })
+        .eq('meeting_id', meetingId)
+        .or(`member_id.eq.${memberId},user_id.eq.${memberId}`);
+    } catch (_) {}
 
     return !error;
   } catch (err) {

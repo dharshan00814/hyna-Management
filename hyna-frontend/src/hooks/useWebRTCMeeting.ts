@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { WebRTCManager } from '@/services/webrtc/WebRTCManager';
 import { SupabaseSignalingService } from '@/services/signaling/SupabaseSignalingService';
 import { updateMeetingStatus } from '@/services/meetingService';
+import { toast } from 'sonner';
 import type { 
   Meeting, 
   ParticipantState, 
@@ -129,7 +130,7 @@ export function useWebRTCMeeting({
           autoGainControl: true,
           ...(selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : {}),
         },
-        video: !isAudioOnly
+        video: (!isAudioOnly && activeVideo)
           ? {
               width: { ideal: 1280, max: 1920 },
               height: { ideal: 720, max: 1080 },
@@ -523,22 +524,70 @@ export function useWebRTCMeeting({
     signalingServiceRef.current?.updatePresence({ micEnabled: nextState });
   }, [micEnabled, localUserId, localUserName]);
 
-  const toggleCamera = useCallback(() => {
+  const toggleCamera = useCallback(async () => {
     if (meeting?.meetingType === 'audio') return;
 
     const nextState = !videoEnabled;
-    setVideoEnabled(nextState);
-    webrtcManagerRef.current?.setVideoEnabled(nextState);
 
-    signalingServiceRef.current?.sendSignal({
-      type: 'CAMERA_CHANGED',
-      senderId: localUserId,
-      senderName: localUserName,
-      videoEnabled: nextState,
-    });
+    if (!nextState) {
+      // 1. Physically shut down laptop webcam hardware
+      setVideoEnabled(false);
 
-    signalingServiceRef.current?.updatePresence({ videoEnabled: nextState });
-  }, [meeting?.meetingType, videoEnabled, localUserId, localUserName]);
+      if (localStream) {
+        localStream.getVideoTracks().forEach(track => {
+          track.stop();
+          localStream.removeTrack(track);
+        });
+      }
+
+      // Tell peers to stop rendering our video track
+      await webrtcManagerRef.current?.replaceVideoTrack(null);
+
+      signalingServiceRef.current?.sendSignal({
+        type: 'CAMERA_CHANGED',
+        senderId: localUserId,
+        senderName: localUserName,
+        videoEnabled: false,
+      });
+
+      signalingServiceRef.current?.updatePresence({ videoEnabled: false });
+    } else {
+      // 2. Turn camera hardware back ON with a fresh track
+      try {
+        const videoConstraints: MediaTrackConstraints = {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 30 },
+          ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}),
+        };
+
+        const freshVideoStream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false,
+        });
+
+        const newVideoTrack = freshVideoStream.getVideoTracks()[0];
+        if (newVideoTrack && localStream) {
+          localStream.addTrack(newVideoTrack);
+          await webrtcManagerRef.current?.replaceVideoTrack(newVideoTrack);
+        }
+
+        setVideoEnabled(true);
+
+        signalingServiceRef.current?.sendSignal({
+          type: 'CAMERA_CHANGED',
+          senderId: localUserId,
+          senderName: localUserName,
+          videoEnabled: true,
+        });
+
+        signalingServiceRef.current?.updatePresence({ videoEnabled: true });
+      } catch (err) {
+        console.error('[useWebRTCMeeting] Error re-enabling camera:', err);
+        toast.error('Unable to access camera device.');
+      }
+    }
+  }, [meeting?.meetingType, videoEnabled, localStream, selectedCameraId, localUserId, localUserName]);
 
   // Screen Sharing Toggle
   const toggleScreenShare = useCallback(async () => {
@@ -602,7 +651,17 @@ export function useWebRTCMeeting({
 
   // Leave Meeting (normal participant)
   const leaveMeeting = useCallback(async () => {
-    // Teardown WebRTC & Signaling
+    // 1. Stop all local tracks immediately so camera hardware shuts down
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      setLocalStream(null);
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(t => t.stop());
+      screenStreamRef.current = null;
+    }
+
+    // 2. Teardown WebRTC & Signaling
     webrtcManagerRef.current?.cleanupAll();
     await signalingServiceRef.current?.disconnect();
 
@@ -614,7 +673,7 @@ export function useWebRTCMeeting({
     }
 
     setOverallConnectionState('disconnected');
-  }, []);
+  }, [localStream]);
 
   // End Meeting for Everyone (host only)
   const endMeetingForEveryone = useCallback(async () => {
@@ -635,10 +694,16 @@ export function useWebRTCMeeting({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(t => t.stop());
+      }
       webrtcManagerRef.current?.cleanupAll();
       signalingServiceRef.current?.disconnect();
     };
-  }, []);
+  }, [localStream]);
 
   // Local Participant State object for UI
   const localParticipantState: ParticipantState = useMemo(() => ({

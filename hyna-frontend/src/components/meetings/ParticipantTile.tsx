@@ -39,6 +39,7 @@ export function ParticipantTile({
   const hasVideoStream = Boolean(
     stream && 
     stream.getVideoTracks().length > 0 && 
+    stream.getVideoTracks().some(t => t.readyState === 'live') &&
     (participant.videoEnabled || participant.isScreenSharing)
   );
 

@@ -115,6 +115,13 @@ export function MeetingRoom() {
     }
   }, [meetingStage, isAudioOnly, permissionError, requestMedia, prejoinVideoEnabled, prejoinAudioEnabled]);
 
+  // Ensure camera hardware stops immediately if user navigates away or leaves page
+  useEffect(() => {
+    return () => {
+      stopLocalStream();
+    };
+  }, [stopLocalStream]);
+
   const isHost = useMemo(() => {
     if (!meeting || !currentUser) return false;
     return (
@@ -182,6 +189,8 @@ export function MeetingRoom() {
   // Join Action from Pre-Join Screen
   const handleJoin = async () => {
     try {
+      // 1. Physically STOP PreJoin preview stream so it never runs in the background
+      stopLocalStream();
       setMeetingStage('in-meeting');
       await startMeetingSession(prejoinVideoEnabled, prejoinAudioEnabled);
       toast.success('Joined meeting session');
@@ -292,10 +301,13 @@ export function MeetingRoom() {
         onToggleVideo={() => {
           setPrejoinVideoEnabled(prev => {
             const next = !prev;
-            if (localStream) {
-              localStream.getVideoTracks().forEach(t => {
-                t.enabled = next;
-              });
+            if (next) {
+              requestMedia(!isAudioOnly, prejoinAudioEnabled).catch(() => {});
+            } else {
+              // Physically turn off laptop camera hardware track in prejoin
+              if (localStream) {
+                localStream.getVideoTracks().forEach(t => t.stop());
+              }
             }
             return next;
           });
