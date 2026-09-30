@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileBottomNav } from './MobileBottomNav';
 import { CommandPalette } from './CommandPalette';
+import { PushNotificationPrompt } from '@/components/common/PushNotificationPrompt';
 import { useSidebarStore } from '@/stores';
 import { useRealtime } from '@/hooks/useRealtime';
 
@@ -28,6 +29,9 @@ export function AppLayout() {
 
       {/* Command palette (Ctrl+K) */}
       <CommandPalette />
+
+      {/* Non-intrusive Web Push prompt */}
+      <PushNotificationPrompt />
     </div>
   );
 }

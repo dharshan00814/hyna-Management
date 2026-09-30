@@ -279,10 +279,14 @@ export function Header() {
             </div>
             <div className="border-t border-[var(--color-border)] px-4 py-2">
               <button
-                onClick={() => { navigate(`/${currentRole === 'member' ? 'member' : 'admin'}/settings`); setShowNotifications(false); }}
+                onClick={() => {
+                  const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
+                  navigate(`${prefix}/settings`);
+                  setShowNotifications(false);
+                }}
                 className="text-xs text-[var(--color-primary)] font-medium hover:underline w-full text-center"
               >
-                View all notifications
+                View all notifications & preferences
               </button>
             </div>
           </div>

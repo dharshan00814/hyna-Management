@@ -26,6 +26,7 @@ import {
   getUserById,
   createNotification,
 } from '@/services/api';
+import { notifyStudioAnnouncement } from '@/services/notificationWorkflow';
 import type { Announcement, AnnouncementPriority } from '@/types';
 
 export function AnnouncementsPage() {
@@ -118,19 +119,12 @@ export function AnnouncementsPage() {
           (newAudience === 'all' || u.role === newAudience)
       );
 
-      for (const user of targetUsers) {
-        if (user.id !== currentUser?.id) {
-          const userPrefix =
-            user.role === 'admin' ? '/admin' : user.role === 'manager' ? '/manager' : '/member';
-          await createNotification({
-            userId: user.id,
-            title: `New Announcement: ${created.title}`,
-            message: 'Check the announcements board for details.',
-            actionUrl: `${userPrefix}/announcements`,
-            type: 'announcement',
-          });
-        }
-      }
+      // Dispatch Web Push notification broadcast to all subscribers
+      notifyStudioAnnouncement({
+        title: created.title,
+        message: created.content.slice(0, 120),
+        authorName: currentUser?.name,
+      }).catch(console.error);
 
       setAnnouncements((prev) => [created, ...prev]);
       toast.success('Announcement broadcasted successfully!');

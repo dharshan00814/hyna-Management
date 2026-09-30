@@ -7,6 +7,11 @@ import {
   getTasks, createTask, updateTask, submitTask, reviewTask, deleteTask,
   getProjects, getModules, getUsers, getUserById, createNotification
 } from '@/services/api';
+import {
+  notifyTaskAssigned,
+  notifyTaskSubmitted,
+  notifyTaskReviewed,
+} from '@/services/notificationWorkflow';
 import { toast } from 'sonner';
 import type { Task, TaskStatus, TaskPriority, Project, Module, User } from '@/types';
 
@@ -120,15 +125,14 @@ export function TasksPage() {
         assigneeId: newTask.assigneeId,
       });
 
-      // Notify the assigned member
+      // Notify the assigned member with native push
       if (newTask.assigneeId && newTask.assigneeId !== currentUser?.id) {
-        await createNotification({
-          userId: newTask.assigneeId,
-          title: 'New Task Assigned',
-          message: `You have been assigned: ${newTask.title}`,
-          actionUrl: '/member/tasks',
-          type: 'general'
-        });
+        notifyTaskAssigned({
+          id: created.id,
+          title: newTask.title,
+          assigneeId: newTask.assigneeId,
+          assignerName: currentUser?.name,
+        }).catch(console.error);
       }
 
       setTasks(prev => [created, ...prev]);
@@ -174,6 +178,13 @@ export function TasksPage() {
       setShowSubmit(null);
       setSubmitForm({ description: '', githubUrl: '', deploymentUrl: '', notes: '' });
       toast.success('Task submitted for review!');
+
+      // Notify managers via Web Push
+      notifyTaskSubmitted({
+        id: updated.id,
+        title: updated.title,
+        submitterName: currentUser?.name || 'Member',
+      }).catch(console.error);
     } catch (err) {
       toast.error('Failed to submit task');
     }
@@ -185,6 +196,17 @@ export function TasksPage() {
       setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
       setShowDetail(null);
       toast.success(action === 'approve' ? 'Task approved!' : 'Changes requested');
+
+      // Notify the task assignee
+      if (updated.assigneeId) {
+        notifyTaskReviewed({
+          id: updated.id,
+          title: updated.title,
+          approved: action === 'approve',
+          reviewerName: currentUser?.name || 'Reviewer',
+          assigneeId: updated.assigneeId,
+        }).catch(console.error);
+      }
     } catch (err) {
       toast.error('Failed to process review');
     }

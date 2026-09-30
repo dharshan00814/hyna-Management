@@ -6,6 +6,7 @@ import {
   Monitor,
   Shield,
   Bell,
+  BellOff,
   Building,
   Key,
   Save,
@@ -21,11 +22,21 @@ import {
   Sparkles,
   Loader2,
   Link as LinkIcon,
+  Send,
+  AlertCircle,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Avatar } from '@/components/ui';
 import { useAuthStore, useThemeStore } from '@/stores';
 import { updateUserProfile, uploadAvatar } from '@/services/api';
+import { useWebPush } from '@/hooks/useWebPush';
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from '@/services/pushNotificationService';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -59,11 +70,53 @@ export function SettingsPage() {
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Notifications state
-  const [emailAlerts, setEmailAlerts] = useState(true);
-  const [taskAssignments, setTaskAssignments] = useState(true);
-  const [meetingReminders, setMeetingReminders] = useState(true);
-  const [announcementsAlert, setAnnouncementsAlert] = useState(true);
+  // Native Web Push Hook
+  const {
+    isSupported: isPushSupported,
+    permission: pushPermission,
+    isSubscribed: isDeviceSubscribed,
+    isLoading: isPushLoading,
+    enablePush,
+    disablePush,
+    sendTest: sendTestPush,
+  } = useWebPush();
+
+  // Notification Preferences State (Synchronized with Supabase)
+  const [preferences, setPreferences] = useState<NotificationPreferences>({
+    push_enabled: true,
+    tasks_enabled: true,
+    projects_enabled: true,
+    modules_enabled: true,
+    meetings_enabled: true,
+    attendance_enabled: true,
+    announcements_enabled: true,
+    events_enabled: true,
+    quiet_hours_enabled: false,
+    quiet_hours_start: '22:00:00',
+    quiet_hours_end: '08:00:00',
+  });
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(false);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      setIsLoadingPrefs(true);
+      getNotificationPreferences(currentUser.id)
+        .then((p) => setPreferences(p))
+        .finally(() => setIsLoadingPrefs(false));
+    }
+  }, [currentUser?.id]);
+
+  const handleTogglePreference = async (key: keyof NotificationPreferences, value: any) => {
+    if (!currentUser?.id) return;
+    const updated = { ...preferences, [key]: value };
+    setPreferences(updated);
+    try {
+      await updateNotificationPreferences(currentUser.id, { [key]: value });
+      toast.success('Notification preference saved');
+    } catch {
+      toast.error('Failed to update preference');
+    }
+  };
 
   // Security state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -533,37 +586,282 @@ export function SettingsPage() {
 
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
-        <div className="card p-6 border border-[var(--color-border)] bg-[var(--color-card)] rounded-xl space-y-6">
-          <div>
-            <h3 className="font-semibold text-base mb-1">Email & In-App Alerts</h3>
-            <p className="text-xs text-[var(--color-muted-foreground)]">
-              Configure which updates and alerts you wish to receive in real-time.
+        <div className="space-y-6">
+          {/* 1. Device Push Notification Status & Controls Card */}
+          <div className="card p-6 border border-[var(--color-border)] bg-[var(--color-card)] rounded-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--color-border)]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-[var(--color-primary)]" />
+                  <h3 className="font-bold text-base text-[var(--color-foreground)]">Browser Push Notifications</h3>
+                </div>
+                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+                  Hardware-level native push notifications delivered directly to this browser using W3C Push API and VAPID.
+                </p>
+              </div>
+
+              {/* Status Badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={cn(
+                  'px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1.5',
+                  !isPushSupported
+                    ? 'bg-red-500/10 text-red-500 border border-red-500/20'
+                    : isDeviceSubscribed
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                    : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20'
+                )}>
+                  <span className={cn('w-2 h-2 rounded-full', isDeviceSubscribed ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400')} />
+                  {isDeviceSubscribed ? 'Subscribed & Active' : isPushSupported ? 'Ready to Enable' : 'Unsupported Browser'}
+                </span>
+                
+                <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-muted)] text-[var(--color-muted-foreground)] border border-[var(--color-border)]">
+                  Permission: <strong className="capitalize text-[var(--color-foreground)]">{pushPermission}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Browser Permission Denied Warning */}
+            {pushPermission === 'denied' && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-semibold text-amber-800 dark:text-amber-200">
+                    Notifications are blocked in your browser settings
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-300/90 leading-relaxed">
+                    To receive updates for task assignments, meeting alerts, and announcements:
+                    click the <strong>Lock / Settings</strong> icon in your browser's address bar next to the URL, change <strong>Notifications</strong> to <strong>Allow</strong>, and reload the page.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Device Actions */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
+              <div className="text-xs text-[var(--color-muted-foreground)]">
+                {isDeviceSubscribed ? (
+                  <span>This browser is registered to receive encrypted background alerts even when the tab is closed.</span>
+                ) : (
+                  <span>Enable push to get notified instantly when tasks are assigned, meetings start, or announcements arrive.</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {!isDeviceSubscribed ? (
+                  <Button
+                    type="button"
+                    onClick={enablePush}
+                    disabled={isPushLoading || !isPushSupported || pushPermission === 'denied'}
+                    className="gap-2 cursor-pointer text-xs"
+                  >
+                    {isPushLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+                    Enable Push on This Device
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={sendTestPush}
+                      disabled={isPushLoading}
+                      className="gap-1.5 cursor-pointer text-xs"
+                    >
+                      <Send className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                      Send Test Push
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={disablePush}
+                      disabled={isPushLoading}
+                      className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer text-xs"
+                    >
+                      <BellOff className="w-3.5 h-3.5" />
+                      Unsubscribe This Device
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <p className="text-[11px] text-[var(--color-muted-foreground)]/80 italic border-t border-[var(--color-border)] pt-3">
+              Note: Unsubscribing this device only removes this specific browser. Your other registered phones or laptops remain active.
             </p>
           </div>
 
-          <div className="space-y-4">
-            {[
-              { label: 'Email Digest & Critical Alerts', desc: 'Receive high priority announcements to your registered inbox', state: emailAlerts, set: setEmailAlerts },
-              { label: 'Task Assignments & Reviews', desc: 'Notify when assigned a new task or when task submissions are reviewed', state: taskAssignments, set: setTaskAssignments },
-              { label: 'Meeting Reminders', desc: 'Get alerts 10 minutes prior to scheduled standups and team syncs', state: meetingReminders, set: setMeetingReminders },
-              { label: 'Broadcast Announcements', desc: 'Push notification when management issues studio-wide notices', state: announcementsAlert, set: setAnnouncementsAlert },
-            ].map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between py-3 border-b border-[var(--color-border)] last:border-0">
+          {/* 2. Notification Preferences by Category */}
+          <div className="card p-6 border border-[var(--color-border)] bg-[var(--color-card)] rounded-xl space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)]">
+              <div>
+                <h3 className="font-bold text-base text-[var(--color-foreground)]">Notification Preferences</h3>
+                <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">
+                  Customize which notifications and reminders are delivered across your devices.
+                </p>
+              </div>
+
+              {/* Master Push Toggle */}
+              <div className="flex items-center gap-3 bg-[var(--color-muted)] px-3 py-1.5 rounded-lg border border-[var(--color-border)]">
+                <span className="text-xs font-semibold text-[var(--color-foreground)]">Global Push</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.push_enabled}
+                  onChange={(e) => handleTogglePreference('push_enabled', e.target.checked)}
+                  className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
+                  title="Toggle all push notifications"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  key: 'tasks_enabled',
+                  label: 'Task Assignments & Status',
+                  desc: 'Alerts when assigned new tasks, deadline approaching, or task review completed',
+                  checked: preferences.tasks_enabled,
+                },
+                {
+                  key: 'projects_enabled',
+                  label: 'Project Updates & Milestones',
+                  desc: 'Notifies when added to a project, project status changes, or milestone reached',
+                  checked: preferences.projects_enabled,
+                },
+                {
+                  key: 'modules_enabled',
+                  label: 'Module Deliverables & Reviews',
+                  desc: 'Notifications when modules are assigned, submitted, or sent back for revision',
+                  checked: preferences.modules_enabled,
+                },
+                {
+                  key: 'meetings_enabled',
+                  label: 'Meeting Invitations & Reminders',
+                  desc: 'Upcoming standup alerts 10 minutes prior, room updates, and calendar invites',
+                  checked: preferences.meetings_enabled,
+                },
+                {
+                  key: 'attendance_enabled',
+                  label: 'Attendance & Check-in Reminders',
+                  desc: 'Daily check-in reminder at start of shift and clock-out verification',
+                  checked: preferences.attendance_enabled,
+                },
+                {
+                  key: 'announcements_enabled',
+                  label: 'Studio Announcements & Broadcasts',
+                  desc: 'Official company bulletins and urgent management notifications',
+                  checked: preferences.announcements_enabled,
+                },
+                {
+                  key: 'events_enabled',
+                  label: 'Weekly Bash & Studio Events',
+                  desc: 'Weekly Bash schedules, hackathons, and company-wide events',
+                  checked: preferences.events_enabled,
+                },
+              ].map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between py-3 border-b border-[var(--color-border)] last:border-0"
+                >
+                  <div className="pr-4">
+                    <p className="text-sm font-medium text-[var(--color-foreground)]">{item.label}</p>
+                    <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">{item.desc}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={item.checked}
+                    onChange={(e) => handleTogglePreference(item.key as any, e.target.checked)}
+                    className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
+                  />
+                </div>
+              ))}
+
+              {/* Mandatory Security Notice Row */}
+              <div className="flex items-center justify-between py-3 bg-[var(--color-muted)]/40 px-4 rounded-xl border border-[var(--color-border)]">
                 <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-[var(--color-muted-foreground)]">{item.desc}</p>
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-emerald-500" />
+                    <p className="text-sm font-semibold text-[var(--color-foreground)]">System & Security Notices</p>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      Mandatory
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5">
+                    Critical account alerts, security warnings, and role updates cannot be disabled.
+                  </p>
                 </div>
                 <input
                   type="checkbox"
-                  checked={item.state}
-                  onChange={(e) => {
-                    item.set(e.target.checked);
-                    toast.success('Notification preference saved');
-                  }}
-                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  checked={true}
+                  disabled={true}
+                  className="w-4 h-4 rounded text-zinc-400 cursor-not-allowed opacity-60"
                 />
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* 3. Quiet Hours (Do Not Disturb) Card */}
+          <div className="card p-6 border border-[var(--color-border)] bg-[var(--color-card)] rounded-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--color-border)]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Moon className="w-5 h-5 text-indigo-500" />
+                  <h3 className="font-bold text-base text-[var(--color-foreground)]">Quiet Hours (Do Not Disturb)</h3>
+                </div>
+                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+                  Mute routine task and meeting alerts during off-work hours or while resting.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-[var(--color-foreground)]">Enable</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.quiet_hours_enabled}
+                  onChange={(e) => handleTogglePreference('quiet_hours_enabled', e.target.checked)}
+                  className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {preferences.quiet_hours_enabled && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-slide-up">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--color-foreground)]">
+                    Quiet Hours Start Time
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                    <input
+                      type="time"
+                      value={preferences.quiet_hours_start?.slice(0, 5) || '22:00'}
+                      onChange={(e) => handleTogglePreference('quiet_hours_start', e.target.value + ':00')}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1.5 text-[var(--color-foreground)]">
+                    Quiet Hours End Time
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[var(--color-muted-foreground)]" />
+                    <input
+                      type="time"
+                      value={preferences.quiet_hours_end?.slice(0, 5) || '08:00'}
+                      onChange={(e) => handleTogglePreference('quiet_hours_end', e.target.value + ':00')}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              During quiet hours, routine notifications will still be safely logged in your in-app notification center, but device popups and vibration will be suppressed.
+            </p>
           </div>
         </div>
       )}

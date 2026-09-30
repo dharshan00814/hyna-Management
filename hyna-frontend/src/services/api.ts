@@ -9,6 +9,7 @@ import type {
   DailyReport, Notification, ChatChannel, ChatMessage,
   FileItem, Folder, LeaveRequest, Announcement,
 } from '@/types';
+import { notifyCheckInSuccess, notifyMeetingScheduled } from '@/services/notificationWorkflow';
 
 // In-memory cache for synchronous lookups (e.g. getUserById in UI rendering)
 let usersCache: User[] = [];
@@ -178,14 +179,14 @@ function mapDailyReport(row: any): DailyReport {
 function mapNotification(row: any): Notification {
   return {
     id: row.id,
-    type: row.type,
-    title: row.title,
-    message: row.message,
-    userId: row.user_id,
-    read: row.read,
+    type: row.type || 'general',
+    title: row.title || 'Notification',
+    message: row.message || row.body || '',
+    userId: row.user_id || row.member_id || '',
+    read: Boolean(row.read || row.is_read || row.read_at),
     createdAt: row.created_at,
-    actionUrl: row.action_url,
-    icon: row.icon,
+    actionUrl: row.action_url || row.link || row.data?.actionUrl || row.data?.url || '',
+    icon: row.icon || row.data?.icon,
   };
 }
 
@@ -1237,6 +1238,20 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
     .single();
 
   if (error) throw error;
+  
+  if (insertPayload.participant_ids?.length) {
+    const attendees = insertPayload.participant_ids.filter((id: string) => id !== currentUserId);
+    if (attendees.length > 0) {
+      notifyMeetingScheduled({
+        id: data.id,
+        title: data.title,
+        date: data.date,
+        time: data.start_time,
+        attendeeIds: attendees,
+      }).catch(console.error);
+    }
+  }
+
   return mapMeeting(data);
 }
 
@@ -1403,6 +1418,13 @@ export async function checkIn(userId: string): Promise<AttendanceRecord> {
       console.warn('Supabase check-in rejected (using local session fallback):', error);
       return fallbackRecord;
     }
+
+    // Trigger instant device push confirmation
+    notifyCheckInSuccess({
+      memberId: userId,
+      checkInTime: timeNow,
+    }).catch(console.error);
+
     return mapAttendance(data);
   } catch (err) {
     console.warn('Check-in network error (using local session fallback):', err);
@@ -1519,6 +1541,7 @@ export async function submitDailyReport(report: Partial<DailyReport>): Promise<D
 // NOTIFICATIONS API
 // ============================================================
 export async function createNotification(notification: any): Promise<void> {
+  if (!isSupabaseConfigured() || !isValidUuid(notification.userId)) return;
   const payload = {
     user_id: notification.userId,
     title: notification.title,
@@ -1532,29 +1555,39 @@ export async function createNotification(notification: any): Promise<void> {
   const { error } = await supabase.from('notifications').insert([payload]);
   if (error) console.error('Failed to create notification:', error);
 }
+
 export async function getNotifications(userId?: string): Promise<Notification[]> {
   if (!isSupabaseConfigured()) return [];
   let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
-  if (userId) {
-    query = query.or(`user_id.eq.${userId},user_id.eq.all`);
+  if (userId && isValidUuid(userId)) {
+    query = query.eq('user_id', userId);
   }
   const { data, error } = await query;
-  if (error) return [];
+  if (error) {
+    console.warn('Error fetching notifications:', error);
+    return [];
+  }
   return (data || []).map(mapNotification);
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  if (isSupabaseConfigured()) {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
+  if (isSupabaseConfigured() && isValidUuid(id)) {
+    await supabase.from('notifications').update({ 
+      is_read: true,
+      read_at: new Date().toISOString()
+    }).eq('id', id);
   }
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  if (isSupabaseConfigured()) {
+  if (isSupabaseConfigured() && isValidUuid(userId)) {
     await supabase
       .from('notifications')
-      .update({ read: true })
-      .or(`user_id.eq.${userId},user_id.eq.all`);
+      .update({ 
+        is_read: true,
+        read_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
   }
 }
 
