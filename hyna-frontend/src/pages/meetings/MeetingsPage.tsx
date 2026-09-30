@@ -231,8 +231,6 @@ export function MeetingsPage() {
               onChange={(e) => setNewMeeting(m => ({ ...m, endTime: e.target.value }))}
             />
           </div>
-          </div>
-        </div>
       </Modal>
 
       <Modal
