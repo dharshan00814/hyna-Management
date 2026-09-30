@@ -30,8 +30,10 @@ const DEFAULT_MEETINGS: Meeting[] = [
     hostId: 'EMP-001',
     participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-009', 'EMP-010', 'EMP-011'],
     type: 'standup',
+    meetingType: 'video',
+    meetingRoomId: 'room-standup-daily',
     isRecurring: true,
-    meetingLink: 'https://meet.google.com/new',
+    meetingLink: '/meeting/room-standup-daily',
     status: 'scheduled',
     notes: 'Please review your active task board cards before joining.',
   },
@@ -45,8 +47,10 @@ const DEFAULT_MEETINGS: Meeting[] = [
     hostId: 'EMP-001',
     participantIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-006', 'EMP-008'],
     type: 'review',
+    meetingType: 'video',
+    meetingRoomId: 'room-product-review',
     isRecurring: false,
-    meetingLink: 'https://meet.google.com/new',
+    meetingLink: '/meeting/room-product-review',
     status: 'scheduled',
     notes: 'Live walkthrough of activity tracking metrics and deliverables.',
   },
@@ -60,11 +64,13 @@ const DEFAULT_MEETINGS: Meeting[] = [
     hostId: 'EMP-004',
     participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-010', 'EMP-011'],
     type: 'planning',
+    meetingType: 'video',
+    meetingRoomId: 'room-arch-planning',
     isRecurring: true,
-    meetingLink: 'https://meet.google.com/new',
+    meetingLink: '/meeting/room-arch-planning',
     status: 'scheduled',
-    notes: 'Review database indexes and realtime connection pooling.',
-  }
+    notes: 'Live walkthrough of WebRTC peer connection manager and database schemas.',
+  },
 ];
 
 function initMeetingsCache(): Meeting[] {
@@ -207,6 +213,7 @@ function mapTask(row: any): Task {
 
 // Helper: Transform Meeting row to Frontend Meeting
 function mapMeeting(row: any): Meeting {
+  const roomId = row.meeting_room_id || row.id;
   return {
     id: row.id,
     title: row.title || '',
@@ -214,13 +221,21 @@ function mapMeeting(row: any): Meeting {
     date: row.date || '',
     startTime: row.start_time || '',
     endTime: row.end_time || '',
-    hostId: row.host_id || '',
+    hostId: row.host_id || row.created_by || '',
+    createdBy: row.created_by || row.host_id,
     participantIds: row.participant_ids || [],
     type: row.type || 'team',
+    meetingType: (row.meeting_type as any) || 'video',
+    meetingRoomId: roomId,
     isRecurring: row.is_recurring ?? false,
-    meetingLink: row.meeting_link || '',
+    meetingLink: row.meeting_link || `/meeting/${roomId}`,
     notes: row.notes || '',
     status: row.status || 'scheduled',
+    scheduledAt: row.scheduled_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 

@@ -114,21 +114,8 @@ export interface TaskSubmission {
 }
 
 // --- Meeting ---
-export interface Meeting {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  hostId: string;
-  participantIds: string[];
-  type: MeetingType;
-  isRecurring: boolean;
-  meetingLink?: string;
-  notes?: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
-}
+export * from './meeting';
+
 
 // --- Attendance ---
 export interface AttendanceRecord {

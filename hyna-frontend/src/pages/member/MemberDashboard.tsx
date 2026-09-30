@@ -299,39 +299,34 @@ export function MemberDashboard() {
                         {meeting.participantIds.length} participants
                       </span>
                     </div>
-                    {meeting.meetingLink ? (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full mt-3 text-xs" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const link = (meeting.meetingLink || '').trim();
-                          if (link.startsWith('http://') || link.startsWith('https://')) {
-                            window.open(link, '_blank', 'noopener,noreferrer');
-                          } else if (link.includes('meet.google.com') || link.includes('zoom.us')) {
-                            window.open(`https://${link}`, '_blank', 'noopener,noreferrer');
-                          } else {
-                            navigate(`/member/meetings/${meeting.id}`);
-                          }
-                        }}
-                      >
-                        <Video className="w-3.5 h-3.5 mr-1" />
-                        {meeting.meetingLink.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
-                      </Button>
-                    ) : (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="w-full mt-2 text-xs text-indigo-600 dark:text-indigo-400"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/member/meetings/${meeting.id}`);
-                        }}
-                      >
-                        View Details →
-                      </Button>
-                    )}
+                    {(() => {
+                      const isLive = meeting.status === 'live' || meeting.status === 'in-progress';
+                      const link = (meeting.meetingLink || '').trim();
+                      const isExternal = link.startsWith('http://') || link.startsWith('https://');
+                      const roomId = meeting.meetingRoomId || (link.includes('/meeting/') ? link.split('/meeting/')[1] : meeting.id);
+
+                      return (
+                        <Button 
+                          variant={isLive ? "primary" : "outline"} 
+                          size="sm" 
+                          className={cn(
+                            "w-full mt-3 text-xs font-semibold",
+                            isLive && "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isExternal) {
+                              window.open(link, '_blank', 'noopener,noreferrer');
+                            } else {
+                              navigate(`/meeting/${roomId}`);
+                            }
+                          }}
+                        >
+                          <Video className="w-3.5 h-3.5 mr-1" />
+                          {isLive ? 'Join Now (Live)' : link.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
+                        </Button>
+                      );
+                    })()}
                   </div>
                 ))
               )}

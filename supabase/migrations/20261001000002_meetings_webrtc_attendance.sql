@@ -1,6 +1,6 @@
 -- ====================================================================
 -- HYNA STUDIO: GROUP VIDEO & AUDIO MEETINGS + WEBRTC + ATTENDANCE MIGRATION
--- Run this script in your Supabase Dashboard -> SQL Editor
+-- Migration: 20261001000002_meetings_webrtc_attendance.sql
 -- Fully idempotent and resilient against pre-existing tables/columns
 -- ====================================================================
 
