@@ -11,23 +11,44 @@ import {
   Tag,
   CheckCircle2,
   Clock,
+  Trash2,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Badge, Modal, EmptyState, Avatar, Input, Select, Textarea } from '@/components/ui';
 import { cn, formatDate, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getAnnouncements, createAnnouncement, getUsers, getUserById, createNotification } from '@/services/api';
+import {
+  getAnnouncements,
+  createAnnouncement,
+  deleteAnnouncement,
+  getUsers,
+  getUserById,
+  createNotification,
+} from '@/services/api';
 import type { Announcement, AnnouncementPriority } from '@/types';
 
 export function AnnouncementsPage() {
   const { currentRole, currentUser } = useAuthStore();
   const isAdmin = currentRole !== 'member';
 
+  // CEO Vignesh strictly identified: Only CEO has the privilege to delete announcements
+  const isCEO = Boolean(
+    currentUser?.name?.toLowerCase().includes('vignesh') ||
+    currentUser?.email?.toLowerCase().includes('vignesh') ||
+    currentUser?.designation?.toUpperCase() === 'CEO' ||
+    (currentUser as any)?.employeeId === 'EMP-001'
+  );
+
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Delete Announcement Modal State (CEO Only)
+  const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // New announcement form state
   const [newTitle, setNewTitle] = useState('');
@@ -49,7 +70,9 @@ export function AnnouncementsPage() {
       }
     }
     load();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filteredAnnouncements = announcements.filter((item) => {
@@ -89,25 +112,27 @@ export function AnnouncementsPage() {
       });
 
       const allUsers = await getUsers();
-      const targetUsers = allUsers.filter(u => 
-        u.status === 'active' && 
-        (newAudience === 'all' || u.role === newAudience)
+      const targetUsers = allUsers.filter(
+        (u) =>
+          u.status === 'active' &&
+          (newAudience === 'all' || u.role === newAudience)
       );
 
       for (const user of targetUsers) {
         if (user.id !== currentUser?.id) {
-          const userPrefix = user.role === 'admin' ? '/admin' : user.role === 'manager' ? '/manager' : '/member';
+          const userPrefix =
+            user.role === 'admin' ? '/admin' : user.role === 'manager' ? '/manager' : '/member';
           await createNotification({
             userId: user.id,
             title: `New Announcement: ${created.title}`,
             message: 'Check the announcements board for details.',
             actionUrl: `${userPrefix}/announcements`,
-            type: 'announcement'
+            type: 'announcement',
           });
         }
       }
 
-      setAnnouncements(prev => [created, ...prev]);
+      setAnnouncements((prev) => [created, ...prev]);
       toast.success('Announcement broadcasted successfully!');
       setIsCreateOpen(false);
       setNewTitle('');
@@ -116,6 +141,23 @@ export function AnnouncementsPage() {
       setNewAudience('all');
     } catch (err) {
       toast.error('Failed to create announcement');
+    }
+  };
+
+  // CEO Delete Handler
+  const handleConfirmDelete = async () => {
+    if (!announcementToDelete) return;
+    setIsDeleting(true);
+
+    try {
+      await deleteAnnouncement(announcementToDelete.id);
+      setAnnouncements((prev) => prev.filter((a) => a.id !== announcementToDelete.id));
+      toast.success(`Announcement "${announcementToDelete.title}" deleted successfully.`);
+      setAnnouncementToDelete(null);
+    } catch (err: any) {
+      toast.error('Failed to delete announcement: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -132,20 +174,32 @@ export function AnnouncementsPage() {
     }
   };
 
-  const urgentList = filteredAnnouncements.filter((a) => a.priority === 'urgent' || a.priority === 'high');
+  const urgentList = filteredAnnouncements.filter(
+    (a) => a.priority === 'urgent' || a.priority === 'high'
+  );
 
   return (
     <div className="page-container space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Announcements</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)]">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight">Announcements</h1>
+            {isCEO && (
+              <Badge variant="outline" className="border-amber-500/40 text-amber-500 text-[10px] uppercase font-mono">
+                CEO Vignesh &bull; Delete Enabled
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-[var(--color-muted-foreground)] mt-0.5">
             Official studio notices, technical updates, and organization broadcasts.
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 cursor-pointer">
+          <Button
+            onClick={() => setIsCreateOpen(true)}
+            className="gap-2 cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+          >
             <Plus className="w-4 h-4" />
             New Announcement
           </Button>
@@ -155,24 +209,39 @@ export function AnnouncementsPage() {
       {/* Featured / Urgent banner if any */}
       {urgentList.length > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-500/20">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-              <Megaphone className="w-5 h-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  Important Notice
-                </span>
-                {getPriorityBadge(urgentList[0].priority)}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                <Megaphone className="w-5 h-5" />
               </div>
-              <h3 className="font-semibold text-base text-[var(--color-foreground)]">
-                {urgentList[0].title}
-              </h3>
-              <p className="text-sm text-[var(--color-muted-foreground)] mt-1 line-clamp-2">
-                {urgentList[0].content}
-              </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Important Notice
+                  </span>
+                  {getPriorityBadge(urgentList[0].priority)}
+                </div>
+                <h3 className="font-semibold text-base text-[var(--color-foreground)]">
+                  {urgentList[0].title}
+                </h3>
+                <p className="text-sm text-[var(--color-muted-foreground)] mt-1 line-clamp-2">
+                  {urgentList[0].content}
+                </p>
+              </div>
             </div>
+
+            {/* CEO Delete Button on Featured Banner */}
+            {isCEO && (
+              <button
+                type="button"
+                onClick={() => setAnnouncementToDelete(urgentList[0])}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer self-start sm:self-center shrink-0"
+                title="Delete Announcement (CEO Vignesh Exclusive)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -232,9 +301,24 @@ export function AnnouncementsPage() {
                       Audience: {item.audience}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] shrink-0">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{formatRelativeTime(item.createdAt)}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{formatRelativeTime(item.createdAt)}</span>
+                    </div>
+
+                    {/* CEO Exclusive Delete Option */}
+                    {isCEO && (
+                      <button
+                        type="button"
+                        onClick={() => setAnnouncementToDelete(item)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer"
+                        title="Delete Announcement (CEO Vignesh Exclusive)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -270,59 +354,109 @@ export function AnnouncementsPage() {
         onClose={() => setIsCreateOpen(false)}
         size="md"
       >
-          <form onSubmit={handleCreate} className="space-y-4">
-            <Input
-              label="Title *"
-              placeholder="e.g. Q4 Sprint Goals & Tech Stack Upgrade"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              required
-            />
+        <form onSubmit={handleCreate} className="space-y-4">
+          <Input
+            label="Title *"
+            placeholder="e.g. Q4 Sprint Goals & Tech Stack Upgrade"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            required
+          />
 
-            <div className="grid grid-cols-2 gap-3">
-              <Select
-                label="Priority"
-                value={newPriority}
-                onChange={(val) => setNewPriority(val as AnnouncementPriority)}
-                options={[
-                  { value: 'normal', label: 'Normal' },
-                  { value: 'high', label: 'High' },
-                  { value: 'urgent', label: 'Urgent' },
-                  { value: 'low', label: 'Notice' },
-                ]}
-              />
-              <Select
-                label="Target Audience"
-                value={newAudience}
-                onChange={(val) => setNewAudience(val as any)}
-                options={[
-                  { value: 'all', label: 'Everyone' },
-                  { value: 'member', label: 'Members Only' },
-                  { value: 'manager', label: 'Managers' },
-                  { value: 'admin', label: 'Admins' },
-                ]}
-              />
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Priority"
+              value={newPriority}
+              onChange={(val) => setNewPriority(val as AnnouncementPriority)}
+              options={[
+                { value: 'normal', label: 'Normal' },
+                { value: 'high', label: 'High' },
+                { value: 'urgent', label: 'Urgent' },
+                { value: 'low', label: 'Notice' },
+              ]}
+            />
+            <Select
+              label="Target Audience"
+              value={newAudience}
+              onChange={(val) => setNewAudience(val as any)}
+              options={[
+                { value: 'all', label: 'Everyone' },
+                { value: 'member', label: 'Members Only' },
+                { value: 'manager', label: 'Managers' },
+                { value: 'admin', label: 'Admins' },
+              ]}
+            />
+          </div>
+
+          <Textarea
+            label="Announcement Message *"
+            placeholder="Type your announcement content here..."
+            rows={4}
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            required
+          />
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              Broadcast Announcement
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* CONFIRM DELETE MODAL (CEO VIGNESH EXCLUSIVE) */}
+      {announcementToDelete && (
+        <Modal
+          isOpen={!!announcementToDelete}
+          onClose={() => setAnnouncementToDelete(null)}
+          title="Delete Announcement"
+          size="sm"
+        >
+          <div className="space-y-4 pt-1">
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3 text-red-600 dark:text-red-400">
+              <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                <p className="font-semibold text-sm">Permanent Deletion</p>
+                <p className="opacity-90 leading-relaxed">
+                  Are you sure you want to delete the announcement:{' '}
+                  <strong>"{announcementToDelete.title}"</strong>?
+                </p>
+                <p className="text-[11px] opacity-75">
+                  This action will permanently remove this broadcast from all team members' feeds and cannot be undone.
+                </p>
+              </div>
             </div>
-
-            <Textarea
-              label="Announcement Message *"
-              placeholder="Type your announcement content here..."
-              rows={4}
-              value={newContent}
-              onChange={(e) => setNewContent(e.target.value)}
-              required
-            />
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAnnouncementToDelete(null)}
+                disabled={isDeleting}
+              >
                 Cancel
               </Button>
-              <Button type="submit">
-                Broadcast Announcement
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleConfirmDelete}
+                isLoading={isDeleting}
+                className="bg-red-600 hover:bg-red-700 text-white shadow-xs"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                Delete Announcement
               </Button>
             </div>
-          </form>
+          </div>
         </Modal>
+      )}
     </div>
   );
 }
+
+export default AnnouncementsPage;
