@@ -19,14 +19,22 @@ let sessionState: ExtensionSessionState = {
   lastActivityAt: Date.now(),
 };
 
-export async function activate(context: vscode.ExtensionContext) {
-  const tool = detectDeveloperTool();
-  sessionState.tool = tool;
+const getToolDisplayName = (t: DeveloperTool) =>
+  t === 'cursor' ? 'Cursor' : t === 'antigravity' ? 'Antigravity' : 'VS Code';
 
+export async function activate(context: vscode.ExtensionContext) {
+  // Initialize HynaClient early
   hynaClient = new HynaClient(context);
 
-  const getToolDisplayName = (t: DeveloperTool) =>
-    t === 'cursor' ? 'Cursor' : t === 'antigravity' ? 'Antigravity' : 'VS Code';
+  // Restore active session ID if persisted
+  const savedSessionId = context.globalState.get<string>('hyna_active_session_id');
+  if (savedSessionId) {
+    hynaClient.setActiveSessionId(savedSessionId);
+  }
+
+  // Detect tool from environment, but allow stored credentials to override
+  const tool = detectDeveloperTool();
+  sessionState.tool = tool;
 
   const toolName = getToolDisplayName(tool);
   const toolTag = tool === 'cursor' ? 'CRSR' : tool === 'antigravity' ? 'AGY' : 'VSCD';
@@ -36,17 +44,30 @@ export async function activate(context: vscode.ExtensionContext) {
   statusBarItem.command = 'hyna.status';
   context.subscriptions.push(statusBarItem);
 
-  // Initialize Hyna Tracker Integrated Terminal
+  // Initialize Hyna Tracker Integrated Terminal (viewing/logging only; closing terminal does NOT stop tracking)
   trackerTerminal = new HynaTerminalManager(
     // On Ctrl+C from terminal
     async () => {
       await stopTrackingSession({ markDisconnectedInDb: true });
-      vscode.window.showInformationMessage('Hyna Activity Tracker stopped and workstation disconnected.');
-    },
-    // On terminal tab closed by user
-    async () => {
-      await stopTrackingSession({ markDisconnectedInDb: true });
+      vscode.window.showInformationMessage('Hyna Activity Tracker stopped.');
     }
+    // No onTerminalClose callback: closing terminal tab does NOT disconnect presence!
+  );
+
+  // When internet connection is restored, immediately send fresh heartbeat
+  hynaClient.onNetworkRestored = () => {
+    if (sessionState.userId && sessionState.status !== 'ended') {
+      sendHeartbeat('session_heartbeat');
+    }
+  };
+
+  // Register document listeners ONCE in activate
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor && editor.document && sessionState.userId && sessionState.status !== 'ended') {
+        handleFileActivity(editor.document.fileName);
+      }
+    })
   );
 
   // 1. Register Commands
@@ -61,17 +82,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
       if (!code) return;
 
-      const deviceName = (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Developer PC').trim();
+      const deviceName = (await hynaClient.getStoredDeviceName()) || (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Developer PC').trim();
       vscode.window.showInformationMessage(`Connecting to Hyna Studio with code ${code}...`);
 
-      const res = await hynaClient.connectWithCode(code, tool, deviceName);
+      const res = await hynaClient.connectWithCode(code, sessionState.tool, deviceName);
       if (res.success && res.userId) {
         sessionState.userId = res.userId;
         if (res.tool) {
           sessionState.tool = res.tool;
         }
-        vscode.window.showInformationMessage(`Successfully connected ${getToolDisplayName(sessionState.tool)} to Hyna Studio! Starting live tracker terminal...`);
-        startTrackingSession();
+        vscode.window.showInformationMessage(`Successfully connected ${getToolDisplayName(sessionState.tool)} to Hyna Studio! Presence tracking active.`);
+        await startTrackingSession();
       } else {
         vscode.window.showErrorMessage(`Failed to connect: ${res.error || 'Invalid code'}`);
       }
@@ -117,13 +138,13 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('hyna.start', () => {
+    vscode.commands.registerCommand('hyna.start', async () => {
       if (!sessionState.userId) {
         vscode.window.showWarningMessage('Not connected to Hyna Studio yet. Please enter pairing code first.');
         vscode.commands.executeCommand('hyna.connect');
         return;
       }
-      startTrackingSession();
+      await startTrackingSession();
     })
   );
 
@@ -222,27 +243,26 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  // 2. Check for previously stored connection
+  // 2. Automatically restore connection and start heartbeat immediately
   const storedUserId = await hynaClient.getStoredUserId();
   const storedTool = await hynaClient.getStoredTool();
+
   if (storedUserId) {
     sessionState.userId = storedUserId;
     if (storedTool) {
       sessionState.tool = storedTool;
     }
-    startTrackingSession();
+    await startTrackingSession();
   } else {
     updateStatusBar();
   }
 }
 
-function startTrackingSession() {
+async function startTrackingSession() {
+  if (!sessionState.userId) return;
+
   const config = vscode.workspace.getConfiguration('hyna');
   const idleTimeoutMin = config.get<number>('idleTimeoutMinutes') || 5;
-  const heartbeatSec = Math.max(30, config.get<number>('heartbeatIntervalSeconds') || 45);
-
-  const getToolDisplayName = (t: DeveloperTool) =>
-    t === 'cursor' ? 'Cursor' : t === 'antigravity' ? 'Antigravity IDE' : 'VS Code';
 
   // Set workspace name
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -252,7 +272,9 @@ function startTrackingSession() {
     sessionState.workspaceName = 'Single File Workspace';
   }
 
-  const deviceName = (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Developer PC').trim();
+  const deviceName =
+    (await hynaClient.getStoredDeviceName()) ||
+    (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Developer PC').trim();
 
   // Initialize Idle Detector
   if (idleDetector) idleDetector.dispose();
@@ -264,7 +286,7 @@ function startTrackingSession() {
 
   sessionState.status = 'active';
 
-  // Automatically update and open the Hyna Tracker Terminal
+  // Update Tracker Terminal info without forcibly showing or stealing focus
   if (trackerTerminal) {
     trackerTerminal.updateInfo({
       toolName: getToolDisplayName(sessionState.tool),
@@ -273,24 +295,22 @@ function startTrackingSession() {
       projectName: sessionState.projectName || 'None',
       taskTitle: sessionState.taskTitle || 'None',
     });
-    trackerTerminal.show(true);
   }
 
-  // Send initial session start event
-  sendHeartbeat('session_started');
+  // Requirement 6: Do not create multiple heartbeat timers if the extension reloads or reconnects
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 
-  // Register document listeners
-  vscode.window.onDidChangeActiveTextEditor((editor) => {
-    if (editor && editor.document) {
-      handleFileActivity(editor.document.fileName);
-    }
-  });
+  // Requirement 2: Immediately after activation, send the first heartbeat. Do not wait for the first interval.
+  await sendHeartbeat('session_started');
 
-  // Start heartbeat interval
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  // Requirement 3: Continue sending the heartbeat automatically every 30 seconds
+  const HEARTBEAT_INTERVAL_MS = 30 * 1000;
   heartbeatTimer = setInterval(() => {
     sendHeartbeat('session_heartbeat');
-  }, heartbeatSec * 1000);
+  }, HEARTBEAT_INTERVAL_MS);
 
   updateStatusBar();
 }
@@ -390,8 +410,7 @@ async function sendHeartbeat(
 
 function updateStatusBar() {
   const isConnected = Boolean(sessionState.userId);
-  const toolName =
-    sessionState.tool === 'cursor' ? 'Cursor' : sessionState.tool === 'antigravity' ? 'Antigravity' : 'VS Code';
+  const toolName = getToolDisplayName(sessionState.tool);
 
   if (!isConnected) {
     statusBarItem.text = `$(circle-slash) Hyna: Offline`;

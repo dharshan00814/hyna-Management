@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Upload, Grid, List, Folder, FileText, Image, Film, Code, Archive, BarChart3, Presentation, Download, Trash2 } from 'lucide-react';
+import { Search, Upload, Grid, List, Folder, FileText, Image, Film, Code, Archive, BarChart3, Presentation, Download, Trash2, Eye } from 'lucide-react';
 import { Button, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatFileSize, formatDate } from '@/lib/utils';
-import { getFiles, getFolders, getUsers, getUserById, uploadFile } from '@/services/api';
+import { supabase } from '@/lib/supabase';
+import { getFiles, getFolders, getUsers, getUserById, uploadFile, deleteFile } from '@/services/api';
 import { toast } from 'sonner';
 import type { FileItem, Folder as FolderType } from '@/types';
 
@@ -25,18 +26,92 @@ export function FilesPage() {
     fileInputRef.current?.click();
   };
 
+  const handleView = async (file: FileItem) => {
+    const filePath = `${file.folder}/${file.name}`;
+    try {
+      const { data, error } = await supabase.storage
+        .from('files')
+        .createSignedUrl(filePath, 60);
+
+      if (error) throw error;
+      
+      window.open(data.signedUrl, '_blank');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to open file');
+    }
+  };
+
+  const handleDownload = async (file: FileItem) => {
+    const filePath = `${file.folder}/${file.name}`;
+    const toastId = toast.loading('Downloading...');
+    try {
+      const { data, error } = await supabase.storage
+        .from('files')
+        .download(filePath);
+
+      if (error) throw error;
+
+      const blob = new Blob([data]);
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = file.name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      
+      toast.success('Download complete', { id: toastId });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Failed to download file', { id: toastId });
+    }
+  };
+
+  const handleDelete = async (file: FileItem) => {
+    const filePath = `${file.folder}/${file.name}`;
+    const toastId = toast.loading('Deleting file...');
+    try {
+      // 1. Delete from Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('files')
+        .remove([filePath]);
+        
+      if (storageError) throw storageError;
+
+      // 2. Delete metadata row from DB
+      const { error: dbError } = await supabase
+        .from('files')
+        .delete()
+        .eq('id', file.id);
+        
+      if (dbError) throw dbError;
+
+      // 3. Update local state
+      setFiles(prev => prev.filter(f => f.id !== file.id));
+      
+      toast.success('File deleted successfully', { id: toastId });
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      toast.error(err.message || 'Failed to delete file', { id: toastId });
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    const toastId = toast.loading('Uploading file...');
+    const toastId = toast.loading(`Uploading "${file.name}"...`);
     try {
       const uploaded = await uploadFile(file, selectedFolder || 'General');
       setFiles(prev => [uploaded, ...prev]);
       toast.success('File uploaded successfully!', { id: toastId });
-    } catch (err) {
-      toast.error('Failed to upload file.', { id: toastId });
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      toast.error(err?.message || 'Failed to upload file.', { id: toastId, duration: 8000 });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -149,8 +224,9 @@ export function FilesPage() {
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]">
                   <span className="text-xs text-[var(--color-muted-foreground)]">{uploader?.name || 'User'}</span>
                   <div className="flex gap-1">
-                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.success('Download started')}><Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
-                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.error('File deleted')}><Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
+                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleView(file)} title="View"><Eye className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
+                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDownload(file)} title="Download"><Download className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
+                    <button className="p-1 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDelete(file)} title="Delete"><Trash2 className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" /></button>
                   </div>
                 </div>
               </div>
@@ -180,7 +256,11 @@ export function FilesPage() {
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)] hidden md:table-cell">{uploader?.name || 'User'}</td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)] hidden sm:table-cell">{formatDate(file.uploadedAt)}</td>
                     <td className="px-4 py-3 text-right">
-                      <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => toast.success('Download started')}><Download className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleView(file)} title="View"><Eye className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
+                        <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDownload(file)} title="Download"><Download className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
+                        <button className="p-1.5 rounded hover:bg-[var(--color-muted)] transition-colors" onClick={() => handleDelete(file)} title="Delete"><Trash2 className="w-4 h-4 text-[var(--color-muted-foreground)]" /></button>
+                      </div>
                     </td>
                   </tr>
                 );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X, Star } from 'lucide-react';
 import { Button, Avatar, Modal, Input, Select, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -238,7 +238,7 @@ export function MembersPage() {
                     <Avatar name={user.name} size="lg" />
                     {user.role === 'admin' && (
                       <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[9px] font-bold" title="Admin">
-                        ★
+                        <Star className="w-2.5 h-2.5 fill-white" />
                       </span>
                     )}
                   </div>

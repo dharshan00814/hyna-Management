@@ -186,7 +186,6 @@ export function LoginPage() {
                 <Eye off={!show} />
               </button>
             </div>
-
             <div className="su-row">
               <label className="su-chk">
                 <input

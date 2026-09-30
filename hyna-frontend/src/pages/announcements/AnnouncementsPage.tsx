@@ -13,10 +13,10 @@ import {
   Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Badge, Modal, EmptyState, Avatar } from '@/components/ui';
+import { Button, Badge, Modal, EmptyState, Avatar, Input, Select, Textarea } from '@/components/ui';
 import { cn, formatDate, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getAnnouncements, createAnnouncement, getUsers, getUserById } from '@/services/api';
+import { getAnnouncements, createAnnouncement, getUsers, getUserById, createNotification } from '@/services/api';
 import type { Announcement, AnnouncementPriority } from '@/types';
 
 export function AnnouncementsPage() {
@@ -87,6 +87,25 @@ export function AnnouncementsPage() {
         createdBy: currentUser?.id || 'u1',
         audience: newAudience,
       });
+
+      const allUsers = await getUsers();
+      const targetUsers = allUsers.filter(u => 
+        u.status === 'active' && 
+        (newAudience === 'all' || u.role === newAudience)
+      );
+
+      for (const user of targetUsers) {
+        if (user.id !== currentUser?.id) {
+          const userPrefix = user.role === 'admin' ? '/admin' : user.role === 'manager' ? '/manager' : '/member';
+          await createNotification({
+            userId: user.id,
+            title: `New Announcement: ${created.title}`,
+            message: 'Check the announcements board for details.',
+            actionUrl: `${userPrefix}/announcements`,
+            type: 'announcement'
+          });
+        }
+      }
 
       setAnnouncements(prev => [created, ...prev]);
       toast.success('Announcement broadcasted successfully!');
@@ -252,67 +271,47 @@ export function AnnouncementsPage() {
         size="md"
       >
           <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--color-foreground)]">
-                Title
-              </label>
-              <input
-                type="text"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="e.g. Q4 Sprint Goals & Tech Stack Upgrade"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                required
-              />
-            </div>
+            <Input
+              label="Title *"
+              placeholder="e.g. Q4 Sprint Goals & Tech Stack Upgrade"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              required
+            />
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--color-foreground)]">
-                  Priority
-                </label>
-                <select
-                  value={newPriority}
-                  onChange={(e) => setNewPriority(e.target.value as AnnouncementPriority)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                >
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                  <option value="low">Notice</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1.5 text-[var(--color-foreground)]">
-                  Target Audience
-                </label>
-                <select
-                  value={newAudience}
-                  onChange={(e) => setNewAudience(e.target.value as any)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                >
-                  <option value="all">Everyone</option>
-                  <option value="member">Members Only</option>
-                  <option value="manager">Managers</option>
-                  <option value="admin">Admins</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[var(--color-foreground)]">
-                Announcement Message
-              </label>
-              <textarea
-                rows={4}
-                value={newContent}
-                onChange={(e) => setNewContent(e.target.value)}
-                placeholder="Type your announcement content here..."
-                className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] resize-none"
-                required
+              <Select
+                label="Priority"
+                value={newPriority}
+                onChange={(val) => setNewPriority(val as AnnouncementPriority)}
+                options={[
+                  { value: 'normal', label: 'Normal' },
+                  { value: 'high', label: 'High' },
+                  { value: 'urgent', label: 'Urgent' },
+                  { value: 'low', label: 'Notice' },
+                ]}
+              />
+              <Select
+                label="Target Audience"
+                value={newAudience}
+                onChange={(val) => setNewAudience(val as any)}
+                options={[
+                  { value: 'all', label: 'Everyone' },
+                  { value: 'member', label: 'Members Only' },
+                  { value: 'manager', label: 'Managers' },
+                  { value: 'admin', label: 'Admins' },
+                ]}
               />
             </div>
+
+            <Textarea
+              label="Announcement Message *"
+              placeholder="Type your announcement content here..."
+              rows={4}
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              required
+            />
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>

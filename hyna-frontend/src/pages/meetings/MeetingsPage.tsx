@@ -4,7 +4,7 @@ import { Plus, Clock, Video, Users } from 'lucide-react';
 import { Button, Avatar, Badge, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getMeetings, createMeeting, getUsers, getUserById } from '@/services/api';
+import { getMeetings, createMeeting, getUsers, getUserById, createNotification } from '@/services/api';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { Copy } from 'lucide-react';
@@ -15,6 +15,7 @@ export function MeetingsPage() {
   const { currentRole, currentUser, effectiveRole } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
@@ -33,7 +34,8 @@ export function MeetingsPage() {
 
   const loadData = async () => {
     try {
-      await getUsers();
+      const usrs = await getUsers();
+      setUsers(usrs);
       const ms = await getMeetings();
       setMeetings(ms);
     } catch (err) {
@@ -59,8 +61,22 @@ export function MeetingsPage() {
         ...newMeeting,
         meetingLink: generatedLink,
         hostId: currentUser?.id || 'u1',
-        participantIds: [currentUser?.id || 'u1'],
+        participantIds: allParticipants,
       });
+
+      // Create notifications for invited members
+      for (const pId of newMeeting.participantIds) {
+        if (pId !== currentUser?.id) {
+          await createNotification({
+            userId: pId,
+            title: 'New Meeting Invitation',
+            message: `You have been invited to ${newMeeting.title} at ${newMeeting.startTime}`,
+            actionUrl: `${prefix}/meetings`,
+            type: 'calendar'
+          });
+        }
+      }
+
       setMeetings(prev => [...prev, created]);
       setCreatedLink(generatedLink);
       setShowCreate(false);
@@ -218,17 +234,25 @@ export function MeetingsPage() {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <Select
               label="Start Time"
-              type="time"
               value={newMeeting.startTime}
-              onChange={(e) => setNewMeeting(m => ({ ...m, startTime: e.target.value }))}
+              options={TIME_OPTIONS}
+              onChange={(val) => {
+                const [hours, minutes] = val.split(':').map(Number);
+                const date = new Date();
+                date.setHours(hours, minutes + 30);
+                const endH = date.getHours().toString().padStart(2, '0');
+                const endM = date.getMinutes().toString().padStart(2, '0');
+                const endVal = `${endH}:${endM}`;
+                setNewMeeting(m => ({ ...m, startTime: val, endTime: endVal }));
+              }}
             />
-            <Input
+            <Select
               label="End Time"
-              type="time"
               value={newMeeting.endTime}
-              onChange={(e) => setNewMeeting(m => ({ ...m, endTime: e.target.value }))}
+              options={TIME_OPTIONS}
+              onChange={(val) => setNewMeeting(m => ({ ...m, endTime: val }))}
             />
           </div>
       </Modal>
