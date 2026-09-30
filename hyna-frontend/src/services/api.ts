@@ -17,7 +17,7 @@ let modulesCache: Module[] = [];
 let tasksCache: Task[] = [];
 
 // Helper: Check if string is a valid UUID
-function isValidUuid(val?: string | null): boolean {
+export function isValidUuid(val?: string | null): boolean {
   if (!val) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 }
@@ -205,9 +205,10 @@ function mapChannel(row: any): ChatChannel {
 
 // Helper: Transform Message row
 function mapMessage(row: any): ChatMessage {
+  const isGlobal = !row.receiver_id || row.channel_id === 'ch_global' || row.channel_id === 'globe';
   return {
     id: row.id,
-    channelId: row.channel_id,
+    channelId: isGlobal ? 'globe' : (row.receiver_id || row.channel_id || ''),
     senderId: row.sender_id,
     content: row.content,
     timestamp: row.timestamp || row.created_at,
@@ -367,6 +368,42 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
 
 export async function updateMember(id: string, updates: Partial<User>): Promise<User> {
   return updateUserProfile(id, updates);
+}
+
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const fileExt = file.name.split('.').pop() || 'png';
+  const fileName = `${userId}_${Date.now()}.${fileExt}`;
+  const filePath = `avatars/${fileName}`;
+
+  if (!isSupabaseConfigured()) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from('files')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.warn('Storage avatar upload fallback to base64:', uploadError);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  return urlData?.publicUrl || '';
 }
 
 export async function deleteMember(id: string): Promise<void> {
@@ -1628,28 +1665,32 @@ export async function getChannelMessages(receiverId: string, currentUserId?: str
   
   let query = supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
   
-  if (receiverId === 'globe') {
-    // Global chat is identified by null receiver_id
-    query = query.is('receiver_id', null);
-  } else if (currentUserId) {
+  const isGlobal = receiverId === 'globe' || receiverId === 'ch_global';
+  if (isGlobal) {
+    // Global chat is identified by null receiver_id or channel_id = 'ch_global'
+    query = query.or('receiver_id.is.null,channel_id.eq.ch_global');
+  } else if (currentUserId && isValidUuid(receiverId) && isValidUuid(currentUserId)) {
     // Direct messages between current user and receiver
     query = query.or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`);
   }
 
   const { data, error } = await query;
-  if (error) return [];
+  if (error) {
+    console.error('Error fetching chat messages:', error);
+    return [];
+  }
   return (data || []).map(mapMessage);
 }
 
 export async function sendMessage(receiverId: string, content: string, senderId: string, attachments: any[] = []): Promise<ChatMessage> {
-  const isGlobal = receiverId === 'globe';
+  const isGlobal = receiverId === 'globe' || receiverId === 'ch_global';
   const now = new Date().toISOString();
   const msgType = attachments.length > 0 && !content.trim() ? 'file' : 'text';
 
   if (!isSupabaseConfigured()) {
     return {
       id: `msg${Date.now()}`,
-      channelId: isGlobal ? 'ch_global' : receiverId,
+      channelId: isGlobal ? 'globe' : receiverId,
       senderId,
       content,
       timestamp: now,
@@ -1661,11 +1702,10 @@ export async function sendMessage(receiverId: string, content: string, senderId:
 
   // Ensure sender_id matches a valid UUID format for public.profiles foreign key
   let validSenderId = senderId;
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(senderId);
-  if (!isUuid) {
+  if (!isValidUuid(senderId)) {
     try {
       const { data: authData } = await supabase.auth.getUser();
-      if (authData?.user?.id) {
+      if (authData?.user?.id && isValidUuid(authData.user.id)) {
         validSenderId = authData.user.id;
       }
     } catch {
@@ -1673,14 +1713,18 @@ export async function sendMessage(receiverId: string, content: string, senderId:
     }
   }
 
-  const insertPayload = {
-    id: `msg_${Math.random().toString(36).substring(2, 10)}`,
-    channel_id: isGlobal ? 'ch_global' : receiverId,
+  const validReceiverId = (!isGlobal && isValidUuid(receiverId)) ? receiverId : null;
+
+  // Note: Do NOT manually pass `id` because public.chat_messages expects a UUID generated by gen_random_uuid()
+  const insertPayload: Record<string, any> = {
+    channel_id: isGlobal ? 'ch_global' : null,
+    receiver_id: validReceiverId,
     sender_id: validSenderId,
     content,
     type: msgType,
     attachments,
     reactions: [],
+    timestamp: now,
   };
 
   const { data, error } = await supabase
@@ -1695,6 +1739,19 @@ export async function sendMessage(receiverId: string, content: string, senderId:
   }
 
   return mapMessage(data);
+}
+
+export async function updateMessageReactions(messageId: string, reactions: any[]): Promise<void> {
+  if (!isSupabaseConfigured() || !isValidUuid(messageId)) return;
+  try {
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ reactions })
+      .eq('id', messageId);
+    if (error) console.error('Error updating reaction in Supabase:', error);
+  } catch (err) {
+    console.error('Failed to update reactions in Supabase:', err);
+  }
 }
 
 

@@ -149,7 +149,7 @@ export function MemberDetailPage() {
       <div className="card p-6 mb-6 animate-slide-up">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-5">
           <div className="flex flex-col sm:flex-row items-start gap-5 flex-1">
-            <Avatar name={member.name} size="xl" />
+            <Avatar name={member.name} src={member.avatar} size="xl" />
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-xl font-semibold">{member.name}</h1>

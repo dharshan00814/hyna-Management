@@ -48,7 +48,7 @@ export function MeetingsPage() {
     type: 'team' as MeetingType,
     startTime: '10:00',
     endTime: '11:00',
-    meetingLink: '',
+    participantIds: [] as string[],
   });
 
   const loadData = async () => {
@@ -74,10 +74,9 @@ export function MeetingsPage() {
       return;
     }
     try {
-      const hostId = currentUser?.id || 'u1';
-      const participants = Array.from(new Set([hostId, ...selectedParticipantIds]));
-      const finalMeetingLink = newMeeting.meetingLink.trim();
-
+      const roomId = uuidv4();
+      const generatedLink = `${window.location.origin}/meeting/${roomId}`;
+      const allParticipants = Array.from(new Set([...newMeeting.participantIds, currentUser?.id || 'u1']));
       const created = await createMeeting({
         ...newMeeting,
         meetingLink: finalMeetingLink,
@@ -113,7 +112,7 @@ export function MeetingsPage() {
         type: 'team',
         startTime: '10:00',
         endTime: '11:00',
-        meetingLink: '',
+        participantIds: [],
       });
       toast.success('Meeting created successfully!');
     } catch (err) {
@@ -377,12 +376,11 @@ export function MeetingsPage() {
               onChange={(val) => setNewMeeting(m => ({ ...m, endTime: val }))}
             />
           </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Participants</label>
             <div className="flex flex-wrap gap-2 p-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] max-h-40 overflow-y-auto">
-              {allUsers.filter(u => u.id !== currentUser?.id).map((user) => {
-                const isSelected = selectedParticipantIds.includes(user.id);
+              {users.filter(u => u.id !== currentUser?.id).map((user) => {
+                const isSelected = newMeeting.participantIds.includes(user.id);
                 return (
                   <label key={user.id} className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs cursor-pointer border transition-colors",
@@ -393,9 +391,12 @@ export function MeetingsPage() {
                       className="hidden"
                       checked={isSelected}
                       onChange={() => {
-                        setSelectedParticipantIds(prev => 
-                          isSelected ? prev.filter(id => id !== user.id) : [...prev, user.id]
-                        );
+                        setNewMeeting(m => ({
+                          ...m,
+                          participantIds: isSelected 
+                            ? m.participantIds.filter(id => id !== user.id)
+                            : [...m.participantIds, user.id]
+                        }));
                       }}
                     />
                     <Avatar name={user.name} src={user.avatar} size="xs" />

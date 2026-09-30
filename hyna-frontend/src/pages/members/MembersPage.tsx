@@ -235,7 +235,7 @@ export function MembersPage() {
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="relative">
-                    <Avatar name={user.name} size="lg" />
+                    <Avatar name={user.name} src={user.avatar} size="lg" />
                     {user.role === 'admin' && (
                       <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[9px] font-bold" title="Admin">
                         <Star className="w-2.5 h-2.5 fill-white" />
