@@ -1968,6 +1968,21 @@ export async function createAnnouncement(announcement: Partial<Announcement>): P
   return mapAnnouncement(data);
 }
 
+export async function deleteAnnouncement(id: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting announcement from Supabase:', error);
+      throw error;
+    }
+  }
+  return true;
+}
+
 // ============================================================
 // MANAGER DASHBOARD DATA AGGREGATION
 // ============================================================
