@@ -41,6 +41,7 @@ import {
   LiveDeveloperActivityPage,
   MyDeveloperActivityPage,
 } from './pages/activity';
+import { MeetingRoom } from './pages/meetings/MeetingRoom';
 
 function App() {
   const { mode, resolvedTheme, setMode } = useThemeStore();
@@ -65,9 +66,6 @@ function App() {
   }, [mode, resolvedTheme, setMode]);
 
   // Route prefix calculated strictly from database-verified role
-  // CEO / CTO / CPO / COO -> /admin
-  // Manager -> /manager
-  // Member -> /member
   const rolePrefix =
     effectiveRole === 'admin'
       ? '/admin'
@@ -83,7 +81,6 @@ function App() {
           path="/login"
           element={
             isLoading ? (
-              // Show spinner while Supabase session is being restored — prevents login flash
               <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[var(--color-background)] text-[var(--color-foreground)]">
                 <div className="flex flex-col items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-[var(--color-primary)] flex items-center justify-center shadow-lg shadow-indigo-500/25 animate-pulse">
@@ -102,9 +99,7 @@ function App() {
 
         {/* Protected App Routes Layout */}
         <Route element={<AppLayout />}>
-          {/* ======================================================== */}
-          {/* ADMIN ROUTES: Strictly CEO, CTO, CPO, COO only           */}
-          {/* ======================================================== */}
+          {/* ... */}
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/projects" element={<ProjectsPage />} />
@@ -127,9 +122,6 @@ function App() {
             <Route path="/admin/settings/integrations" element={<ConnectIntegrationsPage />} />
           </Route>
 
-          {/* ======================================================== */}
-          {/* MANAGER ROUTES: Dedicated Manager Workspace              */}
-          {/* ======================================================== */}
           <Route element={<ProtectedRoute allowedRoles={['manager', 'admin']} />}>
             <Route path="/manager/dashboard" element={<ManagerDashboard />} />
             <Route path="/manager/projects" element={<ProjectsPage />} />
@@ -152,9 +144,6 @@ function App() {
             <Route path="/manager/settings/integrations" element={<ConnectIntegrationsPage />} />
           </Route>
 
-          {/* ======================================================== */}
-          {/* MEMBER ROUTES: Personalized Member Features              */}
-          {/* ======================================================== */}
           <Route element={<ProtectedRoute allowedRoles={['member', 'manager', 'admin']} />}>
             <Route path="/member/dashboard" element={<MemberDashboard />} />
             <Route path="/member/tasks" element={<TasksPage />} />
@@ -180,11 +169,15 @@ function App() {
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
 
-          {/* Privacy & Tracking Policy Route */}
           <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
           <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
           <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />
           <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
+        </Route>
+
+        {/* Meeting Room - Without AppLayout (Full screen) */}
+        <Route element={<ProtectedRoute allowedRoles={['admin', 'manager', 'member']} />}>
+          <Route path="/meeting/:id" element={<MeetingRoom />} />
         </Route>
 
         {/* Dynamic Fallback / Root Redirect */}

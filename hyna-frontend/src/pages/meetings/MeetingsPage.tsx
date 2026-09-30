@@ -6,25 +6,9 @@ import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getMeetings, createMeeting, getUsers, getUserById, createNotification } from '@/services/api';
 import { toast } from 'sonner';
-import type { Meeting, MeetingType, User } from '@/types';
-
-const generateTimeOptions = () => {
-  const options = [];
-  for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += 30) {
-      const hh = h.toString().padStart(2, '0');
-      const mm = m.toString().padStart(2, '0');
-      const value = `${hh}:${mm}`;
-      const isPM = h >= 12;
-      const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      const label = `${displayH}:${mm} ${isPM ? 'PM' : 'AM'}`;
-      options.push({ value, label });
-    }
-  }
-  return options;
-};
-
-const TIME_OPTIONS = generateTimeOptions();
+import { v4 as uuidv4 } from 'uuid';
+import { Copy } from 'lucide-react';
+import type { Meeting, MeetingType } from '@/types';
 
 export function MeetingsPage() {
   const navigate = useNavigate();
@@ -36,6 +20,9 @@ export function MeetingsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
 
+  const [createdLink, setCreatedLink] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+
   const [newMeeting, setNewMeeting] = useState({
     title: '',
     description: '',
@@ -43,8 +30,6 @@ export function MeetingsPage() {
     type: 'team' as MeetingType,
     startTime: '10:00',
     endTime: '11:00',
-    meetingLink: '',
-    participantIds: [] as string[],
   });
 
   const loadData = async () => {
@@ -70,9 +55,11 @@ export function MeetingsPage() {
       return;
     }
     try {
-      const allParticipants = Array.from(new Set([...newMeeting.participantIds, currentUser?.id || 'u1']));
+      const roomId = uuidv4();
+      const generatedLink = `${window.location.origin}/meeting/${roomId}`;
       const created = await createMeeting({
         ...newMeeting,
+        meetingLink: generatedLink,
         hostId: currentUser?.id || 'u1',
         participantIds: allParticipants,
       });
@@ -91,7 +78,9 @@ export function MeetingsPage() {
       }
 
       setMeetings(prev => [...prev, created]);
+      setCreatedLink(generatedLink);
       setShowCreate(false);
+      setShowSuccess(true);
       setNewMeeting({
         title: '',
         description: '',
@@ -99,8 +88,6 @@ export function MeetingsPage() {
         type: 'team',
         startTime: '10:00',
         endTime: '11:00',
-        meetingLink: '',
-        participantIds: [],
       });
       toast.success('Meeting created!');
     } catch (err) {
@@ -184,11 +171,15 @@ export function MeetingsPage() {
                     {host && <Avatar name={host.name} size="xs" />}
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
-                  {meeting.meetingLink && (
-                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); window.open(meeting.meetingLink, '_blank'); }}>
+                  {meeting.meetingLink ? (
+                    <Button variant="outline" size="sm" onClick={(e) => { 
+                      e.stopPropagation(); 
+                      const roomId = meeting.meetingLink?.split('/').pop();
+                      navigate(`/meeting/${roomId}`);
+                    }}>
                       <Video className="w-3.5 h-3.5 mr-1" /> Join
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
@@ -264,42 +255,51 @@ export function MeetingsPage() {
               onChange={(val) => setNewMeeting(m => ({ ...m, endTime: val }))}
             />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Participants</label>
-            <div className="flex flex-wrap gap-2 p-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] max-h-40 overflow-y-auto">
-              {users.filter(u => u.id !== currentUser?.id).map((user) => {
-                const isSelected = newMeeting.participantIds.includes(user.id);
-                return (
-                  <label key={user.id} className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs cursor-pointer border transition-colors",
-                    isSelected ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)]" : "border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]"
-                  )}>
-                    <input
-                      type="checkbox"
-                      className="hidden"
-                      checked={isSelected}
-                      onChange={() => {
-                        setNewMeeting(m => ({
-                          ...m,
-                          participantIds: isSelected 
-                            ? m.participantIds.filter(id => id !== user.id)
-                            : [...m.participantIds, user.id]
-                        }));
-                      }}
-                    />
-                    <Avatar name={user.name} src={user.avatar} size="xs" />
-                    <span>{user.name}</span>
-                  </label>
-                );
-              })}
-            </div>
+      </Modal>
+
+      <Modal
+        isOpen={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        title="Meeting Created Successfully"
+        size="md"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowSuccess(false)}>Done</Button>
+            <Button onClick={() => {
+              const roomId = createdLink.split('/').pop();
+              navigate(`/meeting/${roomId}`);
+            }}>
+              Start Meeting
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6 text-center">
+          <div className="mx-auto w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mb-4">
+            <Video className="w-8 h-8" />
           </div>
-          <Input
-            label="Meeting Link"
-            placeholder="https://meet.hynastudio.com/..."
-            value={newMeeting.meetingLink}
-            onChange={(e) => setNewMeeting(m => ({ ...m, meetingLink: e.target.value }))}
-          />
+          <h3 className="text-lg font-medium">Your meeting is ready</h3>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            Share this link with participants to invite them to the meeting.
+          </p>
+          <div className="flex items-center gap-2 mt-4 p-2 bg-[var(--color-muted)] rounded-lg border border-[var(--color-border)]">
+            <input 
+              type="text" 
+              readOnly 
+              value={createdLink} 
+              className="flex-1 bg-transparent border-none focus:outline-none text-sm px-2"
+            />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                navigator.clipboard.writeText(createdLink);
+                toast.success('Link copied to clipboard');
+              }}
+            >
+              <Copy className="w-4 h-4 mr-1" /> Copy
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>
