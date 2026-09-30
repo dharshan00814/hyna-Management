@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Video, Link2, ExternalLink, Copy, Edit2, Plus, Check } from 'lucide-react';
+import { ArrowLeft, Clock, Video, Link2, ExternalLink, Copy, Edit2, Plus, Check, Trash2 } from 'lucide-react';
 import { Button, Avatar, Badge, EmptyState, LoadingState, Modal, Input } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getMeeting, getUsers, getUserById, updateMeeting } from '@/services/api';
+import { getMeeting, getUsers, getUserById, updateMeeting, deleteMeeting } from '@/services/api';
 import { toast } from 'sonner';
 import type { Meeting } from '@/types';
 
@@ -51,23 +51,35 @@ export function MeetingDetailPage() {
   }
 
   const host = getUserById(meeting.hostId);
-  const isGoogleMeet = Boolean(meeting.meetingLink && meeting.meetingLink.includes('meet.google.com'));
-  const hasExternalLink = Boolean(meeting.meetingLink && (meeting.meetingLink.startsWith('http://') || meeting.meetingLink.startsWith('https://')));
+  const rawLink = (meeting.meetingLink || '').trim();
+  const isGoogleMeet = Boolean(rawLink && rawLink.includes('meet.google.com'));
+  const hasExternalLink = Boolean(
+    rawLink && (
+      rawLink.startsWith('http://') || 
+      rawLink.startsWith('https://') || 
+      rawLink.includes('meet.google.com') || 
+      rawLink.includes('zoom.us') || 
+      rawLink.includes('teams.microsoft.com')
+    )
+  );
 
   const handleJoinMeeting = () => {
-    if (!meeting.meetingLink) {
+    if (!rawLink) {
       setMeetLinkInput('');
       setIsEditingLink(true);
       return;
     }
 
     if (hasExternalLink) {
-      window.open(meeting.meetingLink, '_blank', 'noopener,noreferrer');
+      const targetUrl = rawLink.startsWith('http://') || rawLink.startsWith('https://') 
+        ? rawLink 
+        : `https://${rawLink}`;
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
       return;
     }
 
     let roomId = meeting.id;
-    const parts = meeting.meetingLink.split('/');
+    const parts = rawLink.split('/');
     const last = parts[parts.length - 1];
     if (last) roomId = last;
     navigate(`/meeting/${roomId}`);
@@ -90,11 +102,29 @@ export function MeetingDetailPage() {
     }
   };
 
+  const handleDeleteMeeting = async () => {
+    if (!window.confirm('Are you sure you want to delete this meeting?')) return;
+    try {
+      if (id) await deleteMeeting(id);
+      toast.success('Meeting deleted');
+      navigate(`${prefix}/meetings`);
+    } catch (e) {
+      toast.error('Failed to delete meeting');
+    }
+  };
+
   return (
     <div className="page-container">
-      <button onClick={() => navigate(`${prefix}/meetings`)} className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] mb-6 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Back to Meetings
-      </button>
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={() => navigate(`${prefix}/meetings`)} className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back to Meetings
+        </button>
+        {currentRole !== 'member' && (
+          <Button variant="ghost" size="sm" onClick={handleDeleteMeeting} className="text-red-500 hover:text-red-600 hover:bg-red-500/10 text-xs gap-1.5">
+            <Trash2 className="w-3.5 h-3.5" /> Delete Meeting
+          </Button>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
         <div className="lg:col-span-2 space-y-6">

@@ -123,8 +123,19 @@ export function MeetingsPage() {
 
   const todayStr = new Date().toISOString().split('T')[0];
   const userMeetings = currentRole === 'member'
-    ? meetings.filter(m => m.participantIds.includes(currentUser?.id || ''))
+    ? meetings.filter(m => 
+        m.type === 'team' || 
+        m.type === 'standup' ||
+        m.hostId === currentUser?.id ||
+        (currentUser?.employeeId && m.hostId === currentUser.employeeId) ||
+        (m.participantIds || []).includes(currentUser?.id || '') ||
+        (currentUser?.employeeId && (m.participantIds || []).includes(currentUser.employeeId))
+      )
     : meetings;
+
+  const upcomingCount = userMeetings.filter(m => m.date >= todayStr).length;
+  const pastCount = userMeetings.filter(m => m.date < todayStr).length;
+  const allCount = userMeetings.length;
 
   const filtered = userMeetings.filter(m => {
     if (filter === 'upcoming') return m.date >= todayStr;
@@ -139,17 +150,24 @@ export function MeetingsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="page-title">Meetings</h1>
-          <p className="page-description">{filtered.length} meetings</p>
+          <p className="page-description">{filtered.length} {filter} meeting{filtered.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1 p-1 rounded-lg bg-[var(--color-muted)]">
-            {(['upcoming', 'past', 'all'] as const).map(f => (
+            {[
+              { id: 'upcoming', label: `Upcoming (${upcomingCount})` },
+              { id: 'past', label: `Past (${pastCount})` },
+              { id: 'all', label: `All (${allCount})` },
+            ].map(tab => (
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn('px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors', filter === f ? 'bg-[var(--color-card)] shadow-sm' : 'text-[var(--color-muted-foreground)]')}
+                key={tab.id}
+                onClick={() => setFilter(tab.id as any)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors',
+                  filter === tab.id ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm' : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+                )}
               >
-                {f}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -162,7 +180,29 @@ export function MeetingsPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title="No meetings" description="No meetings to display." />
+        <div className="card p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <Video className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-semibold">No {filter} meetings</h3>
+          <p className="text-xs text-[var(--color-muted-foreground)] max-w-sm">
+            {filter === 'upcoming' && allCount > 0
+              ? `No upcoming meetings scheduled. You have ${allCount} total meeting(s) in your history.`
+              : 'No meetings found matching your current filter.'}
+          </p>
+          <div className="flex items-center gap-2 pt-2">
+            {filter !== 'all' && allCount > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setFilter('all')}>
+                View All ({allCount}) Meetings
+              </Button>
+            )}
+            {currentRole !== 'member' && (
+              <Button size="sm" onClick={() => setShowCreate(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Create Meeting
+              </Button>
+            )}
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((meeting, idx) => {
@@ -171,12 +211,12 @@ export function MeetingsPage() {
             return (
               <div
                 key={meeting.id}
-                className={cn('card p-5 card-hover cursor-pointer animate-slide-up', `stagger-${Math.min(idx + 1, 5)}`)}
+                className={cn('card p-5 card-hover cursor-pointer animate-slide-up group', `stagger-${Math.min(idx + 1, 5)}`)}
                 onClick={() => navigate(`${prefix}/meetings/${meeting.id}`)}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-sm font-semibold">{meeting.title}</h3>
+                    <h3 className="text-sm font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{meeting.title}</h3>
                     <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5 capitalize">{meeting.type} meeting</p>
                   </div>
                   <Badge className={isToday ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-[var(--color-muted)] text-[var(--color-foreground)]'}>
@@ -184,7 +224,7 @@ export function MeetingsPage() {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)] mb-3">
-                  <Clock className="w-3.5 h-3.5" />
+                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
                   <span>{formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)] mb-3">
@@ -208,8 +248,11 @@ export function MeetingsPage() {
                       size="sm" 
                       onClick={(e) => { 
                         e.stopPropagation(); 
-                        if (meeting.meetingLink && (meeting.meetingLink.startsWith('http://') || meeting.meetingLink.startsWith('https://'))) {
-                          window.open(meeting.meetingLink, '_blank', 'noopener,noreferrer');
+                        const rawLink = (meeting.meetingLink || '').trim();
+                        if (rawLink) {
+                          const isHttp = rawLink.startsWith('http://') || rawLink.startsWith('https://');
+                          const targetUrl = isHttp ? rawLink : `https://${rawLink}`;
+                          window.open(targetUrl, '_blank', 'noopener,noreferrer');
                         } else {
                           navigate(`${prefix}/meetings/${meeting.id}`);
                         }
