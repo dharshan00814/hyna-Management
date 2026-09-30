@@ -200,7 +200,7 @@ export function MeetingsPage() {
       <Modal
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
-        title="Create Meeting"
+        title="New Meeting"
         size="lg"
         footer={
           <>
@@ -215,11 +215,45 @@ export function MeetingsPage() {
             placeholder="e.g., Weekly Team Meeting"
             value={newMeeting.title}
             onChange={(e) => setNewMeeting(m => ({ ...m, title: e.target.value }))}
+            autoFocus
           />
+
+          {/* ADD MEETING LINK (GOOGLE MEET) SECTION - PROMINENT AT TOP */}
+          <div className="p-4 rounded-xl border-2 border-indigo-500/20 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                <Link2 className="w-4 h-4 text-indigo-600" /> Add Meeting Link (Google Meet)
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-800 hover:bg-emerald-50 shrink-0 font-medium"
+                onClick={() => window.open('https://meet.google.com/new', '_blank')}
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" /> Create Google Meet Link
+              </Button>
+            </div>
+            <Input
+              placeholder="Paste Google Meet link: https://meet.google.com/abc-defg-hij"
+              value={newMeeting.meetingLink}
+              onChange={(e) => setNewMeeting(m => ({ ...m, meetingLink: e.target.value }))}
+              className="bg-white dark:bg-zinc-900 border-indigo-200 dark:border-indigo-900/50 text-xs font-mono"
+            />
+            <div className="flex items-center justify-between text-[11px] text-[var(--color-muted-foreground)]">
+              <span>Paste your Google Meet link here, or click <strong>Create Google Meet Link</strong> to start one.</span>
+              {newMeeting.meetingLink && newMeeting.meetingLink.includes('meet.google.com') && (
+                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] py-0 font-medium">
+                  Google Meet
+                </Badge>
+              )}
+            </div>
+          </div>
+
           <Textarea
             label="Description"
             placeholder="Meeting agenda..."
-            rows={3}
+            rows={2}
             value={newMeeting.description}
             onChange={(e) => setNewMeeting(m => ({ ...m, description: e.target.value }))}
           />
@@ -256,32 +290,6 @@ export function MeetingsPage() {
               value={newMeeting.endTime}
               onChange={(e) => setNewMeeting(m => ({ ...m, endTime: e.target.value }))}
             />
-          </div>
-
-          {/* Meeting Link (Google Meet / Video Link) Field */}
-          <div className="space-y-1.5 p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-muted)]/30">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-[var(--color-foreground)] flex items-center gap-1.5">
-                <Link2 className="w-3.5 h-3.5 text-indigo-500" /> Meeting Link (Google Meet / Video Call)
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 text-[11px] gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-medium"
-                onClick={() => window.open('https://meet.google.com/new', '_blank')}
-              >
-                <ExternalLink className="w-3 h-3" /> New Google Meet
-              </Button>
-            </div>
-            <Input
-              placeholder="https://meet.google.com/abc-defg-hij"
-              value={newMeeting.meetingLink}
-              onChange={(e) => setNewMeeting(m => ({ ...m, meetingLink: e.target.value }))}
-            />
-            <p className="text-[11px] text-[var(--color-muted-foreground)]">
-              Paste your Google Meet link here, or click "New Google Meet" to create one in Google.
-            </p>
           </div>
 
           <div>
