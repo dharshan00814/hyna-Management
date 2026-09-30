@@ -5,7 +5,7 @@ import { cn, getInitials, getAvatarColor, formatRelativeTime } from '@/lib/utils
 import { useAuthStore, useSidebarStore, useThemeStore } from '@/stores';
 import { usePWA } from '@/hooks/usePWA';
 import { InstallAppModal } from '@/components/common/InstallAppModal';
-import { getNotifications, markNotificationRead, getTodayAttendance } from '@/services/api';
+import { getNotifications, markNotificationRead, markAllNotificationsRead, getTodayAttendance } from '@/services/api';
 import type { UserRole, Notification, AttendanceRecord } from '@/types';
 
 export function Header() {
@@ -40,6 +40,32 @@ export function Header() {
     .slice(0, 8);
   const unreadCount = userNotifications.filter(n => !n.read).length;
 
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.read) {
+      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+      try {
+        await markNotificationRead(notif.id);
+      } catch (err) {
+        console.error('Failed to mark notification as read:', err);
+      }
+    }
+    setShowNotifications(false);
+    if (notif.actionUrl) {
+      navigate(notif.actionUrl);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    if (currentUser?.id) {
+      try {
+        await markAllNotificationsRead(currentUser.id);
+      } catch (err) {
+        console.error('Failed to mark all as read:', err);
+      }
+    }
+  };
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -48,6 +74,27 @@ export function Header() {
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // Listen for realtime notifications
+  useEffect(() => {
+    const handleRealtime = (e: CustomEvent) => {
+      const raw = e.detail;
+      const notif: Notification = {
+        id: raw.id,
+        type: raw.type || 'general',
+        title: raw.title,
+        message: raw.message,
+        userId: raw.user_id,
+        read: raw.is_read || raw.read || false,
+        createdAt: raw.created_at,
+        actionUrl: raw.link || raw.action_url,
+        icon: raw.icon,
+      };
+      setNotifications(prev => [notif, ...prev]);
+    };
+    window.addEventListener('realtime-notification', handleRealtime as EventListener);
+    return () => window.removeEventListener('realtime-notification', handleRealtime as EventListener);
   }, []);
 
   // Keyboard shortcut for search
@@ -192,18 +239,26 @@ export function Header() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
               <h3 className="text-sm font-semibold">Notifications</h3>
               {unreadCount > 0 && (
-                <span className="text-xs text-[var(--color-primary)] font-medium cursor-pointer hover:underline">
+                <span 
+                  onClick={handleMarkAllRead}
+                  className="text-xs text-[var(--color-primary)] font-medium cursor-pointer hover:underline"
+                >
                   Mark all read
                 </span>
               )}
             </div>
             <div className="max-h-96 overflow-y-auto">
               {userNotifications.length === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)] text-center py-8">No notifications</p>
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                  <CheckCircle2 className="w-8 h-8 text-[var(--color-muted-foreground)] opacity-50 mb-3" />
+                  <p className="text-sm font-medium text-[var(--color-foreground)]">You're all caught up!</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)] mt-1">No new notifications right now.</p>
+                </div>
               ) : (
                 userNotifications.map((notif) => (
                   <div
                     key={notif.id}
+                    onClick={() => handleNotificationClick(notif)}
                     className={cn(
                       'flex gap-3 px-4 py-3 border-b border-[var(--color-border)] last:border-0 cursor-pointer hover:bg-[var(--color-muted)] transition-colors',
                       !notif.read && 'bg-[var(--color-primary)]/5',

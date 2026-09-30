@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Laptop, ShieldCheck, CheckCircle2, Copy, Check, RefreshCw,
-  PowerOff, ExternalLink, Terminal, Code2, Sparkles, AlertCircle, Info, Key
+  PowerOff, ExternalLink, Terminal, Code2, Sparkles, AlertCircle, Info, Key, X
 } from 'lucide-react';
 import { Button, Badge, LoadingState } from '@/components/ui';
 import { useAuthStore } from '@/stores';
@@ -115,28 +115,28 @@ export function ConnectIntegrationsPage() {
     name: string;
     description: string;
     badge: string;
-    icon: string;
+    icon: React.ReactNode;
   }[] = [
     {
       id: 'vscode',
       name: 'Visual Studio Code',
       description: 'Connect your standard VS Code desktop or web environment.',
       badge: 'Official Extension',
-      icon: '🔷',
+      icon: <Code2 className="w-6 h-6 text-blue-500" />,
     },
     {
       id: 'cursor',
       name: 'Cursor',
       description: 'Connect Cursor IDE with native cursor tool tagging and telemetry.',
       badge: 'Native Compatible',
-      icon: '⚡',
+      icon: <Terminal className="w-6 h-6 text-indigo-500" />,
     },
     {
       id: 'antigravity',
       name: 'Antigravity',
       description: 'Lightweight agent connector sending verified safe activity metadata.',
       badge: 'Local Connector',
-      icon: '🚀',
+      icon: <Sparkles className="w-6 h-6 text-purple-500" />,
     },
   ];
 
@@ -219,7 +219,7 @@ export function ConnectIntegrationsPage() {
             >
               <div>
                 <div className="flex items-start justify-between mb-3">
-                  <span className="text-2xl">{tool.icon}</span>
+                  <span className="flex items-center justify-center p-2 rounded-lg bg-[var(--color-muted)]">{tool.icon}</span>
                   <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
                     {tool.badge}
                   </span>
@@ -356,7 +356,7 @@ export function ConnectIntegrationsPage() {
                 onClick={() => setActiveModalTool(null)}
                 className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 

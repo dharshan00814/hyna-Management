@@ -42,6 +42,7 @@ export interface Project {
   status: ProjectStatus;
   progress: number;
   managerId: string;
+  leadId?: string;
   memberIds: string[];
   startDate: string;
   deadline: string;
@@ -184,7 +185,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   type: 'text' | 'file' | 'system';
-  attachments?: string[];
+  attachments?: { name: string; path: string; type: string; url?: string }[];
   reactions?: { emoji: string; userIds: string[] }[];
 }
 

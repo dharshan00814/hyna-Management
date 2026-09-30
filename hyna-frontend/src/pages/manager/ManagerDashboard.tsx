@@ -175,7 +175,7 @@ export function ManagerDashboard() {
         {/* Left Column: Projects & Submissions (2 cols) */}
         <div className="lg:col-span-2 space-y-8">
           {/* Pending Submissions / Deliverables Review Queue */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold">Deliverables Queue</h2>
@@ -228,7 +228,7 @@ export function ManagerDashboard() {
           </div>
 
           {/* Managed Projects Overview */}
-          <div className="card p-6 space-y-5">
+          <div className="card p-6 space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold">My Managed Projects</h2>
@@ -300,7 +300,7 @@ export function ManagerDashboard() {
         {/* Right Column: Team & Attendance (1 col) */}
         <div className="space-y-8">
           {/* Team Members */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Assigned Team</h2>
               <span className="text-xs text-[var(--color-muted-foreground)]">
@@ -336,7 +336,7 @@ export function ManagerDashboard() {
           </div>
 
           {/* Today's Team Attendance */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Team Attendance Today</h2>
               <Badge variant="success">{teamAttendance.length} Checked In</Badge>
@@ -368,7 +368,7 @@ export function ManagerDashboard() {
           </div>
 
           {/* Upcoming Team Meetings */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
               <Button size="sm" variant="ghost" onClick={() => navigate('/manager/meetings')}>

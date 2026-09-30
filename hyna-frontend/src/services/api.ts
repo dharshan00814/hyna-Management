@@ -54,7 +54,8 @@ function mapProject(row: any): Project {
     status: row.status || 'planning',
     progress: row.progress ?? 0,
     managerId: row.manager_id || '',
-    memberIds: memberList,
+    leadId: row.lead_id || undefined,
+    memberIds: row.member_ids || [],
     startDate: row.start_date || '',
     deadline: row.deadline || '',
     lastUpdated: row.updated_at || row.created_at || new Date().toISOString(),
@@ -556,12 +557,11 @@ export async function createProject(project: Partial<Project>): Promise<Project>
     description: project.description || '',
     status: project.status || 'planning',
     progress: project.progress || 0,
-    managerId: project.managerId || '',
-    memberIds: project.memberIds || [],
-    startDate: project.startDate || new Date().toISOString().split('T')[0],
-    deadline: project.deadline || '',
-    lastUpdated: new Date().toISOString(),
-    modules: [],
+    manager_id: project.managerId || null,
+    lead_id: project.leadId || null,
+    member_ids: project.memberIds || [],
+    start_date: project.startDate || new Date().toISOString().split('T')[0],
+    deadline: project.deadline || null,
     color: project.color || '#6366f1',
     tags: project.tags || [],
   };
@@ -699,6 +699,40 @@ export async function deleteProject(projectId: string): Promise<boolean> {
     throw error;
   }
   return true;
+}
+
+export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+  const updatePayload: any = {};
+  if (updates.name !== undefined) updatePayload.name = updates.name;
+  if (updates.description !== undefined) updatePayload.description = updates.description;
+  if (updates.status !== undefined) updatePayload.status = updates.status;
+  if (updates.progress !== undefined) updatePayload.progress = updates.progress;
+  if (updates.managerId !== undefined) updatePayload.manager_id = updates.managerId;
+  if (updates.leadId !== undefined) updatePayload.lead_id = updates.leadId;
+  if (updates.memberIds !== undefined) updatePayload.member_ids = updates.memberIds;
+  if (updates.startDate !== undefined) updatePayload.start_date = updates.startDate;
+  if (updates.deadline !== undefined) updatePayload.deadline = updates.deadline;
+  if (updates.color !== undefined) updatePayload.color = updates.color;
+  if (updates.tags !== undefined) updatePayload.tags = updates.tags;
+
+  updatePayload.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update(updatePayload)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating project:', error);
+    throw error;
+  }
+  
+  const updated = mapProject(data);
+  const idx = projectsCache.findIndex(p => p.id === id);
+  if (idx !== -1) projectsCache[idx] = updated;
+  return updated;
 }
 
 // ============================================================
@@ -1412,6 +1446,20 @@ export async function submitDailyReport(report: Partial<DailyReport>): Promise<D
 // ============================================================
 // NOTIFICATIONS API
 // ============================================================
+export async function createNotification(notification: any): Promise<void> {
+  const payload = {
+    user_id: notification.userId,
+    title: notification.title,
+    message: notification.message,
+    link: notification.actionUrl,
+    type: notification.type || 'general',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from('notifications').insert([payload]);
+  if (error) console.error('Failed to create notification:', error);
+}
 export async function getNotifications(userId?: string): Promise<Notification[]> {
   if (!isSupabaseConfigured()) return [];
   let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
@@ -1540,45 +1588,43 @@ export async function createChannel(name: string, type: 'general' | 'project' | 
   return mapChannel(data);
 }
 
-export async function getChannelMessages(channelId: string): Promise<ChatMessage[]> {
-  if (!isSupabaseConfigured() || !channelId) return [];
-
-  try {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('channel_id', channelId)
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      console.warn('Error fetching channel messages:', error);
-      return [];
-    }
-
-    return (data || []).map(mapMessage);
-  } catch (err) {
-    console.warn('Exception in getChannelMessages:', err);
-    return [];
+export async function getChannelMessages(receiverId: string, currentUserId?: string): Promise<ChatMessage[]> {
+  if (!isSupabaseConfigured()) return [];
+  
+  let query = supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
+  
+  if (receiverId === 'globe') {
+    // Global chat is identified by null receiver_id
+    query = query.is('receiver_id', null);
+  } else if (currentUserId) {
+    // Direct messages between current user and receiver
+    query = query.or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`);
   }
+
+  const { data, error } = await query;
+  if (error) return [];
+  return (data || []).map(mapMessage);
 }
 
-export async function sendMessage(
-  channelId: string, 
-  content: string, 
-  senderId: string,
-  attachments: string[] = [],
-  type: 'text' | 'file' | 'system' = 'text'
-): Promise<ChatMessage> {
-  const now = new Date().toISOString();
+export async function sendMessage(receiverId: string, content: string, senderId: string, attachments: any[] = []): Promise<ChatMessage> {
+  const insertPayload = {
+    receiver_id: receiverId === 'globe' ? null : receiverId,
+    sender_id: senderId,
+    content,
+    timestamp: new Date().toISOString(),
+    type: attachments.length > 0 && !content.trim() ? 'file' : 'text',
+    attachments,
+    reactions: [],
+  };
 
   if (!isSupabaseConfigured()) {
     return {
-      id: `msg_${Date.now()}`,
-      channelId,
+      id: `msg${Date.now()}`,
+      channelId: receiverId,
       senderId,
       content,
-      timestamp: now,
-      type,
+      timestamp: insertPayload.timestamp,
+      type: insertPayload.type as any,
       attachments,
       reactions: [],
     };
@@ -1614,69 +1660,12 @@ export async function sendMessage(
     .select()
     .single();
 
-  if (error) {
-    console.error('Error inserting chat message:', error);
-    // Return optimistic fallback message so UI doesn't drop the chat
-    return {
-      id: insertPayload.id,
-      channelId,
-      senderId: validSenderId,
-      content,
-      timestamp: now,
-      type,
-      attachments,
-      reactions: [],
-    };
-  }
-
-  // Update last message in channel asynchronously
-  try {
-    await supabase
-      .from('chat_channels')
-      .update({
-        last_message: content,
-        last_message_at: now,
-      })
-      .eq('id', channelId);
-  } catch (updateErr) {
-    console.warn('Could not update channel last message info:', updateErr);
-  }
+  if (error) throw error;
 
   return mapMessage(data);
 }
 
-export async function toggleMessageReaction(messageId: string, emoji: string, userId: string): Promise<any> {
-  if (!isSupabaseConfigured()) return;
-  try {
-    const { data: msg } = await supabase
-      .from('chat_messages')
-      .select('reactions')
-      .eq('id', messageId)
-      .maybeSingle();
 
-    let reactions: { emoji: string; userIds: string[] }[] = Array.isArray(msg?.reactions) ? msg.reactions : [];
-    const existing = reactions.find(r => r.emoji === emoji);
-    if (existing) {
-      if (existing.userIds.includes(userId)) {
-        existing.userIds = existing.userIds.filter(id => id !== userId);
-      } else {
-        existing.userIds.push(userId);
-      }
-    } else {
-      reactions.push({ emoji, userIds: [userId] });
-    }
-    reactions = reactions.filter(r => r.userIds.length > 0);
-
-    await supabase
-      .from('chat_messages')
-      .update({ reactions })
-      .eq('id', messageId);
-
-    return reactions;
-  } catch (err) {
-    console.warn('Could not toggle reaction:', err);
-  }
-}
 
 // ============================================================
 // FILES API
@@ -1720,18 +1709,11 @@ export async function uploadFile(file: File, folder: string = 'General'): Promis
     throw new Error('Supabase is not configured. Please check your .env credentials.');
   }
 
-  const fileExt = file.name.split('.').pop() || '';
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const uniquePrefix = `${Math.random().toString(36).substring(2, 8)}-${Date.now()}`;
-  const fileName = `${uniquePrefix}-${sanitizedName}`;
-  const filePath = `${folder}/${fileName}`;
+  const filePath = `${folder}/${file.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from('files')
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
+    .upload(filePath, file, { upsert: true });
 
   if (uploadError) {
     console.error('Error uploading file to storage:', uploadError);
