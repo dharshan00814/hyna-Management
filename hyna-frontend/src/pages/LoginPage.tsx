@@ -206,31 +206,33 @@ const css = `
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
 }
 .su-badge {
-  font: 500 11px 'JetBrains Mono', monospace;
-  background: rgba(34, 34, 38, 0.85);
-  color: #b0b0b8;
-  padding: 7px 15px;
-  border-radius: 10px;
-  margin-bottom: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  font: 500 13px 'JetBrains Mono', monospace;
+  background: rgba(34, 34, 38, 0.9);
+  color: #c4c4cd;
+  padding: 8px 18px;
+  border-radius: 12px;
+  margin-bottom: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   letter-spacing: -0.2px;
   white-space: nowrap;
 }
+.su-card h1,
 .su h1 {
-  font-size: 29px;
-  font-weight: 600;
-  letter-spacing: -0.6px;
-  margin-bottom: 8px;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  margin-bottom: 10px;
   color: #ffffff;
   text-align: center;
-  white-space: nowrap;
+  line-height: 1.2;
 }
 .su-sub {
-  font-size: 13px;
-  color: #8a8a94;
+  font-size: 15px;
+  color: #9da0aa;
   margin-bottom: 30px;
   text-align: center;
   font-weight: 400;
+  line-height: 1.45;
 }
 
 /* Error Banner */
@@ -424,44 +426,6 @@ const css = `
   to { transform: rotate(360deg); }
 }
 
-/* Quick Fill Demo Roster */
-.su-quick-roster {
-  margin-top: 26px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.su-roster-title {
-  font: 500 10px 'JetBrains Mono', monospace;
-  color: #6a6a74;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.su-roster-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-}
-.su-roster-btn {
-  font: 500 11px 'Manrope', sans-serif;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #a8a8b2;
-  padding: 4px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.su-roster-btn:hover {
-  background: rgba(193, 242, 103, 0.15);
-  border-color: #c1f267;
-  color: #ffffff;
-}
 
 @media (max-width: 480px) {
   .su-card {
@@ -536,11 +500,6 @@ export function LoginPage() {
     }
   };
 
-  const handleQuickFill = (idVal: string, pwVal: string) => {
-    setIdentifier(idVal);
-    setPassword(pwVal);
-    setErrorMessage('');
-  };
 
   return (
     <div className="su-root">
@@ -635,33 +594,6 @@ export function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Demo Access */}
-          <div className="su-quick-roster">
-            <span className="su-roster-title">Demo Quick Fill</span>
-            <div className="su-roster-chips">
-              <button
-                type="button"
-                className="su-roster-btn"
-                onClick={() => handleQuickFill('vignesh@hynastudio.com', 'admin123')}
-              >
-                Vignesh (CEO)
-              </button>
-              <button
-                type="button"
-                className="su-roster-btn"
-                onClick={() => handleQuickFill('asthamil@hynastudio.com', 'manager123')}
-              >
-                Asthamil (Manager)
-              </button>
-              <button
-                type="button"
-                className="su-roster-btn"
-                onClick={() => handleQuickFill('akshaya@hynastudio.com', 'member123')}
-              >
-                Akshaya (Member)
-              </button>
-            </div>
-          </div>
         </section>
       </div>
     </div>

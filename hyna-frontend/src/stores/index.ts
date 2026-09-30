@@ -628,30 +628,32 @@ export const useSidebarStore = create<SidebarState>()((set) => ({
   setMobileOpen: (open) => set({ isMobileOpen: open }),
 }));
 
-// ---- Theme State ----
-type ThemeMode = 'light' | 'dark' | 'system';
+// ---- Theme State (Strict Obsidian Dark Theme) ----
+export type ThemeMode = 'dark';
 
 interface ThemeState {
   mode: ThemeMode;
-  resolvedTheme: 'light' | 'dark';
-  setMode: (mode: ThemeMode) => void;
+  resolvedTheme: 'dark';
+  setMode: (mode?: string) => void;
 }
-
-const getSystemTheme = (): 'light' | 'dark' => {
-  if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-};
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      mode: 'system',
-      resolvedTheme: getSystemTheme(),
-      setMode: (mode) => set({
-        mode,
-        resolvedTheme: mode === 'system' ? getSystemTheme() : mode,
+      mode: 'dark',
+      resolvedTheme: 'dark',
+      setMode: () => set({
+        mode: 'dark',
+        resolvedTheme: 'dark',
       }),
     }),
-    { name: 'hyna-theme' }
+    {
+      name: 'hyna-theme',
+      // Always migrate any stale localStorage cache to dark
+      migrate: () => ({
+        mode: 'dark' as const,
+        resolvedTheme: 'dark' as const,
+      }),
+    }
   )
 );
