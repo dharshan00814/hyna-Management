@@ -79,11 +79,9 @@ export function MeetingDetailPage() {
               <div><span className="text-[var(--color-muted-foreground)]">Host</span><br /><div className="flex items-center gap-2 mt-1">{host && <Avatar name={host.name} size="xs" />}<span className="font-medium">{host?.name || 'Host'}</span></div></div>
               <div><span className="text-[var(--color-muted-foreground)]">Type</span><br /><span className="font-medium capitalize">{meeting.type}</span></div>
             </div>
-            {meeting.meetingLink && (
-              <Button className="w-full sm:w-auto" onClick={handleJoinMeeting}>
-                <Video className="w-4 h-4 mr-2" /> Join Meeting
-              </Button>
-            )}
+            <Button className="w-full sm:w-auto" onClick={handleJoinMeeting}>
+              <Video className="w-4 h-4 mr-2" /> Join Meeting
+            </Button>
           </div>
 
           <div className="card p-6">

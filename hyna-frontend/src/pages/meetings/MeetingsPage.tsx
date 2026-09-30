@@ -165,15 +165,13 @@ export function MeetingsPage() {
                     {host && <Avatar name={host.name} size="xs" />}
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
-                  {meeting.meetingLink ? (
-                    <Button variant="outline" size="sm" onClick={(e) => { 
-                      e.stopPropagation(); 
-                      const roomId = meeting.meetingLink?.split('/').pop();
-                      navigate(`/meeting/${roomId}`);
-                    }}>
-                      <Video className="w-3.5 h-3.5 mr-1" /> Join
-                    </Button>
-                  ) : null}
+                  <Button variant="outline" size="sm" onClick={(e) => { 
+                    e.stopPropagation(); 
+                    const roomId = meeting.meetingLink ? meeting.meetingLink.trim().split('/').pop() : meeting.id;
+                    navigate(`/meeting/${roomId || meeting.id}`);
+                  }}>
+                    <Video className="w-3.5 h-3.5 mr-1" /> Join
+                  </Button>
                 </div>
               </div>
             );
