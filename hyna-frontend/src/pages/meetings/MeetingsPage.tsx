@@ -31,6 +31,7 @@ export function MeetingsPage() {
     endTime: '11:00',
   });
 
+
   const loadData = async () => {
     try {
       await getUsers();
@@ -156,8 +157,8 @@ export function MeetingsPage() {
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
                   {meeting.meetingLink ? (
-                    <Button variant="outline" size="sm" onClick={(e) => { 
-                      e.stopPropagation(); 
+                    <Button variant="outline" size="sm" onClick={(e) => {
+                      e.stopPropagation();
                       const roomId = meeting.meetingLink?.split('/').pop();
                       navigate(`/meeting/${roomId}`);
                     }}>
@@ -260,15 +261,15 @@ export function MeetingsPage() {
             Share this link with participants to invite them to the meeting.
           </p>
           <div className="flex items-center gap-2 mt-4 p-2 bg-[var(--color-muted)] rounded-lg border border-[var(--color-border)]">
-            <input 
-              type="text" 
-              readOnly 
-              value={createdLink} 
+            <input
+              type="text"
+              readOnly
+              value={createdLink}
               className="flex-1 bg-transparent border-none focus:outline-none text-sm px-2"
             />
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 navigator.clipboard.writeText(createdLink);
                 toast.success('Link copied to clipboard');

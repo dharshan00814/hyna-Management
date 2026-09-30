@@ -15,13 +15,14 @@ const io = new Server(server, {
   },
 });
 
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('join-room', (roomId, userId) => {
     socket.join(roomId);
     console.log(`User ${userId} joined room ${roomId}`);
-    
+
     // Notify others in the room
     socket.to(roomId).emit('user-connected', userId);
 
