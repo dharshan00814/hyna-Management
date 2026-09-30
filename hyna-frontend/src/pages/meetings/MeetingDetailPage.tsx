@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Video } from 'lucide-react';
-import { Button, Avatar, Badge, EmptyState, LoadingState } from '@/components/ui';
+import { ArrowLeft, Clock, Video, Link2, ExternalLink, Copy, Edit2, Plus, Check } from 'lucide-react';
+import { Button, Avatar, Badge, EmptyState, LoadingState, Modal, Input } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getMeeting, getUsers, getUserById } from '@/services/api';
+import { getMeeting, getUsers, getUserById, updateMeeting } from '@/services/api';
+import { toast } from 'sonner';
 import type { Meeting } from '@/types';
 
 export function MeetingDetailPage() {
@@ -15,6 +16,11 @@ export function MeetingDetailPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Link Editor state
+  const [isEditingLink, setIsEditingLink] = useState(false);
+  const [meetLinkInput, setMeetLinkInput] = useState('');
+  const [isSavingLink, setIsSavingLink] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -45,15 +51,43 @@ export function MeetingDetailPage() {
   }
 
   const host = getUserById(meeting.hostId);
+  const isGoogleMeet = Boolean(meeting.meetingLink && meeting.meetingLink.includes('meet.google.com'));
+  const hasExternalLink = Boolean(meeting.meetingLink && (meeting.meetingLink.startsWith('http://') || meeting.meetingLink.startsWith('https://')));
 
   const handleJoinMeeting = () => {
-    let roomId = meeting.id;
-    if (meeting.meetingLink) {
-      const parts = meeting.meetingLink.split('/');
-      const last = parts[parts.length - 1];
-      if (last) roomId = last;
+    if (!meeting.meetingLink) {
+      setMeetLinkInput('');
+      setIsEditingLink(true);
+      return;
     }
+
+    if (hasExternalLink) {
+      window.open(meeting.meetingLink, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    let roomId = meeting.id;
+    const parts = meeting.meetingLink.split('/');
+    const last = parts[parts.length - 1];
+    if (last) roomId = last;
     navigate(`/meeting/${roomId}`);
+  };
+
+  const handleSaveMeetingLink = async () => {
+    if (!id) return;
+    setIsSavingLink(true);
+    try {
+      const cleanLink = meetLinkInput.trim();
+      const updated = await updateMeeting(id, { meetingLink: cleanLink });
+      setMeeting(prev => prev ? { ...prev, meetingLink: cleanLink } : updated);
+      setIsEditingLink(false);
+      toast.success(cleanLink ? 'Meeting link updated successfully!' : 'Meeting link removed');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to update meeting link');
+    } finally {
+      setIsSavingLink(false);
+    }
   };
 
   return (
