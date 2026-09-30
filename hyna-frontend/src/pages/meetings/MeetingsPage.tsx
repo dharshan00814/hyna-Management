@@ -158,14 +158,14 @@ export function MeetingsPage() {
                     {host && <Avatar name={host.name} size="xs" />}
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
-                  {meeting.meetingLink ? (
-                    <Button variant="outline" size="sm" onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/meeting/${meeting.meetingLink}`);
-                    }}>
-                      <Video className="w-3.5 h-3.5 mr-1" /> Join
-                    </Button>
-                  ) : null}
+                  <Button variant="outline" size="sm" onClick={(e) => {
+                    e.stopPropagation();
+                    // Fallback to a predictable ID if meetingLink is missing on older meetings
+                    const roomId = meeting.meetingLink || `HYNA-MTG-${meeting.id.split('-')[0]?.toUpperCase() || meeting.id.substring(0, 8).toUpperCase()}`;
+                    navigate(`/meeting/${roomId}`);
+                  }}>
+                    <Video className="w-3.5 h-3.5 mr-1" /> Join
+                  </Button>
                 </div>
               </div>
             );
