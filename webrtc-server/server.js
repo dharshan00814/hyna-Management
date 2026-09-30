@@ -101,6 +101,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('host-action', (payload) => {
+    io.to(payload.targetSocketId).emit('host-action', payload.action);
+  });
+
   socket.on('disconnect', () => {
     const user = userSockets.get(socket.id);
     if (user) {
