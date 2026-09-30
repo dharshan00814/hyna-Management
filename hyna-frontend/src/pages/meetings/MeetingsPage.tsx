@@ -20,6 +20,7 @@ export function MeetingsPage() {
 
   const [createdLink, setCreatedLink] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showLinkOption, setShowLinkOption] = useState(false);
 
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [newMeeting, setNewMeeting] = useState({
