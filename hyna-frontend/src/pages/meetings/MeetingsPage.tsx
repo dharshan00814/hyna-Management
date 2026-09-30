@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Video, Users } from 'lucide-react';
+import { Plus, Clock, Video, Users, Check, Copy, ExternalLink, Link2 } from 'lucide-react';
 import { Button, Avatar, Badge, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import { getMeetings, createMeeting, getUsers, getUserById, createNotification } from '@/services/api';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
-import { Copy } from 'lucide-react';
 import type { Meeting, MeetingType, User } from '@/types';
 
 const generateTimeOptions = () => {
@@ -33,14 +31,16 @@ export function MeetingsPage() {
   const { currentRole, currentUser, effectiveRole } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
 
   const [createdLink, setCreatedLink] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showLinkOption, setShowLinkOption] = useState(false);
 
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [newMeeting, setNewMeeting] = useState({
     title: '',
     description: '',
@@ -53,8 +53,8 @@ export function MeetingsPage() {
 
   const loadData = async () => {
     try {
-      const usrs = await getUsers();
-      setUsers(usrs);
+      const usersList = await getUsers();
+      setAllUsers(usersList);
       const ms = await getMeetings();
       setMeetings(ms);
     } catch (err) {
@@ -79,13 +79,13 @@ export function MeetingsPage() {
       const allParticipants = Array.from(new Set([...newMeeting.participantIds, currentUser?.id || 'u1']));
       const created = await createMeeting({
         ...newMeeting,
-        meetingLink: generatedLink,
-        hostId: currentUser?.id || 'u1',
-        participantIds: allParticipants,
+        meetingLink: finalMeetingLink,
+        hostId,
+        participantIds: participants,
       });
 
       // Create notifications for invited members
-      for (const pId of newMeeting.participantIds) {
+      for (const pId of participants) {
         if (pId !== currentUser?.id) {
           await createNotification({
             userId: pId,
@@ -93,14 +93,18 @@ export function MeetingsPage() {
             message: `You have been invited to ${newMeeting.title} at ${newMeeting.startTime}`,
             actionUrl: `${prefix}/meetings`,
             type: 'calendar'
-          });
+          }).catch(() => {});
         }
       }
 
       setMeetings(prev => [...prev, created]);
-      setCreatedLink(generatedLink);
+      setCreatedLink(finalMeetingLink);
       setShowCreate(false);
-      setShowSuccess(true);
+      if (finalMeetingLink) {
+        setShowSuccess(true);
+      }
+      setSelectedParticipantIds([]);
+      setShowLinkOption(false);
       setNewMeeting({
         title: '',
         description: '',
@@ -110,11 +114,12 @@ export function MeetingsPage() {
         endTime: '11:00',
         participantIds: [],
       });
-      toast.success('Meeting created!');
+      toast.success('Meeting created successfully!');
     } catch (err) {
       toast.error('Failed to create meeting');
     }
   };
+
 
   const todayStr = new Date().toISOString().split('T')[0];
   const userMeetings = currentRole === 'member'
@@ -192,15 +197,32 @@ export function MeetingsPage() {
                     {host && <Avatar name={host.name} size="xs" />}
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
-                  {meeting.meetingLink ? (
-                    <Button variant="outline" size="sm" onClick={(e) => { 
-                      e.stopPropagation(); 
-                      const roomId = meeting.meetingLink?.split('/').pop();
-                      navigate(`/meeting/${roomId}`);
-                    }}>
-                      <Video className="w-3.5 h-3.5 mr-1" /> Join
+                  <div className="flex items-center gap-2">
+                    {meeting.meetingLink && meeting.meetingLink.includes('meet.google.com') && (
+                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] py-0 px-1.5 font-normal">
+                        Google Meet
+                      </Badge>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (meeting.meetingLink && (meeting.meetingLink.startsWith('http://') || meeting.meetingLink.startsWith('https://'))) {
+                          window.open(meeting.meetingLink, '_blank', 'noopener,noreferrer');
+                        } else {
+                          navigate(`${prefix}/meetings/${meeting.id}`);
+                        }
+                      }}
+                      className={cn(
+                        "text-xs h-7",
+                        meeting.meetingLink?.includes('meet.google.com') && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                      )}
+                    >
+                      <Video className="w-3.5 h-3.5 mr-1" />
+                      {meeting.meetingLink?.includes('meet.google.com') ? 'Google Meet' : 'Join'}
                     </Button>
-                  ) : null}
+                  </div>
                 </div>
               </div>
             );
@@ -210,12 +232,18 @@ export function MeetingsPage() {
 
       <Modal
         isOpen={showCreate}
-        onClose={() => setShowCreate(false)}
+        onClose={() => {
+          setShowCreate(false);
+          setShowLinkOption(false);
+        }}
         title="Create Meeting"
         size="lg"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => {
+              setShowCreate(false);
+              setShowLinkOption(false);
+            }}>Cancel</Button>
             <Button onClick={handleCreateMeeting}>Create Meeting</Button>
           </>
         }
@@ -226,11 +254,83 @@ export function MeetingsPage() {
             placeholder="e.g., Weekly Team Meeting"
             value={newMeeting.title}
             onChange={(e) => setNewMeeting(m => ({ ...m, title: e.target.value }))}
+            autoFocus
           />
+
+          {/* ADD LINK OPTION */}
+          {!showLinkOption && !newMeeting.meetingLink ? (
+            <div className="flex items-center gap-2 py-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowLinkOption(true)}
+                className="flex-1 h-10 border-dashed border-2 border-indigo-500/40 hover:border-indigo-600 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
+              >
+                <Plus className="w-4 h-4" /> Add Meeting Link (Google Meet)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  window.open('https://meet.google.com/new', '_blank');
+                  setShowLinkOption(true);
+                }}
+                className="h-10 px-3.5 text-xs gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl font-medium shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" /> New Google Meet
+              </Button>
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl border-2 border-indigo-500/25 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                  <Link2 className="w-4 h-4 text-indigo-600" /> Meeting Link (Google Meet)
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[11px] gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-white dark:bg-zinc-800 hover:bg-emerald-50 shrink-0 font-medium"
+                    onClick={() => window.open('https://meet.google.com/new', '_blank')}
+                  >
+                    <ExternalLink className="w-3 h-3 text-emerald-600" /> Create in Google
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewMeeting(m => ({ ...m, meetingLink: '' }));
+                      setShowLinkOption(false);
+                    }}
+                    className="text-gray-400 hover:text-red-500 text-xs px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    title="Remove link"
+                  >
+                    ✕ Remove
+                  </button>
+                </div>
+              </div>
+              <Input
+                placeholder="Paste Google Meet link: https://meet.google.com/abc-defg-hij"
+                value={newMeeting.meetingLink}
+                onChange={(e) => setNewMeeting(m => ({ ...m, meetingLink: e.target.value }))}
+                className="bg-white dark:bg-zinc-900 border-indigo-200 dark:border-indigo-900/50 text-xs font-mono"
+                autoFocus
+              />
+              <div className="flex items-center justify-between text-[11px] text-[var(--color-muted-foreground)]">
+                <span>Paste your Google Meet link here, or click <strong>Create in Google</strong> to generate one.</span>
+                {newMeeting.meetingLink && newMeeting.meetingLink.includes('meet.google.com') && (
+                  <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] py-0 font-medium">
+                    Google Meet Detected
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
           <Textarea
             label="Description"
             placeholder="Meeting agenda..."
-            rows={3}
+            rows={2}
             value={newMeeting.description}
             onChange={(e) => setNewMeeting(m => ({ ...m, description: e.target.value }))}
           />
@@ -318,10 +418,15 @@ export function MeetingsPage() {
           <>
             <Button variant="outline" onClick={() => setShowSuccess(false)}>Done</Button>
             <Button onClick={() => {
-              const roomId = createdLink.split('/').pop();
-              navigate(`/meeting/${roomId}`);
+              if (createdLink.startsWith('http://') || createdLink.startsWith('https://')) {
+                window.open(createdLink, '_blank', 'noopener,noreferrer');
+              } else if (createdLink) {
+                const roomId = createdLink.split('/').pop();
+                navigate(`/meeting/${roomId}`);
+              }
+              setShowSuccess(false);
             }}>
-              Start Meeting
+              {createdLink.includes('meet.google.com') ? 'Open Google Meet' : 'Start Meeting'}
             </Button>
           </>
         }
