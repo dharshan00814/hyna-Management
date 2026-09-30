@@ -23,33 +23,12 @@ const css = `
   color: #f2f2f2;
   position: relative;
   overflow: hidden;
-  transition: background 0.4s ease;
-}
-
-/* 1. Lime Canvas (Default - matching user's lime background image) */
-.su-root.theme-lime-canvas {
   background-color: #c1f267;
   background-image: 
     radial-gradient(circle at 18% 18%, #e0faa3 0%, transparent 42%),
     radial-gradient(circle at 82% 28%, #cdf379 0%, transparent 48%),
     radial-gradient(circle at 50% 88%, #b2e646 0%, transparent 55%),
     linear-gradient(140deg, #dcf89d 0%, #c1f267 52%, #b5ea4f 100%);
-}
-
-/* 2. Dark Canvas */
-.su-root.theme-dark-canvas {
-  background-color: #0e0e11;
-  background-image: 
-    radial-gradient(circle at 50% 20%, #1e1e24 0%, transparent 60%),
-    linear-gradient(180deg, #111114 0%, #0a0a0c 100%);
-}
-
-/* 3. Lime Card Theme */
-.su-root.theme-lime-card {
-  background-color: #0d0e12;
-  background-image: 
-    radial-gradient(circle at 50% 40%, rgba(193, 242, 103, 0.12) 0%, transparent 70%),
-    linear-gradient(180deg, #111115 0%, #09090b 100%);
 }
 
 /* Background Ambient Elements */
@@ -80,53 +59,7 @@ const css = `
   right: -80px;
 }
 
-/* Top Theme Switcher Bar */
-.su-theme-bar {
-  position: absolute;
-  top: 20px;
-  right: 24px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(20, 20, 24, 0.25);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  padding: 4px;
-  border-radius: 999px;
-  z-index: 50;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-.su-theme-btn {
-  font: 500 11px 'JetBrains Mono', monospace;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  background: transparent;
-  color: #2c3614;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.theme-dark-canvas .su-theme-btn,
-.theme-lime-card .su-theme-btn {
-  color: #9c9ca6;
-}
-.su-theme-btn.active {
-  background: #141417;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-}
-.su-theme-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-/* Main Login Card - Faithful to Image 1 */
+/* Main Login Card - Faithful to Image */
 .su-card-container {
   width: 100%;
   max-width: 450px;
@@ -162,60 +95,6 @@ const css = `
     0 16px 36px -8px rgba(0, 0, 0, 0.3),
     0 0 0 1px rgba(0, 0, 0, 0.15);
   transition: all 0.3s ease;
-}
-
-.theme-lime-card .su-card {
-  background: #c1f267;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  color: #121214;
-  box-shadow: 0 32px 80px -15px rgba(193, 242, 103, 0.3);
-}
-
-.theme-lime-card .su-card h1 {
-  color: #121214;
-}
-
-.theme-lime-card .su-card .su-sub {
-  color: #4a5c1e;
-}
-
-.theme-lime-card .su-card .su-badge {
-  background: #141416;
-  color: #c1f267;
-}
-
-.theme-lime-card .su-card .su-field input {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.12);
-  color: #121214;
-}
-
-.theme-lime-card .su-card .su-field input::placeholder {
-  color: #7b8863;
-}
-
-.theme-lime-card .su-card .su-field input:focus-visible {
-  border-color: #121214;
-  box-shadow: 0 0 0 3px rgba(18, 18, 20, 0.15);
-}
-
-.theme-lime-card .su-card .su-row {
-  color: #42521c;
-}
-
-.theme-lime-card .su-card .su-link {
-  color: #1f270a;
-  font-weight: 500;
-}
-
-.theme-lime-card .su-card .su-submit {
-  background: #141416;
-  color: #ffffff;
-}
-
-.theme-lime-card .su-card .su-submit:hover:not(:disabled) {
-  background: #000000;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 /* Header & Typography */
@@ -410,7 +289,7 @@ const css = `
   to { transform: rotate(360deg); }
 }
 
-/* Quick Fill Demo Roster (Subtle footer) */
+/* Quick Fill Demo Roster */
 .su-quick-roster {
   margin-top: 26px;
   padding-top: 20px;
@@ -421,17 +300,11 @@ const css = `
   align-items: center;
   gap: 8px;
 }
-.theme-lime-card .su-quick-roster {
-  border-top-color: rgba(0, 0, 0, 0.1);
-}
 .su-roster-title {
   font: 500 10px 'JetBrains Mono', monospace;
   color: #6a6a74;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-.theme-lime-card .su-roster-title {
-  color: #4a5c1e;
 }
 .su-roster-chips {
   display: flex;
@@ -454,24 +327,11 @@ const css = `
   border-color: #c1f267;
   color: #ffffff;
 }
-.theme-lime-card .su-roster-btn {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.12);
-  color: #2b3612;
-}
-.theme-lime-card .su-roster-btn:hover {
-  background: #141416;
-  color: #ffffff;
-}
 
 @media (max-width: 480px) {
   .su-card {
     padding: 38px 24px 34px;
     border-radius: 28px;
-  }
-  .su-theme-bar {
-    top: 12px;
-    right: 12px;
   }
 }
 `;
@@ -492,7 +352,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
 
-  const [bgTheme, setBgTheme] = useState<'lime-canvas' | 'dark-canvas' | 'lime-card'>('lime-canvas');
   const [show, setShow] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -549,44 +408,13 @@ export function LoginPage() {
   };
 
   return (
-    <div className={`su-root theme-${bgTheme}`}>
+    <div className="su-root">
       <style>{css}</style>
 
       {/* Ambient background glows */}
       <div className="su-ambient" aria-hidden="true">
         <div className="su-ambient-circle su-ambient-1" />
         <div className="su-ambient-circle su-ambient-2" />
-      </div>
-
-      {/* Theme selector */}
-      <div className="su-theme-bar">
-        <button
-          type="button"
-          onClick={() => setBgTheme('lime-canvas')}
-          className={`su-theme-btn ${bgTheme === 'lime-canvas' ? 'active' : ''}`}
-          title="Lime Green Background (Image 2)"
-        >
-          <span className="su-theme-dot" style={{ background: '#c1f267' }} />
-          <span>Lime Canvas</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setBgTheme('dark-canvas')}
-          className={`su-theme-btn ${bgTheme === 'dark-canvas' ? 'active' : ''}`}
-          title="Pure Dark Canvas"
-        >
-          <span className="su-theme-dot" style={{ background: '#1c1c20' }} />
-          <span>Dark</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setBgTheme('lime-card')}
-          className={`su-theme-btn ${bgTheme === 'lime-card' ? 'active' : ''}`}
-          title="Lime Card Theme"
-        >
-          <span className="su-theme-dot" style={{ background: '#dcf89d' }} />
-          <span>Lime Card</span>
-        </button>
       </div>
 
       <div className="su-card-container">
@@ -683,7 +511,7 @@ export function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Demo Access (Subtle helper) */}
+          {/* Quick Demo Access */}
           <div className="su-quick-roster">
             <span className="su-roster-title">Demo Quick Fill</span>
             <div className="su-roster-chips">
