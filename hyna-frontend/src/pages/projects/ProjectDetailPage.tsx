@@ -1609,7 +1609,7 @@ export function ProjectDetailPage() {
                 Cancel
               </Button>
               <Button
-                variant="danger"
+                variant="destructive"
                 isLoading={isDeleting}
                 onClick={handleDeleteProject}
                 className="bg-red-600 hover:bg-red-700 text-white"

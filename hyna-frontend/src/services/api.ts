@@ -557,11 +557,13 @@ export async function createProject(project: Partial<Project>): Promise<Project>
     description: project.description || '',
     status: project.status || 'planning',
     progress: project.progress || 0,
-    manager_id: project.managerId || null,
-    lead_id: project.leadId || null,
-    member_ids: project.memberIds || [],
-    start_date: project.startDate || new Date().toISOString().split('T')[0],
-    deadline: project.deadline || null,
+    managerId: project.managerId || '',
+    leadId: project.leadId || undefined,
+    memberIds: project.memberIds || [],
+    startDate: project.startDate || new Date().toISOString().split('T')[0],
+    deadline: project.deadline || '',
+    lastUpdated: new Date().toISOString().split('T')[0],
+    modules: [],
     color: project.color || '#6366f1',
     tags: project.tags || [],
   };
@@ -699,40 +701,6 @@ export async function deleteProject(projectId: string): Promise<boolean> {
     throw error;
   }
   return true;
-}
-
-export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
-  const updatePayload: any = {};
-  if (updates.name !== undefined) updatePayload.name = updates.name;
-  if (updates.description !== undefined) updatePayload.description = updates.description;
-  if (updates.status !== undefined) updatePayload.status = updates.status;
-  if (updates.progress !== undefined) updatePayload.progress = updates.progress;
-  if (updates.managerId !== undefined) updatePayload.manager_id = updates.managerId;
-  if (updates.leadId !== undefined) updatePayload.lead_id = updates.leadId;
-  if (updates.memberIds !== undefined) updatePayload.member_ids = updates.memberIds;
-  if (updates.startDate !== undefined) updatePayload.start_date = updates.startDate;
-  if (updates.deadline !== undefined) updatePayload.deadline = updates.deadline;
-  if (updates.color !== undefined) updatePayload.color = updates.color;
-  if (updates.tags !== undefined) updatePayload.tags = updates.tags;
-
-  updatePayload.updated_at = new Date().toISOString();
-
-  const { data, error } = await supabase
-    .from('projects')
-    .update(updatePayload)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating project:', error);
-    throw error;
-  }
-  
-  const updated = mapProject(data);
-  const idx = projectsCache.findIndex(p => p.id === id);
-  if (idx !== -1) projectsCache[idx] = updated;
-  return updated;
 }
 
 // ============================================================
@@ -1120,6 +1088,33 @@ export async function reviewTask(
   throw new Error('Task or submission not found');
 }
 
+export async function deleteTask(taskId: string): Promise<boolean> {
+  // Remove from cache immediately
+  tasksCache = tasksCache.filter(t => t.id !== taskId);
+
+  if (!isSupabaseConfigured()) {
+    return true;
+  }
+
+  try {
+    await supabase.from('task_submissions').delete().eq('task_id', taskId);
+    await supabase.from('task_checklists').delete().eq('task_id', taskId);
+  } catch (e) {
+    console.warn('Cascade delete for task dependencies:', e);
+  }
+
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('id', taskId);
+
+  if (error) {
+    console.error('Error deleting task:', error);
+    throw error;
+  }
+  return true;
+}
+
 // ============================================================
 // MEETINGS API
 // ============================================================
@@ -1308,7 +1303,7 @@ export async function checkIn(userId: string): Promise<AttendanceRecord> {
     date: today,
     status: isLate ? 'late' : 'present',
     checkIn: timeNow,
-    hoursWorked: 0,
+    workingHours: '0h 00m',
   };
 
   try {
@@ -1350,7 +1345,6 @@ export async function checkOut(userId: string): Promise<AttendanceRecord> {
     status: 'present',
     checkOut: timeNow,
     workingHours: '8h 00m',
-    hoursWorked: 8,
   };
 
   try {
@@ -1607,24 +1601,18 @@ export async function getChannelMessages(receiverId: string, currentUserId?: str
 }
 
 export async function sendMessage(receiverId: string, content: string, senderId: string, attachments: any[] = []): Promise<ChatMessage> {
-  const insertPayload = {
-    receiver_id: receiverId === 'globe' ? null : receiverId,
-    sender_id: senderId,
-    content,
-    timestamp: new Date().toISOString(),
-    type: attachments.length > 0 && !content.trim() ? 'file' : 'text',
-    attachments,
-    reactions: [],
-  };
+  const isGlobal = receiverId === 'globe';
+  const now = new Date().toISOString();
+  const msgType = attachments.length > 0 && !content.trim() ? 'file' : 'text';
 
   if (!isSupabaseConfigured()) {
     return {
       id: `msg${Date.now()}`,
-      channelId: receiverId,
+      channelId: isGlobal ? 'ch_global' : receiverId,
       senderId,
       content,
-      timestamp: insertPayload.timestamp,
-      type: insertPayload.type as any,
+      timestamp: now,
+      type: msgType as any,
       attachments,
       reactions: [],
     };
@@ -1646,10 +1634,10 @@ export async function sendMessage(receiverId: string, content: string, senderId:
 
   const insertPayload = {
     id: `msg_${Math.random().toString(36).substring(2, 10)}`,
-    channel_id: channelId,
+    channel_id: isGlobal ? 'ch_global' : receiverId,
     sender_id: validSenderId,
     content,
-    type,
+    type: msgType,
     attachments,
     reactions: [],
   };
@@ -1660,7 +1648,10 @@ export async function sendMessage(receiverId: string, content: string, senderId:
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error sending message:', error);
+    throw error;
+  }
 
   return mapMessage(data);
 }

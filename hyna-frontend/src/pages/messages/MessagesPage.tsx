@@ -1,7 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
-import EmojiPicker from 'emoji-picker-react';
-import { Globe, Send, Smile, Paperclip, FileText, X, Loader2, Hand } from 'lucide-react';
+import { Globe, Send, Smile, Paperclip, FileText, X, Loader2, Hand, Check, Copy, Sparkles } from 'lucide-react';
+
+const EMOJI_CATEGORIES = [
+  {
+    name: 'Smileys',
+    emojis: ['😀', '😃', '😄', '😁', '😆', '🥹', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😋', '😜', '😎', '🤩', '🥳', '😏', '🧐', '🤓', '🤖'],
+  },
+  {
+    name: 'Gestures',
+    emojis: ['👍', '👎', '👌', '🤌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '✋', '👋', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '💪'],
+  },
+  {
+    name: 'Vibes & Hearts',
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💔', '❣️', '💕', '🔥', '✨', '⚡', '💥', '⭐', '🌟', '🚀', '🎉', '🎊', '💯'],
+  },
+  {
+    name: 'Work & Tools',
+    emojis: ['💻', '🖥️', '📱', '💡', '📝', '📋', '📌', '📍', '🎯', '🏆', '🥇', '📊', '📈', '📉', '📁', '📂', '🔒', '🔑', '☕', '🍕', '⏰'],
+  },
+];
 import { Avatar, LoadingState } from '@/components/ui';
 import { cn, formatRelativeTime, formatFileSize } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -19,6 +37,9 @@ export function MessagesPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; path: string; type: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showMembersPanel, setShowMembersPanel] = useState(false);
+  const teamMembers = users;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,12 +63,31 @@ export function MessagesPage() {
     return () => { isMounted = false; };
   }, [currentUser]);
 
-  // Ensure a channel is always selected
-  useEffect(() => {
-    if (channels.length > 0 && (!selectedChannel || !channels.some(c => c.id === selectedChannel))) {
-      setSelectedChannel(channels[0].id);
-    }
-  }, [channels, selectedChannel]);
+  const handleCopy = (msg: ChatMessage) => {
+    navigator.clipboard.writeText(msg.content);
+    setCopiedMessageId(msg.id);
+    toast.success('Message copied to clipboard');
+    setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  const handleReaction = async (messageId: string, emoji: string) => {
+    if (!currentUser?.id) return;
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId) return m;
+      let reactions = [...(m.reactions || [])];
+      const existing = reactions.find(r => r.emoji === emoji);
+      if (existing) {
+        if (existing.userIds.includes(currentUser.id)) {
+          existing.userIds = existing.userIds.filter(id => id !== currentUser.id);
+        } else {
+          existing.userIds.push(currentUser.id);
+        }
+      } else {
+        reactions.push({ emoji, userIds: [currentUser.id] });
+      }
+      return { ...m, reactions: reactions.filter(r => r.userIds.length > 0) };
+    }));
+  };
 
   // Load messages & subscribe to realtime changes
   useEffect(() => {
@@ -152,11 +192,9 @@ export function MessagesPage() {
     setPendingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  const onEmojiClick = (emojiObject: any) => {
+  const handleInsertEmoji = (emoji: string) => {
     setNewMessage(prev => {
-      const nextStr = prev + emojiObject.emoji;
-      // Programmatically return focus to the input field so Enter key works and focus trap is broken
-      // setTimeout waits for React to finish rendering the updated input value before selecting
+      const nextStr = prev + emoji;
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -406,14 +444,44 @@ export function MessagesPage() {
               />
               <div className="relative">
                 <button 
+                  type="button"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                   className="p-2 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors"
+                  title="Add emoji"
                 >
                   <Smile className="w-4 h-4" />
                 </button>
                 {showEmojiPicker && (
-                  <div className="absolute bottom-12 right-0 z-50 shadow-xl rounded-lg">
-                    <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
+                  <div className="absolute bottom-12 right-0 z-50 w-72 max-h-72 overflow-y-auto bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl shadow-2xl p-3 animate-slide-up">
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--color-border)]">
+                      <span className="text-xs font-semibold text-[var(--color-foreground)]">Emoji Palette</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker(false)}
+                        className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] p-0.5 rounded cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="space-y-2.5">
+                      {EMOJI_CATEGORIES.map(category => (
+                        <div key={category.name}>
+                          <p className="text-[10px] font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider mb-1 px-1">{category.name}</p>
+                          <div className="grid grid-cols-6 gap-1">
+                            {category.emojis.map(emoji => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => handleInsertEmoji(emoji)}
+                                className="w-8 h-8 rounded-lg hover:bg-[var(--color-muted)] text-base flex items-center justify-center transition-transform hover:scale-125 cursor-pointer"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

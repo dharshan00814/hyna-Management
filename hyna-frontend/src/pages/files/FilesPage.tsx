@@ -5,7 +5,6 @@ import { cn, formatFileSize, formatDate } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { getFiles, getFolders, getUsers, getUserById, uploadFile, deleteFile } from '@/services/api';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import type { FileItem, Folder as FolderType } from '@/types';
 
 const fileIcons: Record<string, React.ComponentType<{ className?: string }>> = {

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, List, LayoutGrid, Paperclip, MessageSquare, ExternalLink, Layers, Users, User as UserIcon } from 'lucide-react';
+import { Plus, Search, List, LayoutGrid, Paperclip, MessageSquare, ExternalLink, Layers, Users, User as UserIcon, Trash2, AlertTriangle } from 'lucide-react';
 import { Button, Badge, Avatar, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, getPriorityDot, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import {
-  getTasks, createTask, updateTask, submitTask, reviewTask,
+  getTasks, createTask, updateTask, submitTask, reviewTask, deleteTask,
   getProjects, getModules, getUsers, getUserById, createNotification
 } from '@/services/api';
 import { toast } from 'sonner';
@@ -38,6 +38,8 @@ export function TasksPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showDetail, setShowDetail] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState<string | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form states
   const [newTask, setNewTask] = useState({
@@ -140,6 +142,7 @@ export function TasksPage() {
         status: 'todo',
         deadline: '',
         projectId: projects[0]?.id || '',
+        moduleId: defaultMods[0]?.id || '',
         assigneeId: '',
       });
       const allocatedMember = users.find(u => u.id === newTask.assigneeId);
@@ -184,6 +187,21 @@ export function TasksPage() {
       toast.success(action === 'approve' ? 'Task approved!' : 'Changes requested');
     } catch (err) {
       toast.error('Failed to process review');
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteTask(taskToDelete.id);
+      setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
+      toast.success(`Task "${taskToDelete.title}" deleted successfully.`);
+      setTaskToDelete(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete task');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -327,6 +345,15 @@ export function TasksPage() {
                         <span className="text-xs text-[var(--color-muted-foreground)] hidden lg:inline max-w-[100px] truncate">{assignee.name}</span>
                       </div>
                     )}
+                    {isAdminOrManager && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setTaskToDelete(task); }}
+                        className="p-1 rounded-md text-[var(--color-muted-foreground)] hover:text-red-500 hover:bg-red-500/10 transition-colors ml-1"
+                        title="Delete Task"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -375,13 +402,24 @@ export function TasksPage() {
                           </div>
                         )}
                         <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/50">
-                          {assignee && (
+                          {assignee ? (
                             <div className="flex items-center gap-1">
                               <Avatar name={assignee.name} size="xs" />
                               <span className="text-[11px] text-[var(--color-muted-foreground)] max-w-[80px] truncate">{assignee.name}</span>
                             </div>
-                          )}
-                          <span className="text-[11px] text-[var(--color-muted-foreground)]">{formatDate(task.deadline)}</span>
+                          ) : <span className="text-[11px] text-[var(--color-muted-foreground)]">Unassigned</span>}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-[var(--color-muted-foreground)]">{formatDate(task.deadline)}</span>
+                            {isAdminOrManager && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setTaskToDelete(task); }}
+                                className="p-0.5 rounded text-[var(--color-muted-foreground)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                title="Delete Task"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -419,7 +457,28 @@ export function TasksPage() {
             <>
               <Button variant="outline" onClick={() => handleReview(detailTask.id, 'request-changes')}>Request Changes</Button>
               <Button onClick={() => handleReview(detailTask.id, 'approve')}>Approve Deliverable</Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  const target = detailTask;
+                  setShowDetail(null);
+                  setTaskToDelete(target);
+                }}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+              </Button>
             </>
+          ) : isAdminOrManager ? (
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const target = detailTask;
+                setShowDetail(null);
+                setTaskToDelete(target);
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete Task
+            </Button>
           ) : undefined
         }
       >
@@ -701,6 +760,36 @@ export function TasksPage() {
           />
         </div>
       </Modal>
+
+      {/* Delete Task Confirmation Modal */}
+      {taskToDelete && (
+        <Modal
+          isOpen={!!taskToDelete}
+          onClose={() => setTaskToDelete(null)}
+          title="Delete Task"
+          size="sm"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setTaskToDelete(null)} disabled={isDeleting}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDeleteTask} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete Task'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+              <p className="text-sm text-red-700 dark:text-red-400">
+                This action <strong>cannot be undone</strong>.
+              </p>
+            </div>
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              Are you sure you want to permanently delete <strong className="text-[var(--color-foreground)]">{taskToDelete.title}</strong>?
+            </p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

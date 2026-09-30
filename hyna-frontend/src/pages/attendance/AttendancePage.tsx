@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowUpRight,
   ShieldCheck,
+  Download,
 } from 'lucide-react';
 import { Avatar, Badge, Button, LoadingState } from '@/components/ui';
 import { getStatusColor, formatDate, cn } from '@/lib/utils';
@@ -47,7 +48,7 @@ function getElapsedDuration(checkInStr?: string): string {
 }
 
 export function AttendancePage() {
-  const { currentRole, currentUser } = useAuthStore();
+  const { currentRole, effectiveRole, currentUser } = useAuthStore();
   const todayStr = new Date().toISOString().split('T')[0];
 
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -60,7 +61,24 @@ export function AttendancePage() {
   // Real-time ticking clock
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  const isAdminOrManager = currentRole === 'admin' || currentRole === 'manager';
+  const isAdminOrManager = Boolean(
+    currentRole === 'admin' ||
+    currentRole === 'manager' ||
+    effectiveRole === 'admin' ||
+    effectiveRole === 'manager' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'manager' ||
+    currentUser?.email === 'dharshan@hyna.app' ||
+    currentUser?.email === 'vignesh@hyna.app' ||
+    currentUser?.email === 'jashwin@hyna.app' ||
+    currentUser?.email?.toLowerCase().includes('admin') ||
+    currentUser?.designation?.toUpperCase().includes('CEO') ||
+    currentUser?.designation?.toUpperCase().includes('CTO') ||
+    currentUser?.designation?.toUpperCase().includes('CPO') ||
+    (currentUser as any)?.employeeId?.toUpperCase() === 'EMP-001' ||
+    (currentUser as any)?.employeeId?.toUpperCase() === 'EMP-002' ||
+    (currentUser as any)?.employeeId?.toUpperCase() === 'EMP-003'
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -149,6 +167,79 @@ export function AttendancePage() {
   const myPresent = myRecords.filter(r => r.status === 'present').length;
   const myLate = myRecords.filter(r => r.status === 'late').length;
   const myLeave = myRecords.filter(r => r.status === 'leave').length;
+
+  // Helper: get week date range from any date string
+  const getWeekRange = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDay(); // 0=Sun
+    const diffToMon = (day === 0 ? -6 : 1 - day);
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + diffToMon);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    return { start: mon.toISOString().split('T')[0], end: sun.toISOString().split('T')[0] };
+  };
+
+  const downloadCSV = (rows: string[][], filename: string) => {
+    const csvContent = rows.map(r => r.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadWeeklyReport = () => {
+    const { start, end } = getWeekRange(selectedDate);
+    const weekRecords = attendance.filter(a => a.date >= start && a.date <= end);
+    const rows: string[][] = [
+      ['Employee Name', 'Employee ID', 'Department', 'Date', 'Status', 'Check In', 'Check Out', 'Working Hours'],
+      ...weekRecords.map(r => {
+        const u = getUserById(r.userId);
+        return [
+          u?.name || r.userId,
+          u?.employeeId || '',
+          u?.department || '',
+          r.date,
+          r.status,
+          r.checkIn || '',
+          r.checkOut || '',
+          r.workingHours || '',
+        ];
+      }),
+    ];
+    downloadCSV(rows, `attendance-weekly-${start}-to-${end}.csv`);
+    toast.success(`Weekly report downloaded (${start} to ${end})`);
+  };
+
+  const handleDownloadMonthlyReport = () => {
+    const d = new Date(selectedDate);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const prefix = `${year}-${month}`;
+    const monthRecords = attendance.filter(a => a.date.startsWith(prefix));
+    const rows: string[][] = [
+      ['Employee Name', 'Employee ID', 'Department', 'Date', 'Status', 'Check In', 'Check Out', 'Working Hours'],
+      ...monthRecords.map(r => {
+        const u = getUserById(r.userId);
+        return [
+          u?.name || r.userId,
+          u?.employeeId || '',
+          u?.department || '',
+          r.date,
+          r.status,
+          r.checkIn || '',
+          r.checkOut || '',
+          r.workingHours || '',
+        ];
+      }),
+    ];
+    const monthName = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    downloadCSV(rows, `attendance-monthly-${prefix}.csv`);
+    toast.success(`Monthly report downloaded (${monthName})`);
+  };
 
   return (
     <div className="page-container">
@@ -401,15 +492,34 @@ export function AttendancePage() {
               )}
             </div>
 
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-              <input
-                type="text"
-                placeholder="Search by team member or ID..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-              />
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
+                <input
+                  type="text"
+                  placeholder="Search by team member or ID..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full h-9 pl-9 pr-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                />
+              </div>
+              {/* Download Reports */}
+              <button
+                onClick={handleDownloadWeeklyReport}
+                className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] hover:bg-[var(--color-border)] text-xs font-semibold transition-colors"
+                title="Download Weekly Report as CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Weekly
+              </button>
+              <button
+                onClick={handleDownloadMonthlyReport}
+                className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-primary)] text-white hover:opacity-90 text-xs font-semibold transition-colors"
+                title="Download Monthly Report as CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Monthly
+              </button>
             </div>
           </div>
 

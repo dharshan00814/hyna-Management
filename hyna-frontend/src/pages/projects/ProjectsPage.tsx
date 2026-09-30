@@ -5,24 +5,15 @@ import {
   Search,
   Users,
   User as UserIcon,
-  Check,
-  Layers,
   Trash2,
-  Crown,
-  ArrowDown,
-  X,
   AlertTriangle,
 } from 'lucide-react';
 import {
   Button,
   Badge,
-  ProgressBar,
-  Avatar,
   AvatarGroup,
+  Avatar,
   Modal,
-  Input,
-  Textarea,
-  Select,
   EmptyState,
   LoadingState,
 } from '@/components/ui';
@@ -30,14 +21,12 @@ import { cn, getStatusColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import {
   getProjects,
-  createProject,
   deleteProject,
-  createModule,
   getUsers,
   getUserById,
 } from '@/services/api';
 import { toast } from 'sonner';
-import type { Project } from '@/types';
+import type { Project, User } from '@/types';
 import { ProjectModal } from './ProjectModal';
 
 export function ProjectsPage() {
@@ -77,22 +66,12 @@ export function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'team' | 'solo'>('all');
+  const [projectMode, setProjectMode] = useState<'team' | 'solo'>('team');
   const [showCreate, setShowCreate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editProject, setEditProject] = useState<Project | undefined>();
-
-  // Team & Member allocations
-  const [selectedManagerId, setSelectedManagerId] = useState<string>('');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-  const [selectedSoloMemberId, setSelectedSoloMemberId] = useState<string>('');
-  const [memberSearch, setMemberSearch] = useState('');
-  const [memberDeptFilter, setMemberDeptFilter] = useState('All');
-
-  // Initial Modules to assign to members
-  const [initialModules, setInitialModules] = useState<{ name: string; description: string; assigneeId: string }[]>([]);
-  const [newModName, setNewModName] = useState('');
-  const [newModDesc, setNewModDesc] = useState('');
-  const [newModAssigneeId, setNewModAssigneeId] = useState('');
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadData = async () => {
     try {
@@ -102,18 +81,6 @@ export function ProjectsPage() {
       ]);
       setAllUsers(fetchedUsers);
       setProjects(fetchedProjects);
-
-      // Default manager to currentUser or first manager/admin
-      if (currentUser?.id) {
-        setSelectedManagerId(currentUser.id);
-        setSelectedMemberIds([currentUser.id]);
-        setSelectedSoloMemberId(currentUser.id);
-      } else if (fetchedUsers.length > 0) {
-        const defaultAdmin = fetchedUsers.find(u => u.role === 'admin' || u.role === 'manager') || fetchedUsers[0];
-        setSelectedManagerId(defaultAdmin.id);
-        setSelectedMemberIds([defaultAdmin.id]);
-        setSelectedSoloMemberId(defaultAdmin.id);
-      }
     } catch (err) {
       console.error('Error loading projects page data:', err);
     } finally {
@@ -133,6 +100,21 @@ export function ProjectsPage() {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteProject(projectToDelete.id);
+      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+      toast.success(`Project "${projectToDelete.name}" deleted successfully.`);
+      setProjectToDelete(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete project');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Filter projects by search, status, and project type (team vs solo)
   const filtered = projects.filter((p) => {
     const matchesSearch =
@@ -144,21 +126,6 @@ export function ProjectsPage() {
       (typeFilter === 'team' && (p.projectType === 'team' || p.memberIds.length > 1)) ||
       (typeFilter === 'solo' && (p.projectType === 'solo' || p.memberIds.length <= 1));
     return matchesSearch && matchesStatus && matchesType;
-  });
-
-  // Eligible pool of members for assigning
-  const availableProjectMembers = projectMode === 'solo'
-    ? (selectedSoloMemberId ? [allUsers.find(u => u.id === selectedSoloMemberId)].filter(Boolean) as User[] : allUsers)
-    : (selectedMemberIds.length > 0 ? allUsers.filter(u => selectedMemberIds.includes(u.id)) : allUsers);
-
-  const filteredMembersList = allUsers.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      (u.designation && u.designation.toLowerCase().includes(memberSearch.toLowerCase())) ||
-      (u.employeeId && u.employeeId.toLowerCase().includes(memberSearch.toLowerCase())) ||
-      (u.department && u.department.toLowerCase().includes(memberSearch.toLowerCase()));
-    const matchesDept = memberDeptFilter === 'All' || u.department === memberDeptFilter;
-    return matchesSearch && matchesDept;
   });
 
   if (isLoading) return <LoadingState />;
@@ -297,7 +264,20 @@ export function ProjectsPage() {
                         </span>
                       )}
                       <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-                      {isCEO && (
+                      {isAdminOrManager && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditProject(project);
+                            setShowCreate(true);
+                          }}
+                          className="p-1 hover:bg-[var(--color-muted)] rounded text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+                          title="Edit Project"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                      )}
+                      {isExecutive && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -305,28 +285,12 @@ export function ProjectsPage() {
                             setProjectToDelete(project);
                           }}
                           className="p-1 rounded-md text-[var(--color-muted-foreground)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                          title="Delete Project (CEO Exclusive)"
+                          title="Delete Project"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-                    {currentRole !== 'member' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditProject(project);
-                          setShowCreate(true);
-                        }}
-                        className="p-1 hover:bg-[var(--color-muted)] rounded text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-                        title="Edit Project"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                      </button>
-                    )}
                   </div>
                 </div>
 
@@ -374,6 +338,40 @@ export function ProjectsPage() {
           onSuccess={handleProjectSuccess}
           editProject={editProject}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {projectToDelete && (
+        <Modal
+          isOpen={!!projectToDelete}
+          onClose={() => setProjectToDelete(null)}
+          title="Delete Project"
+          size="sm"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setProjectToDelete(null)} disabled={isDeleting}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteProject}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Project'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+              <p className="text-sm text-red-700 dark:text-red-400">
+                This action <strong>cannot be undone</strong>. All tasks and modules in this project will also be deleted.
+              </p>
+            </div>
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              Are you sure you want to permanently delete <strong className="text-[var(--color-foreground)]">{projectToDelete.name}</strong>?
+            </p>
+          </div>
+        </Modal>
       )}
     </div>
   );
