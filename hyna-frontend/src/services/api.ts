@@ -1240,6 +1240,47 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
   return mapMeeting(data);
 }
 
+export async function updateMeeting(id: string, updates: Partial<Meeting>): Promise<Meeting> {
+  const updatePayload: Record<string, any> = {};
+  if (updates.title !== undefined) updatePayload.title = updates.title;
+  if (updates.description !== undefined) updatePayload.description = updates.description;
+  if (updates.date !== undefined) updatePayload.date = updates.date;
+  if (updates.startTime !== undefined) updatePayload.start_time = updates.startTime;
+  if (updates.endTime !== undefined) updatePayload.end_time = updates.endTime;
+  if (updates.meetingLink !== undefined) updatePayload.meeting_link = updates.meetingLink;
+  if (updates.status !== undefined) updatePayload.status = updates.status;
+  if (updates.notes !== undefined) updatePayload.notes = updates.notes;
+  if (updates.participantIds !== undefined) updatePayload.participant_ids = updates.participantIds;
+
+  if (!isSupabaseConfigured()) {
+    return {
+      id,
+      title: updates.title || '',
+      description: updates.description || '',
+      date: updates.date || '',
+      startTime: updates.startTime || '',
+      endTime: updates.endTime || '',
+      hostId: updates.hostId || '',
+      participantIds: updates.participantIds || [],
+      type: updates.type || 'team',
+      isRecurring: updates.isRecurring || false,
+      meetingLink: updates.meetingLink || '',
+      status: updates.status || 'scheduled',
+      notes: updates.notes || '',
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('meetings')
+    .update(updatePayload)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return mapMeeting(data);
+}
+
 // ============================================================
 // ATTENDANCE API
 // ============================================================
@@ -1982,6 +2023,21 @@ export async function createAnnouncement(announcement: Partial<Announcement>): P
 
   if (error) throw error;
   return mapAnnouncement(data);
+}
+
+export async function deleteAnnouncement(id: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting announcement from Supabase:', error);
+      throw error;
+    }
+  }
+  return true;
 }
 
 // ============================================================
