@@ -143,13 +143,20 @@ CREATE POLICY "meeting_messages_delete" ON public.meeting_messages
   USING (
     sender_id = auth.uid()
     OR public.is_executive()
+  );
+
 COMMIT;
 
--- 6. ENSURE meeting_status ENUM ACCEPTS 'live'
+-- 6. ENSURE meeting_status ENUM ACCEPTS 'live' WITHOUT 42710 (type already exists) ERROR
 DO $$
 BEGIN
-  ALTER TYPE public.meeting_status ADD VALUE IF NOT EXISTS 'live';
-EXCEPTION
-  WHEN others THEN null;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'meeting_status') THEN
+    CREATE TYPE public.meeting_status AS ENUM ('scheduled', 'in-progress', 'completed', 'cancelled', 'live');
+  END IF;
 END $$;
+
+-- If meeting_status already exists, add 'live' value safely outside transaction block
+ALTER TYPE public.meeting_status ADD VALUE IF NOT EXISTS 'live';
+
+
 

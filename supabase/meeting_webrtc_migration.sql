@@ -323,3 +323,14 @@ BEGIN
     END IF;
   END IF;
 END $$;
+
+-- 9. SAFE ENUM CONFIGURATION: Ensure meeting_status exists and supports 'live' without 42710 error
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'meeting_status') THEN
+    CREATE TYPE public.meeting_status AS ENUM ('scheduled', 'in-progress', 'completed', 'cancelled', 'live');
+  END IF;
+END $$;
+
+ALTER TYPE public.meeting_status ADD VALUE IF NOT EXISTS 'live';
+
