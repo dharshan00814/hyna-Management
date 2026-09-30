@@ -238,6 +238,56 @@ export function MeetingDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit / Add Google Meet Link Modal */}
+      <Modal
+        isOpen={isEditingLink}
+        onClose={() => setIsEditingLink(false)}
+        title="Meeting Link (Google Meet / Video Link)"
+        size="md"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsEditingLink(false)}>Cancel</Button>
+            <Button onClick={handleSaveMeetingLink} disabled={isSavingLink}>
+              {isSavingLink ? 'Saving...' : 'Save Link'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            Paste your Google Meet, Zoom, or video call link below. When members click <strong>Join Meeting</strong>, they will be taken directly to this meeting.
+          </p>
+
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
+              Google Meet URL
+            </label>
+            <Input
+              placeholder="https://meet.google.com/abc-defg-hij"
+              value={meetLinkInput}
+              onChange={(e) => setMeetLinkInput(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Don't have a Google Meet link yet?</p>
+              <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">Click here to generate a fresh Google Meet in 1 click.</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 shrink-0"
+              onClick={() => window.open('https://meet.google.com/new', '_blank')}
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Open Google Meet
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
