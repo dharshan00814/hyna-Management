@@ -378,46 +378,31 @@ export function MeetingsPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
-              Invite Team Members ({selectedParticipantIds.length} selected)
-            </label>
-            <div className="max-h-44 overflow-y-auto border border-[var(--color-border)] rounded-lg p-2 space-y-1.5 bg-[var(--color-background)]">
-              {allUsers.filter(u => u.id !== currentUser?.id).length === 0 ? (
-                <p className="text-xs text-[var(--color-muted-foreground)] p-2">No other members found.</p>
-              ) : (
-                allUsers.filter(u => u.id !== currentUser?.id).map(user => {
-                  const isSelected = selectedParticipantIds.includes(user.id);
-                  return (
-                    <div
-                      key={user.id}
-                      onClick={() => {
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Participants</label>
+            <div className="flex flex-wrap gap-2 p-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-background)] max-h-40 overflow-y-auto">
+              {allUsers.filter(u => u.id !== currentUser?.id).map((user) => {
+                const isSelected = selectedParticipantIds.includes(user.id);
+                return (
+                  <label key={user.id} className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs cursor-pointer border transition-colors",
+                    isSelected ? "bg-[var(--color-primary)]/10 border-[var(--color-primary)] text-[var(--color-primary)]" : "border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]"
+                  )}>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={isSelected}
+                      onChange={() => {
                         setSelectedParticipantIds(prev => 
                           isSelected ? prev.filter(id => id !== user.id) : [...prev, user.id]
                         );
                       }}
-                      className={cn(
-                        'flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors text-xs',
-                        isSelected ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200' : 'hover:bg-[var(--color-muted)]'
-                      )}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Avatar name={user.name} size="xs" />
-                        <div className="truncate">
-                          <p className="font-medium truncate">{user.name}</p>
-                          <p className="text-[10px] text-[var(--color-muted-foreground)] truncate">{user.designation || user.role}</p>
-                        </div>
-                      </div>
-                      <div className={cn(
-                        'w-4 h-4 rounded border flex items-center justify-center transition-colors',
-                        isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-400'
-                      )}>
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                    />
+                    <Avatar name={user.name} src={user.avatar} size="xs" />
+                    <span>{user.name}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         </div>
