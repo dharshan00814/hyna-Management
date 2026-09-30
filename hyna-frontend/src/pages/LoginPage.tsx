@@ -345,43 +345,78 @@ const css = `
   color: #c1f267;
 }
 
-/* Submit Button */
+/* Submit Button - Satin Gloss Lime Theme matching reference */
 .su-submit {
   width: 100%;
-  height: 48px;
+  height: 50px;
   margin-top: 24px;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: 14px;
-  background: #f0f0f2;
-  color: #121214;
-  font: 600 14px 'Manrope', sans-serif;
+  background: 
+    radial-gradient(circle at 40% 46%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.35) 28%, transparent 64%),
+    linear-gradient(132deg, #d8f8a2 0%, #ebfcd2 22%, #fdfffa 46%, #daf79b 72%, #cbf584 100%);
+  color: #000000;
+  font: 600 16px 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.35px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 8px 24px -4px rgba(193, 242, 103, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.18),
+    inset 0 1px 2px rgba(255, 255, 255, 0.95),
+    inset 0 -1px 2px rgba(150, 215, 45, 0.35);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.su-submit::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  transition: left 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.su-submit:hover:not(:disabled)::before {
+  left: 140%;
 }
 .su-submit:hover:not(:disabled) {
-  background: #ffffff;
   transform: translateY(-1.5px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 20px rgba(193, 242, 103, 0.25);
+  filter: brightness(1.03);
+  box-shadow: 
+    0 12px 30px -4px rgba(193, 242, 103, 0.6),
+    0 0 24px rgba(225, 255, 140, 0.45),
+    inset 0 1px 2.5px #ffffff,
+    inset 0 -1px 2px rgba(150, 215, 45, 0.35);
 }
 .su-submit:active:not(:disabled) {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.99);
+  filter: brightness(0.98);
 }
 .su-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  filter: grayscale(0.2);
 }
 
 /* Spinner */
 .su-spin {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(18, 18, 20, 0.25);
-  border-top-color: #121214;
+  width: 16px;
+  height: 16px;
+  border: 2.2px solid rgba(0, 0, 0, 0.22);
+  border-top-color: #000000;
   border-radius: 50%;
   animation: suSpin 0.8s linear infinite;
 }
@@ -588,29 +623,14 @@ export function LoginPage() {
               </button>
             </div>
 
-            <button type="submit" className="su-submit" disabled={isLoading}>
+            <button type="submit" className="su-submit" disabled={isLoading} id="login-submit-button">
               {isLoading ? (
                 <>
                   <span className="su-spin" />
                   <span>Authenticating...</span>
                 </>
               ) : (
-                <>
-                  <span>Sign in</span>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                </>
+                <span>Sign in</span>
               )}
             </button>
           </form>
