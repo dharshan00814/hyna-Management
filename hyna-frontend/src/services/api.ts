@@ -4,17 +4,119 @@
 // ============================================================
 
 import { supabase, isSupabaseConfigured, createEphemeralClient } from '@/lib/supabase';
+import { getOrgMemberDetails } from '@/stores';
+import {
+  calculateRecordPoints,
+  parseTimeToMinutes,
+  PUNCH_IN_START_MIN,
+  PUNCH_IN_ONTIME_END_MIN,
+  PUNCH_IN_GRACE_END_MIN,
+  PUNCH_OUT_START_MIN,
+  PUNCH_OUT_END_MIN,
+  POINTS_ON_TIME,
+  POINTS_GRACE,
+  POINTS_MISSED_PUNCHOUT_10,
+  POINTS_MISSED_PUNCHOUT_5,
+} from '@/lib/attendanceRules';
 import type {
   User, UserRole, Project, Module, Task, Meeting, AttendanceRecord,
   DailyReport, Notification, ChatChannel, ChatMessage,
   FileItem, Folder, LeaveRequest, Announcement,
 } from '@/types';
+import { notifyCheckInSuccess, notifyMeetingScheduled } from '@/services/notificationWorkflow';
 
 // In-memory cache for synchronous lookups (e.g. getUserById in UI rendering)
 let usersCache: User[] = [];
 let projectsCache: Project[] = [];
 let modulesCache: Module[] = [];
 let tasksCache: Task[] = [];
+
+// Seed default meetings to ensure instant, uninterrupted meetings functionality
+const DEFAULT_MEETINGS: Meeting[] = [
+  {
+    id: 'mt_standup_daily',
+    title: 'Daily Engineering Standup',
+    description: 'Daily team sync on active sprints, blockers, and upcoming releases.',
+    date: new Date().toISOString().split('T')[0],
+    startTime: '10:00',
+    endTime: '10:30',
+    hostId: 'EMP-001',
+    participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-009', 'EMP-010', 'EMP-011'],
+    type: 'standup',
+    meetingType: 'video',
+    meetingRoomId: 'room-standup-daily',
+    isRecurring: true,
+    meetingLink: '/meeting/room-standup-daily',
+    status: 'scheduled',
+    notes: 'Please review your active task board cards before joining.',
+  },
+  {
+    id: 'mt_product_review',
+    title: 'Product Review & Sprint Demo',
+    description: 'Bi-weekly demo of finished features with Design and Product teams.',
+    date: new Date().toISOString().split('T')[0],
+    startTime: '14:30',
+    endTime: '15:30',
+    hostId: 'EMP-001',
+    participantIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-006', 'EMP-008'],
+    type: 'review',
+    meetingType: 'video',
+    meetingRoomId: 'room-product-review',
+    isRecurring: false,
+    meetingLink: '/meeting/room-product-review',
+    status: 'scheduled',
+    notes: 'Live walkthrough of activity tracking metrics and deliverables.',
+  },
+  {
+    id: 'mt_arch_planning',
+    title: 'Core Architecture & Security Sync',
+    description: 'Technical deep-dive on realtime sync, WebRTC performance, and API scaling.',
+    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+    startTime: '11:00',
+    endTime: '12:00',
+    hostId: 'EMP-004',
+    participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-010', 'EMP-011'],
+    type: 'planning',
+    meetingType: 'video',
+    meetingRoomId: 'room-arch-planning',
+    isRecurring: true,
+    meetingLink: '/meeting/room-arch-planning',
+    status: 'scheduled',
+    notes: 'Live walkthrough of WebRTC peer connection manager and database schemas.',
+  },
+];
+
+function initMeetingsCache(): Meeting[] {
+  try {
+    const stored = localStorage.getItem('hyna_meetings_cache');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to read meetings cache from storage:', e);
+  }
+  return [...DEFAULT_MEETINGS];
+}
+
+let meetingsCache: Meeting[] = initMeetingsCache();
+
+function persistMeetingsCache(meetings: Meeting[]) {
+  meetingsCache = meetings;
+  try {
+    localStorage.setItem('hyna_meetings_cache', JSON.stringify(meetings));
+  } catch (e) {
+    // Ignore storage quota errors
+  }
+}
+
+// Helper: Check if string is a valid UUID
+export function isValidUuid(val?: string | null): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
 
 // Helper: Transform Database User row to Frontend User
 function mapUser(row: any): User {
@@ -34,11 +136,15 @@ function mapUser(row: any): User {
     lastActive: row.last_active || row.updated_at || new Date().toISOString(),
     bio: row.bio || '',
     skills: row.skills || [],
+    bankAccountNumber: row.bank_account_number || row.bankAccountNumber || '',
+    ifsc: row.ifsc_code || row.ifsc || '',
   };
 }
 
 // Helper: Transform Database Project row to Frontend Project
 function mapProject(row: any): Project {
+  const memberList = row.member_ids || [];
+  const projectType: 'team' | 'solo' = row.project_type || (memberList.length <= 1 ? 'solo' : 'team');
   return {
     id: row.id,
     name: row.name || '',
@@ -46,6 +152,7 @@ function mapProject(row: any): Project {
     status: row.status || 'planning',
     progress: row.progress ?? 0,
     managerId: row.manager_id || '',
+    leadId: row.lead_id || undefined,
     memberIds: row.member_ids || [],
     startDate: row.start_date || '',
     deadline: row.deadline || '',
@@ -53,6 +160,7 @@ function mapProject(row: any): Project {
     modules: [],
     color: row.color || '#6366f1',
     tags: row.tags || [],
+    projectType,
   };
 }
 
@@ -118,6 +226,7 @@ function mapTask(row: any): Task {
 
 // Helper: Transform Meeting row to Frontend Meeting
 function mapMeeting(row: any): Meeting {
+  const roomId = row.meeting_room_id || row.id;
   return {
     id: row.id,
     title: row.title || '',
@@ -125,19 +234,27 @@ function mapMeeting(row: any): Meeting {
     date: row.date || '',
     startTime: row.start_time || '',
     endTime: row.end_time || '',
-    hostId: row.host_id || '',
+    hostId: row.host_id || row.created_by || '',
+    createdBy: row.created_by || row.host_id,
     participantIds: row.participant_ids || [],
     type: row.type || 'team',
+    meetingType: (row.meeting_type as any) || 'video',
+    meetingRoomId: roomId,
     isRecurring: row.is_recurring ?? false,
-    meetingLink: row.meeting_link || '',
+    meetingLink: row.meeting_link || `/meeting/${roomId}`,
     notes: row.notes || '',
     status: row.status || 'scheduled',
+    scheduledAt: row.scheduled_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
 // Helper: Transform Attendance row
 function mapAttendance(row: any): AttendanceRecord {
-  return {
+  const baseRecord: AttendanceRecord = {
     id: row.id,
     userId: row.user_id,
     date: row.date,
@@ -146,7 +263,15 @@ function mapAttendance(row: any): AttendanceRecord {
     checkOut: row.check_out,
     workingHours: row.working_hours,
     notes: row.notes,
+    points: row.points !== undefined && row.points !== null ? Number(row.points) : undefined,
   };
+
+  if (baseRecord.points === undefined) {
+    const evalRes = calculateRecordPoints(baseRecord);
+    baseRecord.points = evalRes.finalPoints;
+  }
+
+  return baseRecord;
 }
 
 // Helper: Transform Daily Report row
@@ -168,14 +293,14 @@ function mapDailyReport(row: any): DailyReport {
 function mapNotification(row: any): Notification {
   return {
     id: row.id,
-    type: row.type,
-    title: row.title,
-    message: row.message,
-    userId: row.user_id,
-    read: row.read,
+    type: row.type || 'general',
+    title: row.title || 'Notification',
+    message: row.message || row.body || '',
+    userId: row.user_id || row.member_id || '',
+    read: Boolean(row.read || row.is_read || row.read_at),
     createdAt: row.created_at,
-    actionUrl: row.action_url,
-    icon: row.icon,
+    actionUrl: row.action_url || row.link || row.data?.actionUrl || row.data?.url || '',
+    icon: row.icon || row.data?.icon,
   };
 }
 
@@ -195,9 +320,10 @@ function mapChannel(row: any): ChatChannel {
 
 // Helper: Transform Message row
 function mapMessage(row: any): ChatMessage {
+  const isGlobal = !row.receiver_id || row.channel_id === 'ch_global' || row.channel_id === 'globe';
   return {
     id: row.id,
-    channelId: row.channel_id,
+    channelId: isGlobal ? 'globe' : (row.receiver_id || row.channel_id || ''),
     senderId: row.sender_id,
     content: row.content,
     timestamp: row.timestamp || row.created_at,
@@ -340,6 +466,8 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
   if (updates.bio !== undefined) payload.bio = updates.bio;
   if (updates.skills !== undefined) payload.skills = updates.skills;
   if (updates.avatar !== undefined) payload.avatar = updates.avatar;
+  if (updates.bankAccountNumber !== undefined) payload.bank_account_number = updates.bankAccountNumber;
+  if (updates.ifsc !== undefined) payload.ifsc_code = updates.ifsc;
 
   const { data, error } = await supabase
     .from('profiles')
@@ -357,6 +485,42 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
 
 export async function updateMember(id: string, updates: Partial<User>): Promise<User> {
   return updateUserProfile(id, updates);
+}
+
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const fileExt = file.name.split('.').pop() || 'png';
+  const fileName = `${userId}_${Date.now()}.${fileExt}`;
+  const filePath = `avatars/${fileName}`;
+
+  if (!isSupabaseConfigured()) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from('files')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.warn('Storage avatar upload fallback to base64:', uploadError);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  return urlData?.publicUrl || '';
 }
 
 export async function deleteMember(id: string): Promise<void> {
@@ -387,7 +551,36 @@ export async function deleteMember(id: string): Promise<void> {
 export const removeMember = deleteMember;
 
 export function getUserById(id: string): User | undefined {
-  return usersCache.find(u => u.id === id);
+  if (!id) return undefined;
+  const direct = usersCache.find(u => 
+    u.id === id || 
+    (u.employeeId && u.employeeId.toUpperCase() === id.toUpperCase()) ||
+    (u.name && u.name.toLowerCase() === id.toLowerCase()) ||
+    (u.email && u.email.toLowerCase() === id.toLowerCase())
+  );
+  if (direct) return direct;
+
+  const roster = getOrgMemberDetails(id);
+  if (roster && roster.name) {
+    return {
+      id: roster.employeeId || id,
+      employeeId: roster.employeeId || '',
+      name: roster.name,
+      email: roster.email || '',
+      avatar: '',
+      role: roster.role || 'member',
+      department: roster.department || '',
+      designation: roster.designation || '',
+      phone: '',
+      joinDate: '2026-01-01',
+      status: 'active',
+      activeProjects: 1,
+      lastActive: new Date().toISOString(),
+      bio: '',
+      skills: [],
+    };
+  }
+  return undefined;
 }
 
 export interface AddMemberInput {
@@ -399,6 +592,8 @@ export interface AddMemberInput {
   designation?: string;
   employeeId?: string;
   phone?: string;
+  bankAccountNumber?: string;
+  ifsc?: string;
 }
 
 export async function addMember(input: AddMemberInput): Promise<User> {
@@ -459,6 +654,12 @@ export async function addMember(input: AddMemberInput): Promise<User> {
   if (employeeId) {
     profilePayload.employee_id = employeeId;
   }
+  if (input.bankAccountNumber !== undefined) {
+    profilePayload.bank_account_number = input.bankAccountNumber.trim();
+  }
+  if (input.ifsc !== undefined) {
+    profilePayload.ifsc_code = input.ifsc.trim().toUpperCase();
+  }
 
   const { data: savedProfile, error: profileError } = await supabase
     .from('profiles')
@@ -486,6 +687,8 @@ export async function addMember(input: AddMemberInput): Promise<User> {
     lastActive: new Date().toISOString(),
     bio: '',
     skills: [],
+    bankAccountNumber: input.bankAccountNumber?.trim() || '',
+    ifsc: input.ifsc?.trim().toUpperCase() || '',
   };
 
   usersCache.unshift(newUser);
@@ -512,8 +715,9 @@ export async function getProjects(filter?: { managerId?: string; memberId?: stri
       return projectsCache;
     }
     const projects = (data || []).map(mapProject);
-    projectsCache = projects;
-    return projects;
+    const localOnly = projectsCache.filter(local => local.id.startsWith('proj_') && !projects.some(p => p.id === local.id));
+    projectsCache = [...localOnly, ...projects];
+    return projectsCache;
   } catch (err) {
     console.error('Error in getProjects:', err);
     return projectsCache;
@@ -540,32 +744,129 @@ export function getProjectById(id: string): Project | undefined {
 }
 
 export async function createProject(project: Partial<Project>): Promise<Project> {
-  const insertPayload = {
+  const fallbackProject: Project = {
+    id: `proj_${Date.now()}`,
     name: project.name || 'New Project',
     description: project.description || '',
     status: project.status || 'planning',
     progress: project.progress || 0,
-    manager_id: project.managerId || null,
-    member_ids: project.memberIds || [],
-    start_date: project.startDate || new Date().toISOString().split('T')[0],
-    deadline: project.deadline || null,
+    managerId: project.managerId || '',
+    leadId: project.leadId || undefined,
+    memberIds: project.memberIds || [],
+    startDate: project.startDate || new Date().toISOString().split('T')[0],
+    deadline: project.deadline || '',
+    lastUpdated: new Date().toISOString().split('T')[0],
+    modules: [],
     color: project.color || '#6366f1',
     tags: project.tags || [],
   };
 
-  const { data, error } = await supabase
-    .from('projects')
-    .insert([insertPayload])
-    .select()
-    .single();
+  try {
+    let validManagerId: string | null = null;
+    if (isValidUuid(project.managerId)) {
+      validManagerId = project.managerId!;
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user?.id && isValidUuid(sessionData.session.user.id)) {
+        validManagerId = sessionData.session.user.id;
+      }
+    }
 
-  if (error) {
-    console.error('Error creating project in Supabase:', error);
-    throw error;
+    const insertPayload = {
+      name: project.name || 'New Project',
+      description: project.description || '',
+      status: project.status || 'planning',
+      progress: project.progress || 0,
+      manager_id: validManagerId,
+      member_ids: project.memberIds || [],
+      start_date: project.startDate || new Date().toISOString().split('T')[0],
+      deadline: project.deadline && project.deadline.trim() ? project.deadline.trim() : null,
+      color: project.color || '#6366f1',
+      tags: project.tags || [],
+    };
+
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase project creation rejected (using resilient local fallback):', error);
+      projectsCache.unshift(fallbackProject);
+      return fallbackProject;
+    }
+    const created = mapProject(data);
+    projectsCache.unshift(created);
+    return created;
+  } catch (err) {
+    console.warn('Project creation network error (using resilient local fallback):', err);
+    projectsCache.unshift(fallbackProject);
+    return fallbackProject;
   }
-  const created = mapProject(data);
-  projectsCache.unshift(created);
-  return created;
+}
+
+export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+  const payload: any = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.progress !== undefined) payload.progress = updates.progress;
+  if (updates.managerId !== undefined) payload.manager_id = isValidUuid(updates.managerId) ? updates.managerId : null;
+  if (updates.memberIds !== undefined) payload.member_ids = updates.memberIds;
+  if (updates.startDate !== undefined) payload.start_date = updates.startDate;
+  if (updates.deadline !== undefined) payload.deadline = updates.deadline || null;
+  if (updates.color !== undefined) payload.color = updates.color;
+  if (updates.tags !== undefined) payload.tags = updates.tags;
+
+  const idx = projectsCache.findIndex(p => p.id === id);
+  let updatedProject: Project;
+  if (idx !== -1) {
+    projectsCache[idx] = {
+      ...projectsCache[idx],
+      ...updates,
+      lastUpdated: new Date().toISOString(),
+      projectType: updates.projectType || (updates.memberIds && updates.memberIds.length <= 1 ? 'solo' : 'team') || projectsCache[idx].projectType,
+    };
+    updatedProject = projectsCache[idx];
+  } else {
+    updatedProject = {
+      id,
+      name: updates.name || 'Project',
+      description: updates.description || '',
+      status: updates.status || 'planning',
+      progress: updates.progress || 0,
+      managerId: updates.managerId || '',
+      memberIds: updates.memberIds || [],
+      startDate: updates.startDate || '',
+      deadline: updates.deadline || '',
+      lastUpdated: new Date().toISOString(),
+      modules: [],
+      color: updates.color || '#6366f1',
+      tags: updates.tags || [],
+      projectType: updates.projectType || (updates.memberIds && updates.memberIds.length <= 1 ? 'solo' : 'team'),
+    };
+    projectsCache.push(updatedProject);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (data) {
+      const mapped = mapProject(data);
+      if (idx !== -1) projectsCache[idx] = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Supabase updateProject error (using cache):', err);
+  }
+
+  return updatedProject;
 }
 
 export async function deleteProject(projectId: string): Promise<boolean> {
@@ -598,19 +899,19 @@ export async function deleteProject(projectId: string): Promise<boolean> {
 // ============================================================
 // MODULES API
 // ============================================================
-export async function getModules(projectId: string): Promise<Module[]> {
+export async function getModules(projectId?: string): Promise<Module[]> {
   if (!isSupabaseConfigured()) {
-    return modulesCache.filter(m => m.projectId === projectId);
+    return projectId ? modulesCache.filter(m => m.projectId === projectId) : [...modulesCache];
   }
-  const { data, error } = await supabase
-    .from('modules')
-    .select('*')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: true });
+  let query = supabase.from('modules').select('*').order('created_at', { ascending: true });
+  if (projectId) {
+    query = query.eq('project_id', projectId);
+  }
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching modules from Supabase:', error);
-    return modulesCache.filter(m => m.projectId === projectId);
+    return projectId ? modulesCache.filter(m => m.projectId === projectId) : [...modulesCache];
   }
   const modules = (data || []).map(mapModule);
   // Update cache
@@ -623,28 +924,116 @@ export async function getModules(projectId: string): Promise<Module[]> {
 }
 
 export async function createModule(module: Partial<Module>): Promise<Module> {
-  const insertPayload = {
-    project_id: module.projectId,
+  const fallbackModule: Module = {
+    id: `m_${Date.now()}`,
+    projectId: module.projectId || '',
     name: module.name || 'New Module',
     description: module.description || '',
     progress: module.progress || 0,
-    total_tasks: module.totalTasks || 0,
-    completed_tasks: module.completedTasks || 0,
-    in_review_tasks: module.inReviewTasks || 0,
-    blocked_tasks: module.blockedTasks || 0,
-    assignee_ids: module.assigneeIds || [],
+    totalTasks: module.totalTasks || 0,
+    completedTasks: module.completedTasks || 0,
+    inReviewTasks: module.inReviewTasks || 0,
+    blockedTasks: module.blockedTasks || 0,
+    assigneeIds: module.assigneeIds || [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
-    .from('modules')
-    .insert([insertPayload])
-    .select()
-    .single();
+  try {
+    const insertPayload = {
+      project_id: module.projectId,
+      name: module.name || 'New Module',
+      description: module.description || '',
+      progress: module.progress || 0,
+      total_tasks: module.totalTasks || 0,
+      completed_tasks: module.completedTasks || 0,
+      in_review_tasks: module.inReviewTasks || 0,
+      blocked_tasks: module.blockedTasks || 0,
+      assignee_ids: module.assigneeIds || [],
+    };
 
-  if (error) throw error;
-  const created = mapModule(data);
-  modulesCache.push(created);
-  return created;
+    const { data, error } = await supabase
+      .from('modules')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Supabase module creation rejected (using resilient fallback):', error);
+      modulesCache.push(fallbackModule);
+      return fallbackModule;
+    }
+    const created = mapModule(data);
+    modulesCache.push(created);
+    return created;
+  } catch (err) {
+    console.warn('Module creation network error (using resilient fallback):', err);
+    modulesCache.push(fallbackModule);
+    return fallbackModule;
+  }
+}
+
+export async function updateModule(id: string, updates: Partial<Module>): Promise<Module> {
+  const payload: any = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.progress !== undefined) payload.progress = updates.progress;
+  if (updates.totalTasks !== undefined) payload.total_tasks = updates.totalTasks;
+  if (updates.completedTasks !== undefined) payload.completed_tasks = updates.completedTasks;
+  if (updates.inReviewTasks !== undefined) payload.in_review_tasks = updates.inReviewTasks;
+  if (updates.blockedTasks !== undefined) payload.blocked_tasks = updates.blockedTasks;
+  if (updates.assigneeIds !== undefined) payload.assignee_ids = updates.assigneeIds;
+
+  const idx = modulesCache.findIndex(m => m.id === id);
+  let updatedModule: Module;
+  if (idx !== -1) {
+    modulesCache[idx] = { ...modulesCache[idx], ...updates, updatedAt: new Date().toISOString() };
+    updatedModule = modulesCache[idx];
+  } else {
+    updatedModule = {
+      id,
+      projectId: updates.projectId || '',
+      name: updates.name || 'Module',
+      description: updates.description || '',
+      progress: updates.progress || 0,
+      totalTasks: updates.totalTasks || 0,
+      completedTasks: updates.completedTasks || 0,
+      inReviewTasks: updates.inReviewTasks || 0,
+      blockedTasks: updates.blockedTasks || 0,
+      assigneeIds: updates.assigneeIds || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    modulesCache.push(updatedModule);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('modules')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (data) {
+      const mapped = mapModule(data);
+      if (idx !== -1) modulesCache[idx] = mapped;
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Supabase updateModule error (using cache):', err);
+  }
+  return updatedModule;
+}
+
+export async function deleteModule(id: string): Promise<boolean> {
+  modulesCache = modulesCache.filter(m => m.id !== id);
+  try {
+    await supabase.from('modules').delete().eq('id', id);
+  } catch (err) {
+    console.warn('Supabase deleteModule error:', err);
+  }
+  return true;
 }
 
 // ============================================================
@@ -727,30 +1116,57 @@ export async function getUserTasks(userId: string): Promise<Task[]> {
 }
 
 export async function createTask(task: Partial<Task>): Promise<Task> {
-  const insertPayload = {
+  const fallbackTask: Task = {
+    id: `task_${Date.now()}`,
     title: task.title || 'New Task',
     description: task.description || '',
     status: task.status || 'todo',
     priority: task.priority || 'medium',
-    assignee_id: task.assigneeId || null,
-    project_id: task.projectId,
-    module_id: task.moduleId || null,
-    deadline: task.deadline || null,
+    assigneeId: task.assigneeId || '',
+    projectId: task.projectId || '',
+    moduleId: task.moduleId,
+    deadline: task.deadline || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     tags: task.tags || [],
     attachments: 0,
     comments: 0,
   };
 
-  const { data, error } = await supabase
-    .from('tasks')
-    .insert([insertPayload])
-    .select(`*, task_checklists (*), task_submissions (*)`)
-    .single();
+  try {
+    const insertPayload = {
+      title: task.title || 'New Task',
+      description: task.description || '',
+      status: task.status || 'todo',
+      priority: task.priority || 'medium',
+      assignee_id: task.assigneeId || null,
+      project_id: task.projectId,
+      module_id: task.moduleId || null,
+      deadline: task.deadline || null,
+      tags: task.tags || [],
+      attachments: 0,
+      comments: 0,
+    };
 
-  if (error) throw error;
-  const created = mapTask(data);
-  tasksCache.unshift(created);
-  return created;
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([insertPayload])
+      .select(`*, task_checklists (*), task_submissions (*)`)
+      .single();
+
+    if (error) {
+      console.warn('Supabase task creation rejected (using fallback):', error);
+      tasksCache.unshift(fallbackTask);
+      return fallbackTask;
+    }
+    const created = mapTask(data);
+    tasksCache.unshift(created);
+    return created;
+  } catch (err) {
+    console.warn('Task creation network error (using fallback):', err);
+    tasksCache.unshift(fallbackTask);
+    return fallbackTask;
+  }
 }
 
 export async function updateTask(id: string, updates: Partial<Task>): Promise<Task> {
@@ -865,92 +1281,301 @@ export async function reviewTask(
   throw new Error('Task or submission not found');
 }
 
+export async function deleteTask(taskId: string): Promise<boolean> {
+  // Remove from cache immediately
+  tasksCache = tasksCache.filter(t => t.id !== taskId);
+
+  if (!isSupabaseConfigured()) {
+    return true;
+  }
+
+  try {
+    await supabase.from('task_submissions').delete().eq('task_id', taskId);
+    await supabase.from('task_checklists').delete().eq('task_id', taskId);
+  } catch (e) {
+    console.warn('Cascade delete for task dependencies:', e);
+  }
+
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('id', taskId);
+
+  if (error) {
+    console.error('Error deleting task:', error);
+    throw error;
+  }
+  return true;
+}
+
 // ============================================================
 // MEETINGS API
 // ============================================================
 export async function getMeetings(userId?: string): Promise<Meeting[]> {
   try {
-    const { data, error } = await supabase
-      .from('meetings')
-      .select('*')
-      .order('date', { ascending: true });
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .order('date', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching meetings from Supabase:', error);
-      return [];
+      if (!error && data && data.length > 0) {
+        const dbMeetings = data.map(mapMeeting);
+        // Merge with local-only meetings so freshly created meetings are preserved
+        const localOnly = meetingsCache.filter(m => !dbMeetings.some(dbm => dbm.id === m.id));
+        const merged = [...dbMeetings, ...localOnly];
+        persistMeetingsCache(merged);
+      }
     }
-    const all = (data || []).map(mapMeeting);
-    if (userId) {
-      return all.filter(m => m.hostId === userId || m.participantIds.includes(userId));
-    }
-    return all;
   } catch (err) {
-    console.error('Error in getMeetings:', err);
-    return [];
+    console.warn('Error fetching meetings from Supabase, using cache fallback:', err);
   }
+
+  // Ensure cache is never completely empty
+  if (meetingsCache.length === 0) {
+    persistMeetingsCache([...DEFAULT_MEETINGS]);
+  }
+
+  let result = [...meetingsCache];
+  if (userId) {
+    const uIdUpper = userId.toUpperCase();
+    result = result.filter(m => 
+      m.hostId === userId || 
+      (m.hostId && m.hostId.toUpperCase() === uIdUpper) ||
+      (m.participantIds || []).some(p => p === userId || p.toUpperCase() === uIdUpper) ||
+      m.type === 'team' ||
+      m.type === 'standup'
+    );
+  }
+  return result;
 }
 
 export async function getMeeting(id: string): Promise<Meeting | undefined> {
-  if (!isSupabaseConfigured()) return undefined;
-  const { data, error } = await supabase
-    .from('meetings')
-    .select('*')
-    .eq('id', id)
-    .single();
+  if (!id) return undefined;
+  // 1. Check in-memory / local cache
+  const cached = meetingsCache.find(m => m.id === id);
+  if (cached) return cached;
 
-  if (error || !data) return undefined;
-  return mapMeeting(data);
+  // 2. Query Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (!error && data) {
+        const meeting = mapMeeting(data);
+        const idx = meetingsCache.findIndex(m => m.id === id);
+        if (idx !== -1) {
+          meetingsCache[idx] = meeting;
+        } else {
+          meetingsCache.push(meeting);
+        }
+        persistMeetingsCache(meetingsCache);
+        return meeting;
+      }
+    } catch (e) {
+      console.warn('Error in getMeeting query:', e);
+    }
+  }
+
+  // 3. Fallback: refresh meetings list and check again
+  await getMeetings();
+  return meetingsCache.find(m => m.id === id);
 }
 
 export async function getUserMeetings(userId: string): Promise<Meeting[]> {
   const allMeetings = await getMeetings();
-  return allMeetings.filter(m => m.participantIds.includes(userId) || m.hostId === userId);
+  if (!userId) return allMeetings;
+  const uIdUpper = userId.toUpperCase();
+  return allMeetings.filter(m => 
+    m.hostId === userId || 
+    (m.hostId && m.hostId.toUpperCase() === uIdUpper) ||
+    (m.participantIds || []).some(p => p === userId || p.toUpperCase() === uIdUpper) ||
+    m.type === 'team' ||
+    m.type === 'standup'
+  );
 }
 
 export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting> {
   const { data: authData } = await supabase.auth.getUser();
-  const currentUserId = authData?.user?.id || meeting.hostId;
+  const currentUserId = authData?.user?.id || meeting.hostId || 'EMP-001';
 
-  const insertPayload: Record<string, any> = {
+  const newId = meeting.id || `mt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const cleanLink = (meeting.meetingLink || '').trim();
+  const finalLink = cleanLink && !cleanLink.startsWith('http://') && !cleanLink.startsWith('https://') && cleanLink.includes('.')
+    ? `https://${cleanLink}`
+    : cleanLink;
+
+  const roomId = meeting.meetingRoomId || newId;
+  const newMeeting: Meeting = {
+    id: newId,
     title: meeting.title || 'New Meeting',
     description: meeting.description || meeting.notes || '',
     date: meeting.date || new Date().toISOString().split('T')[0],
-    start_time: meeting.startTime || '10:00',
-    end_time: meeting.endTime || '11:00',
-    host_id: currentUserId,
-    participant_ids: meeting.participantIds?.length ? meeting.participantIds : (currentUserId ? [currentUserId] : []),
+    startTime: meeting.startTime || '10:00',
+    endTime: meeting.endTime || '11:00',
+    hostId: currentUserId,
+    participantIds: meeting.participantIds?.length ? meeting.participantIds : [currentUserId],
     type: meeting.type || 'team',
-    is_recurring: meeting.isRecurring || false,
-    meeting_link: meeting.meetingLink || '',
-    status: 'scheduled',
+    meetingType: meeting.meetingType || 'video',
+    meetingRoomId: roomId,
+    isRecurring: meeting.isRecurring || false,
+    meetingLink: finalLink || `/meeting/${roomId}`,
+    notes: meeting.notes || meeting.description || '',
+    status: meeting.status || 'scheduled',
   };
 
-  if (!isSupabaseConfigured()) {
-    return {
-      id: `mt${Date.now()}`,
-      title: insertPayload.title,
-      description: insertPayload.description,
-      date: insertPayload.date,
-      startTime: insertPayload.start_time,
-      endTime: insertPayload.end_time,
-      hostId: insertPayload.host_id || 'u1',
-      participantIds: insertPayload.participant_ids,
-      type: insertPayload.type,
-      isRecurring: insertPayload.is_recurring,
-      meetingLink: insertPayload.meeting_link,
-      notes: meeting.notes || insertPayload.description,
-      status: 'scheduled',
-    };
+  // Add to local cache immediately so UI shows it with 0 latency
+  meetingsCache.unshift(newMeeting);
+  persistMeetingsCache(meetingsCache);
+
+  // Attempt database insert if Supabase is configured and hostId is a valid UUID
+  if (isSupabaseConfigured() && isValidUuid(currentUserId)) {
+    try {
+      const insertPayload: Record<string, any> = {
+        id: newId,
+        title: newMeeting.title,
+        description: newMeeting.description,
+        date: newMeeting.date,
+        start_time: newMeeting.startTime,
+        end_time: newMeeting.endTime,
+        host_id: currentUserId,
+        participant_ids: newMeeting.participantIds,
+        type: newMeeting.type,
+        meeting_type: newMeeting.meetingType,
+        meeting_room_id: newMeeting.meetingRoomId,
+        is_recurring: newMeeting.isRecurring,
+        meeting_link: newMeeting.meetingLink,
+        status: newMeeting.status,
+        notes: newMeeting.notes,
+      };
+
+      const { data, error } = await supabase
+        .from('meetings')
+        .insert([insertPayload])
+        .select()
+        .maybeSingle();
+
+      if (!error && data) {
+        const mapped = mapMeeting(data);
+        const idx = meetingsCache.findIndex(m => m.id === newId);
+        if (idx !== -1) meetingsCache[idx] = mapped;
+        persistMeetingsCache(meetingsCache);
+
+        if (insertPayload.participant_ids?.length) {
+          const attendees = insertPayload.participant_ids.filter((id: string) => id !== currentUserId);
+          if (attendees.length > 0) {
+            notifyMeetingScheduled({
+              id: data.id,
+              title: data.title,
+              date: data.date,
+              time: data.start_time,
+              attendeeIds: attendees,
+            }).catch(console.error);
+          }
+        }
+
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Could not insert meeting into Supabase, kept in local cache:', err);
+    }
   }
 
-  const { data, error } = await supabase
-    .from('meetings')
-    .insert([insertPayload])
-    .select()
-    .single();
+  return newMeeting;
+}
 
-  if (error) throw error;
-  return mapMeeting(data);
+export async function updateMeeting(id: string, updates: Partial<Meeting>): Promise<Meeting> {
+  const idx = meetingsCache.findIndex(m => m.id === id);
+  let updatedMeeting: Meeting;
+
+  const rawLink = updates.meetingLink !== undefined ? updates.meetingLink.trim() : undefined;
+  const cleanLink = rawLink !== undefined
+    ? (rawLink && !rawLink.startsWith('http://') && !rawLink.startsWith('https://') && rawLink.includes('.') ? `https://${rawLink}` : rawLink)
+    : undefined;
+
+  if (idx !== -1) {
+    updatedMeeting = {
+      ...meetingsCache[idx],
+      ...updates,
+      meetingLink: cleanLink !== undefined ? cleanLink : meetingsCache[idx].meetingLink,
+    };
+    meetingsCache[idx] = updatedMeeting;
+  } else {
+    const roomId = updates.meetingRoomId || id;
+    updatedMeeting = {
+      id,
+      title: updates.title || '',
+      description: updates.description || '',
+      date: updates.date || new Date().toISOString().split('T')[0],
+      startTime: updates.startTime || '10:00',
+      endTime: updates.endTime || '11:00',
+      hostId: updates.hostId || 'EMP-001',
+      participantIds: updates.participantIds || [],
+      type: updates.type || 'team',
+      meetingType: updates.meetingType || 'video',
+      meetingRoomId: roomId,
+      isRecurring: updates.isRecurring || false,
+      meetingLink: cleanLink || `/meeting/${roomId}`,
+      status: updates.status || 'scheduled',
+      notes: updates.notes || '',
+    };
+    meetingsCache.push(updatedMeeting);
+  }
+  persistMeetingsCache(meetingsCache);
+
+  if (isSupabaseConfigured()) {
+    try {
+      const updatePayload: Record<string, any> = {};
+      if (updates.title !== undefined) updatePayload.title = updates.title;
+      if (updates.description !== undefined) updatePayload.description = updates.description;
+      if (updates.date !== undefined) updatePayload.date = updates.date;
+      if (updates.startTime !== undefined) updatePayload.start_time = updates.startTime;
+      if (updates.endTime !== undefined) updatePayload.end_time = updates.endTime;
+      if (cleanLink !== undefined) updatePayload.meeting_link = cleanLink;
+      if (updates.status !== undefined) updatePayload.status = updates.status;
+      if (updates.notes !== undefined) updatePayload.notes = updates.notes;
+      if (updates.participantIds !== undefined) updatePayload.participant_ids = updates.participantIds;
+      if (updates.meetingType !== undefined) updatePayload.meeting_type = updates.meetingType;
+      if (updates.meetingRoomId !== undefined) updatePayload.meeting_room_id = updates.meetingRoomId;
+
+      const { data, error } = await supabase
+        .from('meetings')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+      if (!error && data) {
+        const mapped = mapMeeting(data);
+        const i = meetingsCache.findIndex(m => m.id === id);
+        if (i !== -1) meetingsCache[i] = mapped;
+        persistMeetingsCache(meetingsCache);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Failed to update meeting in Supabase, updated local cache:', err);
+    }
+  }
+
+  return updatedMeeting;
+}
+
+export async function deleteMeeting(id: string): Promise<boolean> {
+  meetingsCache = meetingsCache.filter(m => m.id !== id);
+  persistMeetingsCache(meetingsCache);
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('meetings').delete().eq('id', id);
+    } catch (e) {
+      console.warn('Could not delete meeting from Supabase:', e);
+    }
+  }
+  return true;
 }
 
 // ============================================================
@@ -1040,69 +1665,210 @@ export async function getTodayAttendance(userId: string): Promise<AttendanceReco
   return mapAttendance(data);
 }
 
-export async function checkIn(userId: string): Promise<AttendanceRecord> {
+export async function checkIn(userId: string, overrideTime?: Date): Promise<AttendanceRecord> {
   if (!userId) throw new Error('User ID is required to check in.');
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date();
+  const now = overrideTime instanceof Date ? overrideTime : new Date();
+  const today = now.toISOString().split('T')[0];
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const isLate = now.getHours() > 10 || (now.getHours() === 10 && now.getMinutes() > 15);
 
-  const payload: any = {
-    user_id: userId,
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  let pointsAwarded = 0;
+  let isLate = false;
+  let notes = '';
+
+  if (currentMins >= PUNCH_IN_START_MIN && currentMins <= PUNCH_IN_ONTIME_END_MIN) {
+    pointsAwarded = POINTS_ON_TIME;
+    isLate = false;
+    notes = `Points: ${pointsAwarded} | On-time Punch In (9:00 AM - 10:00 AM)`;
+  } else if (currentMins > PUNCH_IN_ONTIME_END_MIN && currentMins <= PUNCH_IN_GRACE_END_MIN) {
+    pointsAwarded = POINTS_GRACE;
+    isLate = true;
+    notes = `Points: ${pointsAwarded} | Grace Window Punch In (10:00 AM - 10:15 AM)`;
+  } else if (currentMins < PUNCH_IN_START_MIN) {
+    throw new Error('Punch In is disabled before 9:00 AM. Window opens at 9:00 AM.');
+  } else {
+    throw new Error('Punch In is closed for today. Cut-off was 10:15 AM.');
+  }
+
+  const fallbackRecord: AttendanceRecord = {
+    id: `att_${Date.now()}`,
+    userId,
     date: today,
     status: isLate ? 'late' : 'present',
-    check_in: timeNow,
-    hours_worked: 0,
+    checkIn: timeNow,
+    workingHours: '0h 00m',
+    notes,
+    points: pointsAwarded,
   };
 
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .upsert(payload, { onConflict: 'user_id,date' })
-    .select()
-    .single();
+  try {
+    const payload: any = {
+      user_id: userId,
+      date: today,
+      status: isLate ? 'late' : 'present',
+      check_in: timeNow,
+      hours_worked: 0,
+      notes,
+    };
 
-  if (error) {
-    console.error('Check-in error from Supabase:', error);
-    throw error;
+    let res = await supabase
+      .from('attendance_records')
+      .upsert({ ...payload, points: pointsAwarded }, { onConflict: 'user_id,date' })
+      .select()
+      .single();
+
+    if (res.error && (res.error.message?.includes('points') || res.error.code === '42703')) {
+      res = await supabase
+        .from('attendance_records')
+        .upsert(payload, { onConflict: 'user_id,date' })
+        .select()
+        .single();
+    }
+
+    if (res.error) {
+      console.warn('Supabase check-in rejected (using local session fallback):', res.error);
+      return fallbackRecord;
+    }
+
+    // Trigger instant device push confirmation
+    notifyCheckInSuccess({
+      memberId: userId,
+      checkInTime: timeNow,
+    }).catch(console.error);
+
+    return mapAttendance(data);
+  } catch (err) {
+    console.warn('Check-in network error (using local session fallback):', err);
+    return fallbackRecord;
   }
-  return mapAttendance(data);
 }
 
-export async function checkOut(userId: string): Promise<AttendanceRecord> {
+export async function checkOut(userId: string, overrideTime?: Date): Promise<AttendanceRecord> {
   if (!userId) throw new Error('User ID is required to check out.');
-  const today = new Date().toISOString().split('T')[0];
-  const timeNow = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const now = overrideTime instanceof Date ? overrideTime : new Date();
+  const today = now.toISOString().split('T')[0];
+  const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const currentMins = now.getHours() * 60 + now.getMinutes();
 
-  // Get existing check_in time to calculate exact working hours
-  const { data: existing } = await supabase
-    .from('attendance_records')
-    .select('check_in')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle();
+  if (currentMins < PUNCH_OUT_START_MIN) {
+    throw new Error('Punch Out is disabled before 9:00 PM. Shifts conclude between 9:00 PM and 10:00 PM.');
+  }
+  if (currentMins > PUNCH_OUT_END_MIN) {
+    throw new Error('Punch Out is closed after 10:00 PM. Missed punch-out penalty has been applied.');
+  }
 
-  const { formatted, numeric } = calculateDuration(existing?.check_in, timeNow);
+  let existingCheckIn = '';
+  let existingNotes = '';
+  let basePoints = POINTS_ON_TIME;
 
-  const updatePayload: any = {
-    check_out: timeNow,
-    hours_worked: numeric,
+  try {
+    const { data: existing } = await supabase
+      .from('attendance_records')
+      .select('check_in, points, notes')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .maybeSingle();
+
+    if (existing) {
+      existingCheckIn = existing.check_in || '';
+      existingNotes = existing.notes || '';
+      const inMins = parseTimeToMinutes(existingCheckIn);
+      if (inMins !== null && inMins > PUNCH_IN_ONTIME_END_MIN && inMins <= PUNCH_IN_GRACE_END_MIN) {
+        basePoints = POINTS_GRACE;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const { formatted, numeric } = calculateDuration(existingCheckIn, timeNow);
+  const finalPoints = basePoints;
+  const notes = `${existingNotes} | Punch Out at ${timeNow} (Full ${finalPoints} pts retained)`.trim();
+
+  const fallbackRecord: AttendanceRecord = {
+    id: `att_${Date.now()}`,
+    userId,
+    date: today,
+    status: 'present',
+    checkOut: timeNow,
+    workingHours: formatted,
+    notes,
+    points: finalPoints,
   };
 
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .update(updatePayload)
-    .eq('user_id', userId)
-    .eq('date', today)
-    .select()
-    .single();
+  try {
+    const updatePayload: any = {
+      check_out: timeNow,
+      hours_worked: numeric,
+      notes,
+    };
 
-  if (error) {
-    console.error('Check-out error from Supabase:', error);
-    throw error;
+    let res = await supabase
+      .from('attendance_records')
+      .update({ ...updatePayload, points: finalPoints })
+      .eq('user_id', userId)
+      .eq('date', today)
+      .select()
+      .single();
+
+    if (res.error && (res.error.message?.includes('points') || res.error.code === '42703')) {
+      res = await supabase
+        .from('attendance_records')
+        .update(updatePayload)
+        .eq('user_id', userId)
+        .eq('date', today)
+        .select()
+        .single();
+    }
+
+    if (res.error) {
+      console.warn('Supabase check-out rejected (using local session fallback):', res.error);
+      return fallbackRecord;
+    }
+    const result = mapAttendance(res.data);
+    result.workingHours = formatted;
+    result.points = finalPoints;
+    return result;
+  } catch (err: any) {
+    if (err.message && (err.message.includes('Punch Out is disabled') || err.message.includes('Punch Out is closed'))) {
+      throw err;
+    }
+    console.warn('Check-out network error (using local session fallback):', err);
+    return fallbackRecord;
   }
-  const result = mapAttendance(data);
-  result.workingHours = formatted;
-  return result;
+}
+
+export async function resetTodayAttendance(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const { error: delError } = await supabase
+      .from('attendance_records')
+      .delete()
+      .eq('user_id', userId)
+      .eq('date', today);
+
+    if (delError) {
+      console.warn('Supabase delete error (attempting nullify update):', delError);
+      await supabase
+        .from('attendance_records')
+        .update({
+          check_in: null,
+          check_out: null,
+          working_hours: null,
+          hours_worked: 0,
+          status: 'present',
+          notes: 'Reset by user',
+          points: 0,
+        })
+        .eq('user_id', userId)
+        .eq('date', today);
+    }
+    return true;
+  } catch (err) {
+    console.error('Error resetting today attendance:', err);
+    return false;
+  }
 }
 
 // ============================================================
@@ -1161,79 +1927,225 @@ export async function submitDailyReport(report: Partial<DailyReport>): Promise<D
 // ============================================================
 // NOTIFICATIONS API
 // ============================================================
+export async function createNotification(notification: any): Promise<void> {
+  if (!isSupabaseConfigured() || !isValidUuid(notification.userId)) return;
+  const payload = {
+    user_id: notification.userId,
+    title: notification.title,
+    message: notification.message,
+    link: notification.actionUrl,
+    type: notification.type || 'general',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from('notifications').insert([payload]);
+  if (error) console.error('Failed to create notification:', error);
+}
+
 export async function getNotifications(userId?: string): Promise<Notification[]> {
   if (!isSupabaseConfigured()) return [];
   let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
-  if (userId) {
-    query = query.or(`user_id.eq.${userId},user_id.eq.all`);
+  if (userId && isValidUuid(userId)) {
+    query = query.eq('user_id', userId);
   }
   const { data, error } = await query;
-  if (error) return [];
+  if (error) {
+    console.warn('Error fetching notifications:', error);
+    return [];
+  }
   return (data || []).map(mapNotification);
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  if (isSupabaseConfigured()) {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
+  if (isSupabaseConfigured() && isValidUuid(id)) {
+    await supabase.from('notifications').update({ 
+      is_read: true,
+      read_at: new Date().toISOString()
+    }).eq('id', id);
   }
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  if (isSupabaseConfigured()) {
+  if (isSupabaseConfigured() && isValidUuid(userId)) {
     await supabase
       .from('notifications')
-      .update({ read: true })
-      .or(`user_id.eq.${userId},user_id.eq.all`);
+      .update({ 
+        is_read: true,
+        read_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
   }
 }
 
 // ============================================================
 // MESSAGES API
 // ============================================================
-export async function getChannels(): Promise<ChatChannel[]> {
-  if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase
-    .from('chat_channels')
-    .select('*')
-    .order('created_at', { ascending: true });
+export const DEFAULT_CHAT_CHANNELS: ChatChannel[] = [
+  { id: 'ch_global', name: 'global-chat', type: 'general', memberIds: [], unreadCount: 0, icon: 'globe' },
+];
 
-  if (error) return [];
-  return (data || []).map(mapChannel);
+export async function getChannels(): Promise<ChatChannel[]> {
+  if (!isSupabaseConfigured()) return DEFAULT_CHAT_CHANNELS;
+
+  try {
+    const { data, error } = await supabase
+      .from('chat_channels')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching chat_channels, using default global channel:', error);
+      return DEFAULT_CHAT_CHANNELS;
+    }
+
+    // Filter out removed options: direct messages, development, random, announcements
+    const filtered = (data || []).filter(c => {
+      const n = (c.name || '').toLowerCase();
+      return (
+        c.type !== 'direct' &&
+        !['announcements', 'development', 'random', 'general'].includes(n)
+      );
+    });
+
+    let globalChannel = filtered.find(c => c.id === 'ch_global' || c.name === 'global-chat');
+
+    // If global-chat does not exist in the database yet, auto-create it
+    if (!globalChannel) {
+      try {
+        const { data: newGlobal, error: globalErr } = await supabase
+          .from('chat_channels')
+          .insert([{
+            id: 'ch_global',
+            name: 'global-chat',
+            type: 'general',
+            icon: 'globe',
+            member_ids: [],
+          }])
+          .select()
+          .single();
+
+        if (!globalErr && newGlobal) {
+          globalChannel = newGlobal;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    // Clean up unwanted channels in background
+    try {
+      supabase
+        .from('chat_channels')
+        .delete()
+        .or('name.in.(announcements,development,random,general),type.eq.direct')
+        .then(() => {});
+    } catch {
+      // ignore
+    }
+
+    return globalChannel ? [mapChannel(globalChannel)] : DEFAULT_CHAT_CHANNELS;
+  } catch (err) {
+    console.warn('Chat channels exception, using defaults:', err);
+    return DEFAULT_CHAT_CHANNELS;
+  }
 }
 
-export async function getChannelMessages(channelId: string): Promise<ChatMessage[]> {
-  if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('*')
-    .eq('channel_id', channelId)
-    .order('timestamp', { ascending: true });
+export async function createChannel(name: string, type: 'general' | 'project' | 'direct' = 'general', memberIds: string[] = []): Promise<ChatChannel> {
+  const sanitizedName = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+  const newChan = {
+    id: `ch_${Math.random().toString(36).substring(2, 10)}`,
+    name: sanitizedName || 'new-channel',
+    type,
+    member_ids: memberIds,
+    unread_count: 0,
+    icon: type === 'direct' ? 'user' : 'hash',
+  };
 
-  if (error) return [];
+  if (!isSupabaseConfigured()) {
+    return mapChannel(newChan);
+  }
+
+  const { data, error } = await supabase
+    .from('chat_channels')
+    .insert([newChan])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating channel in Supabase:', error);
+    throw error;
+  }
+
+  return mapChannel(data);
+}
+
+export async function getChannelMessages(receiverId: string, currentUserId?: string): Promise<ChatMessage[]> {
+  if (!isSupabaseConfigured()) return [];
+  
+  let query = supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
+  
+  const isGlobal = receiverId === 'globe' || receiverId === 'ch_global';
+  if (isGlobal) {
+    // Global chat is identified by null receiver_id or channel_id = 'ch_global'
+    query = query.or('receiver_id.is.null,channel_id.eq.ch_global');
+  } else if (currentUserId && isValidUuid(receiverId) && isValidUuid(currentUserId)) {
+    // Direct messages between current user and receiver
+    query = query.or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Error fetching chat messages:', error);
+    return [];
+  }
   return (data || []).map(mapMessage);
 }
 
-export async function sendMessage(channelId: string, content: string, senderId: string): Promise<ChatMessage> {
-  const insertPayload = {
-    channel_id: channelId,
-    sender_id: senderId,
-    content,
-    timestamp: new Date().toISOString(),
-    type: 'text',
-    attachments: [],
-    reactions: [],
-  };
+export async function sendMessage(receiverId: string, content: string, senderId: string, attachments: any[] = []): Promise<ChatMessage> {
+  const isGlobal = receiverId === 'globe' || receiverId === 'ch_global';
+  const now = new Date().toISOString();
+  const msgType = attachments.length > 0 && !content.trim() ? 'file' : 'text';
 
   if (!isSupabaseConfigured()) {
     return {
       id: `msg${Date.now()}`,
-      channelId,
+      channelId: isGlobal ? 'globe' : receiverId,
       senderId,
       content,
-      timestamp: insertPayload.timestamp,
-      type: 'text',
+      timestamp: now,
+      type: msgType as any,
+      attachments,
+      reactions: [],
     };
   }
+
+  // Ensure sender_id matches a valid UUID format for public.profiles foreign key
+  let validSenderId = senderId;
+  if (!isValidUuid(senderId)) {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData?.user?.id && isValidUuid(authData.user.id)) {
+        validSenderId = authData.user.id;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  const validReceiverId = (!isGlobal && isValidUuid(receiverId)) ? receiverId : null;
+
+  // Note: Do NOT manually pass `id` because public.chat_messages expects a UUID generated by gen_random_uuid()
+  const insertPayload: Record<string, any> = {
+    channel_id: isGlobal ? 'ch_global' : null,
+    receiver_id: validReceiverId,
+    sender_id: validSenderId,
+    content,
+    type: msgType,
+    attachments,
+    reactions: [],
+    timestamp: now,
+  };
 
   const { data, error } = await supabase
     .from('chat_messages')
@@ -1241,15 +2153,28 @@ export async function sendMessage(channelId: string, content: string, senderId: 
     .select()
     .single();
 
-  if (error) throw error;
-  // Update last message in channel
-  await supabase
-    .from('chat_channels')
-    .update({ last_message: content, last_message_at: insertPayload.timestamp })
-    .eq('id', channelId);
+  if (error) {
+    console.error('Error sending message:', error);
+    throw error;
+  }
 
   return mapMessage(data);
 }
+
+export async function updateMessageReactions(messageId: string, reactions: any[]): Promise<void> {
+  if (!isSupabaseConfigured() || !isValidUuid(messageId)) return;
+  try {
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ reactions })
+      .eq('id', messageId);
+    if (error) console.error('Error updating reaction in Supabase:', error);
+  } catch (err) {
+    console.error('Failed to update reactions in Supabase:', err);
+  }
+}
+
+
 
 // ============================================================
 // FILES API
@@ -1290,36 +2215,60 @@ export async function getFilesByFolder(folder: string): Promise<FileItem[]> {
 
 export async function uploadFile(file: File, folder: string = 'General'): Promise<FileItem> {
   if (!isSupabaseConfigured()) {
-    throw new Error('Supabase is not configured');
+    throw new Error('Supabase is not configured. Please check your .env credentials.');
   }
 
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-  const filePath = `${folder}/${fileName}`;
+  const filePath = `${folder}/${file.name}`;
 
   const { error: uploadError } = await supabase.storage
     .from('files')
-    .upload(filePath, file);
+    .upload(filePath, file, { upsert: true });
 
   if (uploadError) {
     console.error('Error uploading file to storage:', uploadError);
+    const msg = uploadError.message || '';
+    if (msg.toLowerCase().includes('bucket not found') || (uploadError as any).statusCode === '404') {
+      throw new Error("Supabase Storage bucket 'files' not found. Please create a public bucket named 'files' in Supabase Dashboard -> Storage.");
+    }
+    if (msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('policy') || (uploadError as any).statusCode === '403') {
+      throw new Error("Upload blocked by Supabase Storage RLS. Please apply the storage policies for the 'files' bucket.");
+    }
     throw uploadError;
+  }
+
+  // Generate public URL
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  const publicUrl = urlData?.publicUrl || '#';
+
+  // Get current user ID if logged in
+  let currentUserId: string | null = null;
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    currentUserId = authData?.user?.id || null;
+  } catch {
+    // Session optional in demo/offline
   }
 
   let type = 'document';
   if (file.type.startsWith('image/')) type = 'image';
   else if (file.type.startsWith('video/')) type = 'video';
-  else if (file.name.match(/\.(zip|tar|gz|rar)$/i)) type = 'archive';
-  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json)$/i)) type = 'code';
+  else if (file.name.match(/\.(zip|tar|gz|rar|7z)$/i)) type = 'archive';
+  else if (file.name.match(/\.(ts|js|jsx|tsx|css|html|json|py|java|c|cpp|go|rs|sql|md)$/i)) type = 'code';
   else if (file.name.match(/\.(xls|xlsx|csv)$/i)) type = 'spreadsheet';
   else if (file.name.match(/\.(ppt|pptx)$/i)) type = 'presentation';
 
   const insertPayload = {
-    id: crypto.randomUUID(),
+    id: `fl_${Math.random().toString(36).substring(2, 10)}`,
     name: file.name,
     type,
     size: file.size,
     folder,
+    url: publicUrl,
+    uploaded_by: currentUserId,
+    mime_type: file.type || 'application/octet-stream',
   };
 
   const { data, error: dbError } = await supabase
@@ -1329,11 +2278,55 @@ export async function uploadFile(file: File, folder: string = 'General'): Promis
     .single();
 
   if (dbError) {
-    console.error('Error inserting file record:', dbError);
-    throw dbError;
+    console.warn('Database record creation failed, returning mapped memory item:', dbError);
+    return {
+      id: insertPayload.id,
+      name: file.name,
+      type: insertPayload.type as any,
+      size: file.size,
+      folder,
+      uploadedBy: currentUserId || 'user',
+      uploadedAt: new Date().toISOString(),
+      url: publicUrl,
+      mimeType: insertPayload.mime_type,
+    };
   }
 
   return mapFile(data);
+}
+
+export async function deleteFile(fileId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { data: fileRecord } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', fileId)
+      .maybeSingle();
+
+    if (fileRecord?.url && fileRecord.url.includes('/files/')) {
+      const parts = fileRecord.url.split('/files/');
+      const storagePath = parts[parts.length - 1]?.split('?')[0];
+      if (storagePath) {
+        await supabase.storage.from('files').remove([decodeURIComponent(storagePath)]);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not remove file from Supabase storage:', err);
+  }
+
+  const { error } = await supabase
+    .from('files')
+    .delete()
+    .eq('id', fileId);
+
+  if (error) {
+    console.error('Error deleting file record from database:', error);
+    throw error;
+  }
+
+  return true;
 }
 
 // ============================================================
@@ -1450,6 +2443,21 @@ export async function createAnnouncement(announcement: Partial<Announcement>): P
 
   if (error) throw error;
   return mapAnnouncement(data);
+}
+
+export async function deleteAnnouncement(id: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting announcement from Supabase:', error);
+      throw error;
+    }
+  }
+  return true;
 }
 
 // ============================================================

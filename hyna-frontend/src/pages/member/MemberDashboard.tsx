@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckSquare, Clock, CheckCircle2, Send, Video, ArrowRight,
-  Check, Edit3, Calendar,
+  Check, Edit3, Calendar, Hand, PartyPopper
 } from 'lucide-react';
 import { StatCard, AvatarGroup, Badge, Button, Textarea, LoadingState } from '@/components/ui';
 import { cn, getGreeting, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
@@ -11,6 +11,12 @@ import {
   getUserTasks, getUserMeetings, getUserAttendance,
   submitDailyReport, checkIn, checkOut, getUserById, getUsers,
 } from '@/services/api';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import {
+  getPunchInStatus,
+  getPunchOutStatus,
+  calculateRecordPoints,
+} from '@/lib/attendanceRules';
 import { toast } from 'sonner';
 import type { Task, Meeting, AttendanceRecord } from '@/types';
 
@@ -24,39 +30,43 @@ export function MemberDashboard() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   const userId = currentUser?.id || '';
   const todayStr = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      if (!userId) return;
-      try {
-        await getUsers();
-        const [t, m, a] = await Promise.all([
-          getUserTasks(userId),
-          getUserMeetings(userId),
-          getUserAttendance(userId),
-        ]);
-        if (isMounted) {
-          setTasks(t);
-          setMeetings(m);
-          setAttendance(a);
-          const todayRecord = a.find(record => record.date === todayStr);
-          if (todayRecord && todayRecord.checkIn && !todayRecord.checkOut) {
-            setIsCheckedIn(true);
-          } else {
-            setIsCheckedIn(false);
-          }
-        }
-      } catch (err) {
-        console.error('Error loading member dashboard data:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const loadData = async () => {
+    if (!userId) return;
+    try {
+      await getUsers();
+      const [t, m, a] = await Promise.all([
+        getUserTasks(userId),
+        getUserMeetings(userId),
+        getUserAttendance(userId),
+      ]);
+      setTasks(t);
+      setMeetings(m);
+      setAttendance(a);
+      const todayRecord = a.find(record => record.date === todayStr);
+      if (todayRecord && todayRecord.checkIn && !todayRecord.checkOut) {
+        setIsCheckedIn(true);
+      } else {
+        setIsCheckedIn(false);
       }
+    } catch (err) {
+      console.error('Error loading member dashboard data:', err);
+    } finally {
+      setIsLoading(false);
     }
-    load();
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    loadData();
   }, [userId, todayStr]);
 
   const completedTasks = tasks.filter(t => t.status === 'completed');
@@ -88,25 +98,43 @@ export function MemberDashboard() {
     }
   };
 
+  const punchInStatus = getPunchInStatus(currentTime);
+  const punchOutStatus = getPunchOutStatus(currentTime, todayAttendance?.checkIn);
+  const todayPointEval = todayAttendance ? calculateRecordPoints(todayAttendance, currentTime) : null;
+
   const handleCheckIn = async () => {
+    const status = getPunchInStatus(currentTime);
+    if (!status.canPunchIn) {
+      toast.error(status.tooltip);
+      return;
+    }
     try {
-      const record = await checkIn(userId);
+      const record = await checkIn(userId, currentTime);
       setAttendance(prev => [record, ...prev.filter(a => a.date !== todayStr)]);
       setIsCheckedIn(true);
-      toast.success('Checked in successfully!');
-    } catch (err) {
-      toast.error('Check in failed');
+      toast.success(
+        status.phase === 'on_time'
+          ? `Checked in on-time at ${record.checkIn}! +10 Points earned! 🎯`
+          : `Checked in during grace window at ${record.checkIn}! +5 Points earned! ⏱️`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Check in failed');
     }
   };
 
   const handleCheckOut = async () => {
+    const status = getPunchOutStatus(currentTime, todayAttendance?.checkIn);
+    if (!status.canPunchOut) {
+      toast.error(status.tooltip);
+      return;
+    }
     try {
-      const record = await checkOut(userId);
+      const record = await checkOut(userId, currentTime);
       setAttendance(prev => [record, ...prev.filter(a => a.date !== todayStr)]);
       setIsCheckedIn(false);
-      toast.success('Checked out successfully!');
-    } catch (err) {
-      toast.error('Check out failed');
+      toast.success(`Checked out successfully at ${record.checkOut}! Full points preserved.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Check out failed');
     }
   };
 
@@ -116,7 +144,10 @@ export function MemberDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'} 👋</h1>
+        <h1 className="page-title flex items-center gap-2">
+          {getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Member'}
+          <Hand className="w-6 h-6 text-yellow-500" />
+        </h1>
         <p className="page-description">Here's your work overview for today.</p>
       </div>
 
@@ -131,8 +162,15 @@ export function MemberDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Daily Streaks & Attendance Points */}
+          <StreakAndPointsCard
+            userId={userId}
+            attendanceRecords={attendance}
+            onAttendanceUpdated={loadData}
+          />
+
           {/* Today's tasks */}
-          <div className="card p-6 animate-slide-up">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold">Today's Tasks</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/member/tasks')}>
@@ -141,7 +179,9 @@ export function MemberDashboard() {
             </div>
             <div className="space-y-1">
               {todayTasks.length === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)] py-4 text-center">No tasks for today 🎉</p>
+                <p className="text-sm text-[var(--color-muted-foreground)] py-4 flex items-center justify-center gap-2">
+                  No tasks for today <PartyPopper className="w-4 h-4 text-emerald-500" />
+                </p>
               ) : (
                 todayTasks.map((task) => (
                   <div
@@ -181,7 +221,7 @@ export function MemberDashboard() {
           </div>
 
           {/* Daily work report */}
-          <div className="card p-6 animate-slide-up stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center gap-2 mb-4">
               <Edit3 className="w-4 h-4 text-[var(--color-primary)]" />
               <h2 className="text-base font-semibold">Today's Work Report</h2>
@@ -204,7 +244,7 @@ export function MemberDashboard() {
         {/* Right column */}
         <div className="space-y-6">
           {/* Daily check-in */}
-          <div className="card p-6 animate-slide-in-right">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
             <div className="text-center py-4">
               {isCheckedIn ? (
@@ -213,14 +253,35 @@ export function MemberDashboard() {
                     <CheckCircle2 className="w-8 h-8 text-emerald-500 animate-pulse" />
                   </div>
                   <p className="text-lg font-bold text-[var(--color-foreground)]">{todayAttendance?.checkIn}</p>
-                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">Active Shift</p>
+                  <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      Active Shift • {todayPointEval ? `${todayPointEval.finalPoints} Pts` : '10 Pts'}
+                    </span>
+                    {todayPointEval?.penaltyApplied && (
+                      <span className="text-[10px] px-1 rounded bg-red-500/15 text-red-600">Penalty</span>
+                    )}
+                  </div>
                   <div className="flex items-center justify-center gap-2 mt-3 text-sm">
                     <Clock className="w-4 h-4 text-[var(--color-muted-foreground)]" />
                     <span className="font-medium text-xs">Tracking active work hours</span>
                   </div>
-                  <Button variant="outline" className="mt-4 w-full" onClick={handleCheckOut}>
-                    Check Out
-                  </Button>
+                  <div className="mt-4 flex flex-col items-center gap-1.5 w-full">
+                    <Button
+                      variant={punchOutStatus.canPunchOut ? 'destructive' : 'outline'}
+                      className={cn(
+                        'w-full font-semibold',
+                        !punchOutStatus.canPunchOut && 'opacity-60 cursor-not-allowed border-dashed'
+                      )}
+                      disabled={!punchOutStatus.canPunchOut}
+                      onClick={handleCheckOut}
+                      title={punchOutStatus.tooltip}
+                    >
+                      {punchOutStatus.canPunchOut ? 'Check Out (Keep Points)' : punchOutStatus.label}
+                    </Button>
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', punchOutStatus.badgeColor)}>
+                      {punchOutStatus.badgeText}
+                    </span>
+                  </div>
                 </>
               ) : todayAttendance?.checkOut ? (
                 <>
@@ -234,7 +295,7 @@ export function MemberDashboard() {
                   <div className="flex items-center justify-center gap-2 mt-3 text-sm">
                     <Clock className="w-4 h-4 text-blue-500" />
                     <span className="font-semibold text-xs text-[var(--color-foreground)]">
-                      Total: {todayAttendance.workingHours || 'Logged'}
+                      Total: {todayAttendance.workingHours || 'Logged'} • {todayPointEval?.finalPoints || 10} Pts
                     </span>
                   </div>
                   <Button variant="ghost" size="sm" className="mt-3 w-full text-xs text-[var(--color-primary)]" onClick={() => navigate('/member/attendance')}>
@@ -247,28 +308,57 @@ export function MemberDashboard() {
                     <Clock className="w-8 h-8 text-[var(--color-muted-foreground)]" />
                   </div>
                   <p className="text-sm font-medium text-[var(--color-muted-foreground)]">You haven't checked in yet today</p>
-                  <Button className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCheckIn}>
-                    Check In
-                  </Button>
+                  <div className="mt-4 flex flex-col items-center gap-1.5 w-full">
+                    <Button
+                      className={cn(
+                        'w-full font-semibold',
+                        punchInStatus.canPunchIn
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted'
+                      )}
+                      disabled={!punchInStatus.canPunchIn}
+                      onClick={handleCheckIn}
+                      title={punchInStatus.tooltip}
+                    >
+                      {punchInStatus.canPunchIn ? punchInStatus.label : punchInStatus.label}
+                    </Button>
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', punchInStatus.badgeColor)}>
+                      {punchInStatus.badgeText}
+                    </span>
+                  </div>
                 </>
               )}
             </div>
           </div>
 
           {/* Upcoming meetings */}
-          <div className="card p-6 animate-slide-in-right stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/member/meetings')}>
+                View all
+              </Button>
             </div>
             <div className="space-y-3">
               {upcomingMeetings.length === 0 ? (
                 <p className="text-sm text-[var(--color-muted-foreground)] text-center py-4">No upcoming meetings</p>
               ) : (
                 upcomingMeetings.map(meeting => (
-                  <div key={meeting.id} className="p-3 rounded-xl border border-[var(--color-border)]">
-                    <p className="text-sm font-medium">{meeting.title}</p>
+                  <div 
+                    key={meeting.id} 
+                    onClick={() => navigate(`/member/meetings/${meeting.id}`)}
+                    className="p-3.5 rounded-xl border border-[var(--color-border)] hover:border-indigo-500/50 hover:bg-[var(--color-muted)]/40 hover:shadow-sm transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {meeting.title}
+                      </p>
+                      <Badge className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        {meeting.type}
+                      </Badge>
+                    </div>
                     <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--color-muted-foreground)]">
-                      <Calendar className="w-3.5 h-3.5" />
+                      <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                       <span>{formatDate(meeting.date)} • {formatTime(meeting.startTime)}</span>
                     </div>
                     <div className="flex items-center justify-between mt-3">
@@ -280,11 +370,34 @@ export function MemberDashboard() {
                         {meeting.participantIds.length} participants
                       </span>
                     </div>
-                    {meeting.meetingLink && (
-                      <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => window.open(meeting.meetingLink, '_blank')}>
-                        <Video className="w-3.5 h-3.5 mr-1" /> Join Meeting
-                      </Button>
-                    )}
+                    {(() => {
+                      const isLive = meeting.status === 'live' || meeting.status === 'in-progress';
+                      const link = (meeting.meetingLink || '').trim();
+                      const isExternal = link.startsWith('http://') || link.startsWith('https://');
+                      const roomId = meeting.meetingRoomId || (link.includes('/meeting/') ? link.split('/meeting/')[1] : meeting.id);
+
+                      return (
+                        <Button 
+                          variant={isLive ? "primary" : "outline"} 
+                          size="sm" 
+                          className={cn(
+                            "w-full mt-3 text-xs font-semibold",
+                            isLive && "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isExternal) {
+                              window.open(link, '_blank', 'noopener,noreferrer');
+                            } else {
+                              navigate(`/meeting/${roomId}`);
+                            }
+                          }}
+                        >
+                          <Video className="w-3.5 h-3.5 mr-1" />
+                          {isLive ? 'Join Now (Live)' : link.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
+                        </Button>
+                      );
+                    })()}
                   </div>
                 ))
               )}
@@ -292,7 +405,7 @@ export function MemberDashboard() {
           </div>
 
           {/* My activity summary */}
-          <div className="card p-6 animate-slide-in-right stagger-2">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
             <h2 className="text-base font-semibold mb-4">Activity Summary</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">

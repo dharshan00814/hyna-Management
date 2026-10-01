@@ -32,6 +32,8 @@ export interface User {
   lastActive: string;
   bio?: string;
   skills?: string[];
+  bankAccountNumber?: string;
+  ifsc?: string;
 }
 
 // --- Project ---
@@ -42,6 +44,7 @@ export interface Project {
   status: ProjectStatus;
   progress: number;
   managerId: string;
+  leadId?: string;
   memberIds: string[];
   startDate: string;
   deadline: string;
@@ -49,6 +52,7 @@ export interface Project {
   modules: Module[];
   color: string;
   tags: string[];
+  projectType?: 'team' | 'solo';
 }
 
 // --- Module ---
@@ -110,21 +114,8 @@ export interface TaskSubmission {
 }
 
 // --- Meeting ---
-export interface Meeting {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  hostId: string;
-  participantIds: string[];
-  type: MeetingType;
-  isRecurring: boolean;
-  meetingLink?: string;
-  notes?: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
-}
+export * from './meeting';
+
 
 // --- Attendance ---
 export interface AttendanceRecord {
@@ -136,6 +127,23 @@ export interface AttendanceRecord {
   checkOut?: string;
   workingHours?: string;
   notes?: string;
+  points?: number;
+}
+
+export interface UserStreakAndPoints {
+  currentStreak: number;
+  longestStreak: number;
+  totalPoints: number;
+  todayPoints: number;
+  todayStatus: 'not_started' | 'checked_in' | 'completed' | 'missed';
+  penaltyAppliedToday: boolean;
+  historyDays: {
+    date: string;
+    dayLabel: string;
+    isToday: boolean;
+    attended: boolean;
+    points: number;
+  }[];
 }
 
 // --- Daily Report ---
@@ -183,7 +191,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   type: 'text' | 'file' | 'system';
-  attachments?: string[];
+  attachments?: { name: string; path: string; type: string; url?: string }[];
   reactions?: { emoji: string; userIds: string[] }[];
 }
 

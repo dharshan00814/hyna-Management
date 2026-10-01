@@ -13,6 +13,7 @@ import {
   TrendingUp,
   FileCheck,
   Plus,
+  Video,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -33,8 +34,10 @@ import {
   reviewTask,
   getUserById,
   createTask,
+  getAttendance,
 } from '@/services/api';
-import { cn, formatDate, getStatusColor, getPriorityColor } from '@/lib/utils';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import { cn, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
 import type { Project, Task, User, Meeting, AttendanceRecord } from '@/types';
 
 export function ManagerDashboard() {
@@ -54,17 +57,23 @@ export function ManagerDashboard() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  const [managerAttendance, setManagerAttendance] = useState<AttendanceRecord[]>([]);
+
   const loadData = async () => {
     if (!currentUser?.id) return;
     try {
       setIsLoading(true);
-      const data = await getManagerDashboardData(currentUser.id);
+      const [data, allAttendance] = await Promise.all([
+        getManagerDashboardData(currentUser.id),
+        getAttendance(currentUser.id),
+      ]);
       setProjects(data.managedProjects);
       setTasks(data.managerTasks);
       setTeamMembers(data.teamMembers);
       setPendingSubmissions(data.pendingSubmissions);
       setTeamAttendance(data.teamAttendance);
       setMeetings(data.meetings);
+      setManagerAttendance(allAttendance);
     } catch (err) {
       console.error('Failed to load manager dashboard:', err);
       toast.error('Could not load manager metrics');
@@ -175,7 +184,7 @@ export function ManagerDashboard() {
         {/* Left Column: Projects & Submissions (2 cols) */}
         <div className="lg:col-span-2 space-y-8">
           {/* Pending Submissions / Deliverables Review Queue */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold">Deliverables Queue</h2>
@@ -227,8 +236,15 @@ export function ManagerDashboard() {
             )}
           </div>
 
+          {/* Daily Streaks & Points */}
+          <StreakAndPointsCard
+            userId={currentUser?.id || ''}
+            attendanceRecords={managerAttendance}
+            onAttendanceUpdated={loadData}
+          />
+
           {/* Managed Projects Overview */}
-          <div className="card p-6 space-y-5">
+          <div className="card p-6 space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold">My Managed Projects</h2>
@@ -300,7 +316,7 @@ export function ManagerDashboard() {
         {/* Right Column: Team & Attendance (1 col) */}
         <div className="space-y-8">
           {/* Team Members */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Assigned Team</h2>
               <span className="text-xs text-[var(--color-muted-foreground)]">
@@ -336,7 +352,7 @@ export function ManagerDashboard() {
           </div>
 
           {/* Today's Team Attendance */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Team Attendance Today</h2>
               <Badge variant="success">{teamAttendance.length} Checked In</Badge>
@@ -368,7 +384,7 @@ export function ManagerDashboard() {
           </div>
 
           {/* Upcoming Team Meetings */}
-          <div className="card p-6 space-y-4">
+          <div className="card p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
               <Button size="sm" variant="ghost" onClick={() => navigate('/manager/meetings')}>
@@ -381,11 +397,62 @@ export function ManagerDashboard() {
             ) : (
               <div className="space-y-3">
                 {meetings.slice(0, 3).map((m) => (
-                  <div key={m.id} className="p-3 rounded-lg border border-[var(--color-border)] space-y-1">
-                    <p className="text-sm font-medium">{m.title}</p>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">
-                      {m.startTime} - {m.endTime} • {m.type}
-                    </p>
+                  <div 
+                    key={m.id} 
+                    onClick={() => navigate(`/manager/meetings/${m.id}`)}
+                    className="p-3.5 rounded-xl border border-[var(--color-border)] hover:border-indigo-500/50 hover:bg-[var(--color-muted)]/40 hover:shadow-sm transition-all cursor-pointer group space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {m.title}
+                      </p>
+                      <Badge className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        {m.type}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                      <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>{formatDate(m.date)} • {formatTime(m.startTime)}</span>
+                    </div>
+                    {m.participantIds && m.participantIds.length > 0 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <AvatarGroup
+                          names={m.participantIds.slice(0, 4).map(id => getUserById(id)?.name || '').filter(Boolean)}
+                          max={3}
+                        />
+                        <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                          {m.participantIds.length} participants
+                        </span>
+                      </div>
+                    )}
+                    {(() => {
+                      const isLive = m.status === 'live' || m.status === 'in-progress';
+                      const link = (m.meetingLink || '').trim();
+                      const isExternal = link.startsWith('http://') || link.startsWith('https://');
+                      const roomId = m.meetingRoomId || (link.includes('/meeting/') ? link.split('/meeting/')[1] : m.id);
+
+                      return (
+                        <Button 
+                          variant={isLive ? "primary" : "outline"} 
+                          size="sm" 
+                          className={cn(
+                            "w-full mt-2 text-xs h-7 font-semibold",
+                            isLive && "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isExternal) {
+                              window.open(link, '_blank', 'noopener,noreferrer');
+                            } else {
+                              navigate(`/meeting/${roomId}`);
+                            }
+                          }}
+                        >
+                          <Video className="w-3.5 h-3.5 mr-1" />
+                          {isLive ? 'Join Now (Live)' : link.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
+                        </Button>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>

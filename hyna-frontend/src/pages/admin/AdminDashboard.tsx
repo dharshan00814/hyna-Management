@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, FolderKanban, CheckSquare, CalendarClock, Clock, Video,
-  ArrowRight, Eye,
+  ArrowRight, Eye, Hand,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores';
 import {
   getProjects, getTasks, getMeetings, getUsers, getAttendance, getUserById,
 } from '@/services/api';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
 import type { Project, Task, Meeting, User, AttendanceRecord } from '@/types';
 
 const weeklyTaskData = [
@@ -35,32 +36,29 @@ export function AdminDashboard() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      try {
-        const [u, p, t, m, a] = await Promise.all([
-          getUsers(),
-          getProjects(),
-          getTasks(),
-          getMeetings(),
-          getAttendance(),
-        ]);
-        if (isMounted) {
-          setUsers(u);
-          setProjects(p);
-          setTasks(t);
-          setMeetings(m);
-          setAttendance(a);
-        }
-      } catch (err) {
-        console.error('Error loading dashboard data:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+  const loadDashboardData = async () => {
+    try {
+      const [u, p, t, m, a] = await Promise.all([
+        getUsers(),
+        getProjects(),
+        getTasks(),
+        getMeetings(),
+        getAttendance(),
+      ]);
+      setUsers(u);
+      setProjects(p);
+      setTasks(t);
+      setMeetings(m);
+      setAttendance(a);
+    } catch (err) {
+      console.error('Error loading dashboard data:', err);
+    } finally {
+      setIsLoading(false);
     }
-    load();
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    loadDashboardData();
   }, []);
 
   if (isLoading) return <LoadingState />;
@@ -95,7 +93,10 @@ export function AdminDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">{getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Lead'} 👋</h1>
+        <h1 className="page-title flex items-center gap-2">
+          {getGreeting()}, {currentUser?.name?.split(' ')[0] || 'Team Lead'} 
+          <Hand className="w-6 h-6 text-yellow-500" />
+        </h1>
         <p className="page-description">Here's what's happening at Hyna Studio today.</p>
       </div>
 
@@ -107,11 +108,18 @@ export function AdminDashboard() {
         <StatCard label="Today's Attendance" value={`${presentCount}/${users.filter(u => u.status === 'active').length || 1}`} change={2} icon={CalendarClock} iconColor="text-emerald-500" className="stagger-3" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left column */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          {/* Daily Streaks & Attendance Points (Above Project Overview) */}
+          <StreakAndPointsCard
+            userId={currentUser?.id || ''}
+            attendanceRecords={attendance}
+            onAttendanceUpdated={loadDashboardData}
+          />
+
           {/* Project overview */}
-          <div className="card p-6 animate-slide-up">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold">Project Overview</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin/projects')}>
@@ -148,9 +156,9 @@ export function AdminDashboard() {
           </div>
 
           {/* Task & Activity charts */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Weekly task chart */}
-            <div className="card p-6 animate-slide-up stagger-1">
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
               <h2 className="text-base font-semibold mb-4">Weekly Tasks</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={weeklyTaskData} barGap={4}>
@@ -182,7 +190,7 @@ export function AdminDashboard() {
             </div>
 
             {/* Task status pie */}
-            <div className="card p-6 animate-slide-up stagger-2">
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-2">
               <h2 className="text-base font-semibold mb-4">Task Overview</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
@@ -222,7 +230,7 @@ export function AdminDashboard() {
 
           {/* Pending reviews */}
           {pendingReviews.length > 0 && (
-            <div className="card p-6 animate-slide-up stagger-3">
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-3">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold">Pending Reviews</h2>
                 <span className="text-xs text-[var(--color-muted-foreground)]">{pendingReviews.length} tasks</span>
@@ -268,12 +276,41 @@ export function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* Recent members */}
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold">Team Members</h2>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>
+                View all
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {users.slice(0, 6).map(user => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
+                  onClick={() => navigate(`/admin/members/${user.id}`)}
+                >
+                  <Avatar name={user.name} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{user.name}</p>
+                    <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
+                  </div>
+                  <div className={cn(
+                    'w-2 h-2 rounded-full shrink-0',
+                    user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300',
+                  )} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Right column */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6 lg:col-span-1 sticky top-6">
           {/* Today's attendance */}
-          <div className="card p-6 animate-slide-in-right">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-base font-semibold mb-4">Today's Attendance</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
@@ -291,7 +328,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Upcoming meetings */}
-          <div className="card p-6 animate-slide-in-right stagger-1">
+          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-1">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Upcoming Meetings</h2>
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin/meetings')}>
@@ -300,10 +337,21 @@ export function AdminDashboard() {
             </div>
             <div className="space-y-3">
               {upcomingMeetings.map(meeting => (
-                <div key={meeting.id} className="p-3 rounded-xl border border-[var(--color-border)] hover:border-[var(--color-muted-foreground)] transition-colors">
-                  <p className="text-sm font-medium">{meeting.title}</p>
+                <div 
+                  key={meeting.id} 
+                  onClick={() => navigate(`/admin/meetings/${meeting.id}`)}
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] hover:border-indigo-500/50 hover:bg-[var(--color-muted)]/40 hover:shadow-sm transition-all cursor-pointer group"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      {meeting.title}
+                    </p>
+                    <Badge className="text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                      {meeting.type}
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--color-muted-foreground)]">
-                    <Clock className="w-3.5 h-3.5" />
+                    <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                     <span>{formatDate(meeting.date)} • {formatTime(meeting.startTime)}</span>
                   </div>
                   <div className="flex items-center justify-between mt-3">
@@ -315,44 +363,39 @@ export function AdminDashboard() {
                       {meeting.participantIds.length} participants
                     </span>
                   </div>
-                  {meeting.meetingLink && (
-                    <Button variant="outline" size="sm" className="w-full mt-3" onClick={() => window.open(meeting.meetingLink, '_blank')}>
-                      <Video className="w-3.5 h-3.5 mr-1" /> Join Meeting
-                    </Button>
-                  )}
+                  {(() => {
+                    const isLive = meeting.status === 'live' || meeting.status === 'in-progress';
+                    const link = (meeting.meetingLink || '').trim();
+                    const isExternal = link.startsWith('http://') || link.startsWith('https://');
+                    const roomId = meeting.meetingRoomId || (link.includes('/meeting/') ? link.split('/meeting/')[1] : meeting.id);
+
+                    return (
+                      <Button 
+                        variant={isLive ? "primary" : "outline"} 
+                        size="sm" 
+                        className={cn(
+                          "w-full mt-3 text-xs font-semibold",
+                          isLive && "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isExternal) {
+                            window.open(link, '_blank', 'noopener,noreferrer');
+                          } else {
+                            navigate(`/meeting/${roomId}`);
+                          }
+                        }}
+                      >
+                        <Video className="w-3.5 h-3.5 mr-1" />
+                        {isLive ? 'Join Now (Live)' : link.includes('meet.google.com') ? 'Join Google Meet' : 'Join Meeting'}
+                      </Button>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Recent members */}
-          <div className="card p-6 animate-slide-in-right stagger-2">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold">Team Members</h2>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>
-                View all
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {users.slice(0, 6).map(user => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
-                  onClick={() => navigate(`/admin/members/${user.id}`)}
-                >
-                  <Avatar name={user.name} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{user.name}</p>
-                    <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
-                  </div>
-                  <div className={cn(
-                    'w-2 h-2 rounded-full',
-                    user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300',
-                  )} />
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

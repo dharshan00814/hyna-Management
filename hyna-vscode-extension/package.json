@@ -62,7 +62,7 @@
       "properties": {
         "hyna.supabaseUrl": {
           "type": "string",
-          "default": "https://bpawtpzyodgzqjeglsye.supabase.co",
+          "default": "",
           "description": "Supabase Project URL for Hyna Studio."
         },
         "hyna.supabaseAnonKey": {
@@ -72,7 +72,7 @@
         },
         "hyna.heartbeatIntervalSeconds": {
           "type": "number",
-          "default": 45,
+          "default": 30,
           "description": "Heartbeat reporting frequency in seconds (30-120)."
         },
         "hyna.idleTimeoutMinutes": {

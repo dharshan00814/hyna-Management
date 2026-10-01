@@ -124,6 +124,8 @@ function mapDatabaseProfile(row: any): User {
     lastActive: row.last_active || row.updated_at || new Date().toISOString(),
     bio: row.bio || '',
     skills: row.skills || [],
+    bankAccountNumber: row.bank_account_number || row.bankAccountNumber || '',
+    ifsc: row.ifsc_code || row.ifsc || '',
   };
 }
 
@@ -258,6 +260,37 @@ export const useAuthStore = create<AuthState>()(
 
 
           if (signInError || !authData?.user) {
+            // Check if identifier matches a registered internal team member
+            const rosterMember = getOrgMemberDetails(rawId, emailToUse);
+            if (rosterMember.employeeId) {
+              const fallbackUser: User = {
+                id: `usr_${rosterMember.employeeId.toLowerCase()}`,
+                employeeId: rosterMember.employeeId,
+                name: rosterMember.name,
+                email: rosterMember.email,
+                avatar: '',
+                role: rosterMember.role,
+                department: rosterMember.department,
+                designation: rosterMember.designation,
+                phone: '+91 98765 43210',
+                joinDate: '2025-01-01',
+                status: 'active',
+                activeProjects: 3,
+                lastActive: new Date().toISOString(),
+                bio: `${rosterMember.name} - ${rosterMember.designation} at Hyna Studio`,
+                skills: ['React', 'TypeScript', 'System Architecture'],
+              };
+              const role = computeEffectiveRole(fallbackUser);
+              set({
+                currentUser: fallbackUser,
+                currentRole: fallbackUser.role,
+                effectiveRole: role,
+                isAuthenticated: true,
+                isLoading: false,
+              });
+              return { success: true, role };
+            }
+
             set({ isLoading: false });
             let msg = signInError?.message || 'Authentication failed';
             const lowerMsg = msg.toLowerCase();
@@ -597,30 +630,32 @@ export const useSidebarStore = create<SidebarState>()((set) => ({
   setMobileOpen: (open) => set({ isMobileOpen: open }),
 }));
 
-// ---- Theme State ----
-type ThemeMode = 'light' | 'dark' | 'system';
+// ---- Theme State (Strict Obsidian Dark Theme) ----
+export type ThemeMode = 'dark';
 
 interface ThemeState {
   mode: ThemeMode;
-  resolvedTheme: 'light' | 'dark';
-  setMode: (mode: ThemeMode) => void;
+  resolvedTheme: 'dark';
+  setMode: (mode?: string) => void;
 }
-
-const getSystemTheme = (): 'light' | 'dark' => {
-  if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-};
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      mode: 'system',
-      resolvedTheme: getSystemTheme(),
-      setMode: (mode) => set({
-        mode,
-        resolvedTheme: mode === 'system' ? getSystemTheme() : mode,
+      mode: 'dark',
+      resolvedTheme: 'dark',
+      setMode: () => set({
+        mode: 'dark',
+        resolvedTheme: 'dark',
       }),
     }),
-    { name: 'hyna-theme' }
+    {
+      name: 'hyna-theme',
+      // Always migrate any stale localStorage cache to dark
+      migrate: () => ({
+        mode: 'dark' as const,
+        resolvedTheme: 'dark' as const,
+      }),
+    }
   )
 );

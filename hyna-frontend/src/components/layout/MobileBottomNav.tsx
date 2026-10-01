@@ -3,7 +3,7 @@ import { LayoutDashboard, CheckSquare, MessageCircle, FolderKanban, Menu } from 
 import { cn } from '@/lib/utils';
 import { useAuthStore, useSidebarStore } from '@/stores';
 
-export function MobileNav() {
+export function MobileBottomNav() {
   const { currentRole, effectiveRole } = useAuthStore();
   const { setMobileOpen } = useSidebarStore();
   const location = useLocation();
@@ -19,7 +19,7 @@ export function MobileNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden items-center justify-around h-16 bg-[var(--color-background)] border-t border-[var(--color-border)] safe-area-bottom">
+    <nav className="fixed bottom-0 left-0 w-full z-50 flex md:hidden items-center justify-around h-16 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 safe-area-bottom">
       {items.map((item) => {
         if (item.path === '__more__') {
           return (
@@ -29,7 +29,7 @@ export function MobileNav() {
               className="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 text-[var(--color-muted-foreground)]"
             >
               <item.icon className="w-5 h-5" />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="text-xs font-medium">{item.label}</span>
             </button>
           );
         }
@@ -48,7 +48,7 @@ export function MobileNav() {
             )}
           >
             <item.icon className="w-5 h-5" />
-            <span className="text-[10px] font-medium">{item.label}</span>
+            <span className="text-xs font-medium">{item.label}</span>
           </NavLink>
         );
       })}
