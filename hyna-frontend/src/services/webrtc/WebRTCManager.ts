@@ -52,9 +52,11 @@ export class WebRTCManager {
     this.callbacks = callbacks;
     
     // Dynamically fallback to the current hostname so LAN testing works on mobile
-    const defaultServerUrl = window.location.protocol === 'https:' 
-      ? `https://${window.location.hostname}:5050` 
-      : `http://${window.location.hostname}:5050`;
+    // If it's localhost or local IP, use port 5050. If it's production (Render), use HTTPS on default port 443.
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.');
+    const defaultServerUrl = isLocal 
+      ? `http://${window.location.hostname}:5050` 
+      : `https://${window.location.hostname}`;
       
     const SERVER_URL = import.meta.env.VITE_SFU_SERVER_URL || defaultServerUrl;
     this.socket = io(SERVER_URL, { transports: ['websocket'] });
