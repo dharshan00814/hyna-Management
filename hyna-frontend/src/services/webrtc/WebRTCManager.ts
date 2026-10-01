@@ -183,15 +183,20 @@ export class WebRTCManager {
     };
 
     pc.ontrack = (event) => {
-      // Use the remote stream provided by the browser, or create one if it doesn't exist
-      let stream = event.streams && event.streams[0];
+      let stream = this.remoteStreams.get(peerSocketId);
+
       if (!stream) {
-        stream = new MediaStream([event.track]);
+        // If the browser groups them into event.streams[0], use it. Otherwise, create a new stream.
+        stream = event.streams && event.streams.length > 0 ? event.streams[0] : new MediaStream();
+        this.remoteStreams.set(peerSocketId, stream);
       }
 
-      this.remoteStreams.set(peerSocketId, stream);
-      
-      // Always trigger onRemoteStreamUpdate so React replaces the old stream reference
+      // Explicitly guarantee the track is added to the stream
+      if (!stream.getTracks().find(t => t.id === event.track.id)) {
+        stream.addTrack(event.track);
+      }
+
+      // Always trigger onRemoteStreamUpdate so React renders the updated stream
       if (this.callbacks.onRemoteStreamUpdate) {
         this.callbacks.onRemoteStreamUpdate(peerSocketId, stream);
       }
