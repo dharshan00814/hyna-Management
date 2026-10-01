@@ -722,17 +722,7 @@ export function SettingsPage() {
                       Send Test Push
                     </Button>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={disablePush}
-                      disabled={isPushLoading}
-                      className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer text-xs"
-                    >
-                      <BellOff className="w-3.5 h-3.5" />
-                      Unsubscribe This Device
-                    </Button>
+                    {/* Unsubscribe option removed as per mandatory notification policy */}
                   </>
                 )}
               </div>
@@ -758,10 +748,10 @@ export function SettingsPage() {
                 <span className="text-xs font-semibold text-[var(--color-foreground)]">Global Push</span>
                 <input
                   type="checkbox"
-                  checked={preferences.push_enabled}
-                  onChange={(e) => handleTogglePreference('push_enabled', e.target.checked)}
-                  className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
-                  title="Toggle all push notifications"
+                  checked={true}
+                  disabled={true}
+                  className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-not-allowed opacity-60"
+                  title="Mandatory for all members"
                 />
               </div>
             </div>
@@ -821,9 +811,10 @@ export function SettingsPage() {
                   </div>
                   <input
                     type="checkbox"
-                    checked={item.checked}
-                    onChange={(e) => handleTogglePreference(item.key as any, e.target.checked)}
-                    className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
+                    checked={true}
+                    disabled={true}
+                    className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-not-allowed opacity-60"
+                    title="Mandatory for all members"
                   />
                 </div>
               ))}
