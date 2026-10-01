@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   CreditCard,
   Download,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   Clock,
   CheckCircle2,
@@ -476,7 +476,7 @@ export function PayrollPage() {
       }
 
       toast.success(
-        `Updated compensation for ${editingRecord.name}: Base $${liveBase.toLocaleString()}, Bonus $${liveBonus.toLocaleString()}, Deductions $${liveDeductions.toLocaleString()}. Net Pay: $${updatedNetSalary.toLocaleString()}`
+        `Updated compensation for ${editingRecord.name}: Base ₹${liveBase.toLocaleString('en-IN')}, Bonus ₹${liveBonus.toLocaleString('en-IN')}, Deductions ₹${liveDeductions.toLocaleString('en-IN')}. Net Pay: ₹${updatedNetSalary.toLocaleString('en-IN')}`
       );
       setEditingRecord(null);
     } catch (err: any) {
@@ -652,29 +652,29 @@ export function PayrollPage() {
               <tr>
                 <th>Earnings & Deductions Component</th>
                 <th class="amount">Type</th>
-                <th class="amount">Amount ($)</th>
+                <th class="amount">Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>Base Gross Salary</td>
                 <td class="amount" style="color: #64748b;">Fixed</td>
-                <td class="amount">$${record.baseSalary.toLocaleString()}</td>
+                <td class="amount">₹${record.baseSalary.toLocaleString('en-IN')}</td>
               </tr>
               <tr>
                 <td>Performance & Project Bonus</td>
                 <td class="amount" style="color: #16a34a;">Addition</td>
-                <td class="amount" style="color: #16a34a;">+$${record.bonus.toLocaleString()}</td>
+                <td class="amount" style="color: #16a34a;">+₹${record.bonus.toLocaleString('en-IN')}</td>
               </tr>
               <tr>
                 <td>Standard Tax, Social Security & Benefits</td>
                 <td class="amount" style="color: #dc2626;">Deduction</td>
-                <td class="amount" style="color: #dc2626;">-$${record.deductions.toLocaleString()}</td>
+                <td class="amount" style="color: #dc2626;">-₹${record.deductions.toLocaleString('en-IN')}</td>
               </tr>
               <tr class="net-row">
                 <td>Net Take-Home Pay (Credited)</td>
-                <td class="amount">ACH Deposit</td>
-                <td class="amount">$${record.netSalary.toLocaleString()}</td>
+                <td class="amount">Direct Deposit (NEFT)</td>
+                <td class="amount">₹${record.netSalary.toLocaleString('en-IN')}</td>
               </tr>
             </tbody>
           </table>
@@ -798,10 +798,10 @@ export function PayrollPage() {
           <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
             <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
               <span>Total Monthly Payroll</span>
-              <DollarSign className="w-4 h-4 text-indigo-500" />
+              <IndianRupee className="w-4 h-4 text-indigo-500" />
             </div>
             <div className="text-2xl font-bold text-[var(--color-foreground)]">
-              ${totalPayroll.toLocaleString()}
+              ₹{totalPayroll.toLocaleString('en-IN')}
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-500 font-medium">
               <TrendingUp className="w-3.5 h-3.5" />
@@ -815,10 +815,10 @@ export function PayrollPage() {
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-bold text-emerald-500">
-              ${disbursedAmount.toLocaleString()}
+              ₹{disbursedAmount.toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
-              Direct deposit via Automated Clearing House (ACH)
+              Direct deposit via National Electronic Funds Transfer (NEFT)
             </p>
           </div>
 
@@ -828,7 +828,7 @@ export function PayrollPage() {
               <Clock className="w-4 h-4 text-amber-500" />
             </div>
             <div className="text-2xl font-bold text-amber-500">
-              ${pendingAmount.toLocaleString()}
+              ₹{pendingAmount.toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
               {records.filter((r) => r.status !== 'Paid').length} payouts awaiting authorization
@@ -856,7 +856,7 @@ export function PayrollPage() {
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-bold text-emerald-500">
-              ${(myRecord?.netSalary || 0).toLocaleString()}
+              ₹{(myRecord?.netSalary || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2 font-mono">
               Account: {myRecord?.bankAccount || '•••• 4892'}
@@ -866,10 +866,10 @@ export function PayrollPage() {
           <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
             <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
               <span>My Base Salary</span>
-              <DollarSign className="w-4 h-4 text-indigo-500" />
+              <IndianRupee className="w-4 h-4 text-indigo-500" />
             </div>
             <div className="text-2xl font-bold text-[var(--color-foreground)]">
-              ${(myRecord?.baseSalary || 0).toLocaleString()}
+              ₹{(myRecord?.baseSalary || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
               Gross contractual annual equivalent
@@ -882,7 +882,7 @@ export function PayrollPage() {
               <TrendingUp className="w-4 h-4 text-emerald-500" />
             </div>
             <div className="text-2xl font-bold text-emerald-500">
-              +${(myRecord?.bonus || 0).toLocaleString()}
+              +₹{(myRecord?.bonus || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
               Project delivery & milestone bonus
@@ -895,7 +895,7 @@ export function PayrollPage() {
               <ShieldCheck className="w-4 h-4 text-red-400" />
             </div>
             <div className="text-2xl font-bold text-red-400">
-              -${(myRecord?.deductions || 0).toLocaleString()}
+              -₹{(myRecord?.deductions || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-emerald-500 font-medium mt-2 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1004,17 +1004,17 @@ export function PayrollPage() {
                       </div>
                     </td>
                     <td className="py-3.5 px-4 font-medium text-[var(--color-foreground)]">
-                      ${record.baseSalary.toLocaleString()}
+                      ₹{record.baseSalary.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3.5 px-4 text-emerald-500 font-medium">
-                      +${record.bonus.toLocaleString()}
+                      +₹{record.bonus.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3.5 px-4 text-red-400 font-medium">
-                      -${record.deductions.toLocaleString()}
+                      -₹{record.deductions.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3.5 px-4 font-bold text-sm text-[var(--color-foreground)]">
                       <span className="bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">
-                        ${record.netSalary.toLocaleString()}
+                        ₹{record.netSalary.toLocaleString('en-IN')}
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
@@ -1116,7 +1116,7 @@ export function PayrollPage() {
 
               <div className="flex items-baseline justify-between">
                 <div className="text-3xl font-extrabold text-[var(--color-foreground)] tracking-tight">
-                  ${autoCalculatedNetPay.toLocaleString()}
+                  ₹{autoCalculatedNetPay.toLocaleString('en-IN')}
                 </div>
                 <div className="text-xs text-[var(--color-muted-foreground)] font-mono">
                   Base + Bonus - Deductions
@@ -1128,19 +1128,19 @@ export function PayrollPage() {
                 <div className="bg-[var(--color-background)]/80 p-2 rounded-lg border border-[var(--color-border)]">
                   <div className="text-[10px] text-[var(--color-muted-foreground)] uppercase">Base</div>
                   <div className="font-bold text-[var(--color-foreground)]">
-                    ${liveBase.toLocaleString()}
+                    ₹{liveBase.toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div className="bg-[var(--color-background)]/80 p-2 rounded-lg border border-[var(--color-border)]">
                   <div className="text-[10px] text-emerald-500 uppercase">+ Bonus</div>
                   <div className="font-bold text-emerald-500">
-                    +${liveBonus.toLocaleString()}
+                    +₹{liveBonus.toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div className="bg-[var(--color-background)]/80 p-2 rounded-lg border border-[var(--color-border)]">
                   <div className="text-[10px] text-red-400 uppercase">- Deductions</div>
                   <div className="font-bold text-red-400">
-                    -${liveDeductions.toLocaleString()}
+                    -₹{liveDeductions.toLocaleString('en-IN')}
                   </div>
                 </div>
               </div>
@@ -1148,7 +1148,7 @@ export function PayrollPage() {
               {liveDeductions > liveBase + liveBonus && (
                 <div className="flex items-center gap-1.5 text-xs text-amber-500 pt-1">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Deductions exceed earnings. Net pay will be floored at $0.</span>
+                  <span>Deductions exceed earnings. Net pay will be floored at ₹0.</span>
                 </div>
               )}
             </div>
@@ -1157,11 +1157,11 @@ export function PayrollPage() {
             <div className="space-y-3 pt-1">
               <div>
                 <label className="text-xs font-medium text-[var(--color-foreground)] block mb-1">
-                  Base Salary ($) <span className="text-indigo-500">*</span>
+                  Base Salary (₹) <span className="text-indigo-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] text-xs font-semibold">
-                    $
+                    ₹
                   </span>
                   <input
                     type="number"
@@ -1174,18 +1174,18 @@ export function PayrollPage() {
                   />
                 </div>
                 <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
-                  Annual gross base pay before performance additions and deductions.
+                  Monthly gross base pay before performance additions and deductions.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-[var(--color-foreground)] block mb-1">
-                    Bonus ($) <span className="text-emerald-500 font-semibold">(Addition)</span>
+                    Bonus (₹) <span className="text-emerald-500 font-semibold">(Addition)</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 text-xs font-semibold">
-                      +$
+                      +₹
                     </span>
                     <input
                       type="number"
@@ -1201,11 +1201,11 @@ export function PayrollPage() {
 
                 <div>
                   <label className="text-xs font-medium text-[var(--color-foreground)] block mb-1">
-                    Deductions ($) <span className="text-red-400 font-semibold">(Tax & Social)</span>
+                    Deductions (₹) <span className="text-red-400 font-semibold">(Tax & Social)</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-red-400 text-xs font-semibold">
-                      -$
+                      -₹
                     </span>
                     <input
                       type="number"
@@ -1290,19 +1290,19 @@ export function PayrollPage() {
               </div>
               <div className="flex justify-between py-1.5 border-b border-[var(--color-border)]">
                 <span className="text-[var(--color-muted-foreground)]">Base Gross Salary</span>
-                <span className="font-semibold">${selectedRecord.baseSalary.toLocaleString()}</span>
+                <span className="font-semibold">₹{selectedRecord.baseSalary.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[var(--color-border)]">
                 <span className="text-[var(--color-muted-foreground)]">Performance & Project Bonus</span>
-                <span className="font-semibold text-emerald-500">+${selectedRecord.bonus.toLocaleString()}</span>
+                <span className="font-semibold text-emerald-500">+₹{selectedRecord.bonus.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-[var(--color-border)]">
                 <span className="text-[var(--color-muted-foreground)]">Standard Tax & Social Security</span>
-                <span className="font-semibold text-red-400">-${selectedRecord.deductions.toLocaleString()}</span>
+                <span className="font-semibold text-red-400">-₹{selectedRecord.deductions.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between pt-2 text-sm font-bold">
                 <span>Net Credited Amount (Automatic)</span>
-                <span className="text-indigo-500">${selectedRecord.netSalary.toLocaleString()}</span>
+                <span className="text-indigo-500">₹{selectedRecord.netSalary.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
@@ -1335,9 +1335,9 @@ export function PayrollPage() {
         >
           <div className="space-y-4 pt-2">
             <p className="text-xs text-[var(--color-muted-foreground)] leading-relaxed">
-              You are about to initiate Automated Clearing House (ACH) direct deposit transfers for{' '}
+              You are about to initiate direct deposit bank transfers (NEFT / IMPS) for{' '}
               <strong>{records.length} team members</strong> totaling{' '}
-              <strong>${totalPayroll.toLocaleString()}</strong>.
+              <strong>₹{totalPayroll.toLocaleString('en-IN')}</strong>.
             </p>
             <div className="p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-xs text-indigo-400 space-y-1">
               <p className="font-semibold flex items-center gap-1.5">
