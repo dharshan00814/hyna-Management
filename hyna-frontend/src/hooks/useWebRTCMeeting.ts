@@ -111,7 +111,7 @@ export function useWebRTCMeeting({
       socket.on('room-joined', (data) => {
         const newMap = new Map<string, ParticipantState>();
         for (const p of data.participants) {
-          newMap.set(p.userId, {
+          newMap.set(p.socketId, {
             memberId: p.userId, name: p.name, avatar: p.avatar, role: p.role, designation: p.designation,
             micEnabled: p.micEnabled, videoEnabled: p.videoEnabled, isScreenSharing: p.isScreenSharing,
             isSpeaking: p.isSpeaking, isHost: p.isHost, joinedAt: p.joinedAt, connectionState: 'connected'
@@ -123,7 +123,7 @@ export function useWebRTCMeeting({
       socket.on('participant_joined', (p) => {
         setParticipants(prev => {
           const next = new Map(prev);
-          next.set(p.userId, {
+          next.set(p.socketId, {
             memberId: p.userId, name: p.name, avatar: p.avatar, role: p.role, designation: p.designation,
             micEnabled: p.micEnabled, videoEnabled: p.videoEnabled, isScreenSharing: p.isScreenSharing,
             isSpeaking: p.isSpeaking, isHost: p.isHost, joinedAt: p.joinedAt, connectionState: 'connected'
@@ -135,8 +135,8 @@ export function useWebRTCMeeting({
       socket.on('participant-media-changed', (data) => {
         setParticipants(prev => {
           const next = new Map(prev);
-          const p = next.get(data.userId);
-          if (p) next.set(data.userId, { ...p, micEnabled: data.micEnabled, videoEnabled: data.videoEnabled, isScreenSharing: data.isScreenSharing });
+          const p = next.get(data.socketId);
+          if (p) next.set(data.socketId, { ...p, micEnabled: data.micEnabled, videoEnabled: data.videoEnabled, isScreenSharing: data.isScreenSharing });
           return next;
         });
       });
@@ -144,14 +144,14 @@ export function useWebRTCMeeting({
       socket.on('participant-speaking-changed', (data) => {
         setParticipants(prev => {
           const next = new Map(prev);
-          const p = next.get(data.userId);
-          if (p) next.set(data.userId, { ...p, isSpeaking: data.isSpeaking });
+          const p = next.get(data.socketId);
+          if (p) next.set(data.socketId, { ...p, isSpeaking: data.isSpeaking });
           return next;
         });
       });
 
       socket.on('participant_left', (data) => {
-        setParticipants(prev => { const next = new Map(prev); next.delete(data.userId); return next; });
+        setParticipants(prev => { const next = new Map(prev); next.delete(data.socketId); return next; });
       });
 
       socket.on('forced-mute', () => {

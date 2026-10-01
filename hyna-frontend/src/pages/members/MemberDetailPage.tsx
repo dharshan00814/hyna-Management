@@ -1,9 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, Calendar, Edit3, Trash2, AlertTriangle, UserCheck, Landmark, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, Edit3, Trash2, AlertTriangle, UserCheck, Landmark, Copy, Check, Key } from 'lucide-react';
 import { Button, Avatar, Badge, Tabs, ProgressBar, EmptyState, LoadingState, Modal, Input, Select } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getUser, getUserTasks, getProjects, updateMember, deleteMember } from '@/services/api';
+import { getUser, getUserTasks, getProjects, updateMember, deleteMember, sendPasswordResetEmail } from '@/services/api';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { User, Task, Project, UserRole } from '@/types';
@@ -48,6 +48,23 @@ export function MemberDetailPage() {
   // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Password Reset State
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!member?.email) return;
+    setIsResettingPassword(true);
+    try {
+      await sendPasswordResetEmail(member.email);
+      toast.success(`Password reset email sent to ${member.email}`);
+    } catch (err: any) {
+      console.error('Failed to send password reset email:', err);
+      toast.error(err.message || 'Failed to send password reset email');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -207,6 +224,17 @@ export function MemberDetailPage() {
               <Button variant="outline" size="sm" onClick={handleOpenEditModal} className="gap-1.5 text-xs">
                 <Edit3 className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                 Edit Member & Role
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetPassword}
+                isLoading={isResettingPassword}
+                className="gap-1.5 text-xs text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 border-amber-500/20"
+                title="Send a password recovery email to this user"
+              >
+                {!isResettingPassword && <Key className="w-3.5 h-3.5" />}
+                Reset Password
               </Button>
               {member.id !== currentUser?.id && (
                 <Button
