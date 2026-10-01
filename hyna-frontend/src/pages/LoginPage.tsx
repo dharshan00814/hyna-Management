@@ -522,10 +522,22 @@ export function LoginPage() {
     }
   };
 
+
   return (
-    <div className="su">
+    <div className="su-root">
       <style>{css}</style>
-      <div className="su-wrap">
+
+      {/* Dark background with glowing floating lime bubbles */}
+      <div className="su-bubbles-container" aria-hidden="true">
+        <div className="su-bubble su-bubble-center" />
+        <div className="su-bubble su-bubble-1" />
+        <div className="su-bubble su-bubble-2" />
+        <div className="su-bubble su-bubble-3" />
+        <div className="su-bubble su-bubble-4" />
+        <div className="su-bubble su-bubble-5" />
+      </div>
+
+      <div className="su-card-container">
         <section className="su-card">
           <div className="su-card-inner">
             <Logo />

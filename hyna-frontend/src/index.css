@@ -9,28 +9,28 @@
 
 /* ---- CSS Custom Properties ---- */
 :root {
-  /* Semantic colors (New Design System) - Light */
-  --color-background: #F8FAFC;
-  --color-foreground: #0F172A;
-  --color-card: #FFFFFF;
-  --color-card-foreground: #0F172A;
-  --color-popover: #FFFFFF;
-  --color-popover-foreground: #0F172A;
+  /* Semantic colors (Permanent Obsidian Dark Theme) */
+  --color-background: #111111;
+  --color-foreground: #FFFFFF;
+  --color-card: #030518;
+  --color-card-foreground: #FFFFFF;
+  --color-popover: #030518;
+  --color-popover-foreground: #FFFFFF;
   --color-primary: #2041F0;
   --color-primary-foreground: #FFFFFF;
-  --color-secondary: #E2E8F0;
-  --color-secondary-foreground: #0F172A;
-  --color-muted: #F1F5F9;
-  --color-muted-foreground: #64748B;
-  --color-accent-bg: #F1F5F9;
-  --color-accent-fg: #0F172A;
+  --color-secondary: #050B35;
+  --color-secondary-foreground: #FFFFFF;
+  --color-muted: #1B1B1B;
+  --color-muted-foreground: #ABABAB;
+  --color-accent-bg: #1B1B1B;
+  --color-accent-fg: #FFFFFF;
   --color-destructive: #FF0000;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #E2E8F0;
-  --color-input: #E2E8F0;
+  --color-border: #1B1B1B;
+  --color-input: #1B1B1B;
   --color-ring: #7B8DF8;
-  --color-sidebar-bg: #FFFFFF;
-  --color-sidebar-border: #E2E8F0;
+  --color-sidebar-bg: #111111;
+  --color-sidebar-border: #1B1B1B;
   
   /* Radii */
   --radius: 0.5rem;
@@ -39,10 +39,10 @@
   --radius-xl: 1rem;
   
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
 }
 
 .dark {

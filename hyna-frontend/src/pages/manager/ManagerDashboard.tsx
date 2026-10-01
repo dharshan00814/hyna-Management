@@ -34,7 +34,9 @@ import {
   reviewTask,
   getUserById,
   createTask,
+  getAttendance,
 } from '@/services/api';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
 import { cn, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
 import type { Project, Task, User, Meeting, AttendanceRecord } from '@/types';
 
@@ -55,17 +57,23 @@ export function ManagerDashboard() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  const [managerAttendance, setManagerAttendance] = useState<AttendanceRecord[]>([]);
+
   const loadData = async () => {
     if (!currentUser?.id) return;
     try {
       setIsLoading(true);
-      const data = await getManagerDashboardData(currentUser.id);
+      const [data, allAttendance] = await Promise.all([
+        getManagerDashboardData(currentUser.id),
+        getAttendance(currentUser.id),
+      ]);
       setProjects(data.managedProjects);
       setTasks(data.managerTasks);
       setTeamMembers(data.teamMembers);
       setPendingSubmissions(data.pendingSubmissions);
       setTeamAttendance(data.teamAttendance);
       setMeetings(data.meetings);
+      setManagerAttendance(allAttendance);
     } catch (err) {
       console.error('Failed to load manager dashboard:', err);
       toast.error('Could not load manager metrics');
@@ -227,6 +235,13 @@ export function ManagerDashboard() {
               </div>
             )}
           </div>
+
+          {/* Daily Streaks & Points */}
+          <StreakAndPointsCard
+            userId={currentUser?.id || ''}
+            attendanceRecords={managerAttendance}
+            onAttendanceUpdated={loadData}
+          />
 
           {/* Managed Projects Overview */}
           <div className="card p-6 space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">

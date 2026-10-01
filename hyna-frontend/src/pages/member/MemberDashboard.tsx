@@ -11,6 +11,12 @@ import {
   getUserTasks, getUserMeetings, getUserAttendance,
   submitDailyReport, checkIn, checkOut, getUserById, getUsers,
 } from '@/services/api';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import {
+  getPunchInStatus,
+  getPunchOutStatus,
+  calculateRecordPoints,
+} from '@/lib/attendanceRules';
 import { toast } from 'sonner';
 import type { Task, Meeting, AttendanceRecord } from '@/types';
 
@@ -24,39 +30,43 @@ export function MemberDashboard() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   const userId = currentUser?.id || '';
   const todayStr = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      if (!userId) return;
-      try {
-        await getUsers();
-        const [t, m, a] = await Promise.all([
-          getUserTasks(userId),
-          getUserMeetings(userId),
-          getUserAttendance(userId),
-        ]);
-        if (isMounted) {
-          setTasks(t);
-          setMeetings(m);
-          setAttendance(a);
-          const todayRecord = a.find(record => record.date === todayStr);
-          if (todayRecord && todayRecord.checkIn && !todayRecord.checkOut) {
-            setIsCheckedIn(true);
-          } else {
-            setIsCheckedIn(false);
-          }
-        }
-      } catch (err) {
-        console.error('Error loading member dashboard data:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const loadData = async () => {
+    if (!userId) return;
+    try {
+      await getUsers();
+      const [t, m, a] = await Promise.all([
+        getUserTasks(userId),
+        getUserMeetings(userId),
+        getUserAttendance(userId),
+      ]);
+      setTasks(t);
+      setMeetings(m);
+      setAttendance(a);
+      const todayRecord = a.find(record => record.date === todayStr);
+      if (todayRecord && todayRecord.checkIn && !todayRecord.checkOut) {
+        setIsCheckedIn(true);
+      } else {
+        setIsCheckedIn(false);
       }
+    } catch (err) {
+      console.error('Error loading member dashboard data:', err);
+    } finally {
+      setIsLoading(false);
     }
-    load();
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    loadData();
   }, [userId, todayStr]);
 
   const completedTasks = tasks.filter(t => t.status === 'completed');
@@ -88,25 +98,43 @@ export function MemberDashboard() {
     }
   };
 
+  const punchInStatus = getPunchInStatus(currentTime);
+  const punchOutStatus = getPunchOutStatus(currentTime, todayAttendance?.checkIn);
+  const todayPointEval = todayAttendance ? calculateRecordPoints(todayAttendance, currentTime) : null;
+
   const handleCheckIn = async () => {
+    const status = getPunchInStatus(currentTime);
+    if (!status.canPunchIn) {
+      toast.error(status.tooltip);
+      return;
+    }
     try {
-      const record = await checkIn(userId);
+      const record = await checkIn(userId, currentTime);
       setAttendance(prev => [record, ...prev.filter(a => a.date !== todayStr)]);
       setIsCheckedIn(true);
-      toast.success('Checked in successfully!');
-    } catch (err) {
-      toast.error('Check in failed');
+      toast.success(
+        status.phase === 'on_time'
+          ? `Checked in on-time at ${record.checkIn}! +10 Points earned! 🎯`
+          : `Checked in during grace window at ${record.checkIn}! +5 Points earned! ⏱️`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Check in failed');
     }
   };
 
   const handleCheckOut = async () => {
+    const status = getPunchOutStatus(currentTime, todayAttendance?.checkIn);
+    if (!status.canPunchOut) {
+      toast.error(status.tooltip);
+      return;
+    }
     try {
-      const record = await checkOut(userId);
+      const record = await checkOut(userId, currentTime);
       setAttendance(prev => [record, ...prev.filter(a => a.date !== todayStr)]);
       setIsCheckedIn(false);
-      toast.success('Checked out successfully!');
-    } catch (err) {
-      toast.error('Check out failed');
+      toast.success(`Checked out successfully at ${record.checkOut}! Full points preserved.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Check out failed');
     }
   };
 
@@ -134,6 +162,13 @@ export function MemberDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Daily Streaks & Attendance Points */}
+          <StreakAndPointsCard
+            userId={userId}
+            attendanceRecords={attendance}
+            onAttendanceUpdated={loadData}
+          />
+
           {/* Today's tasks */}
           <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
@@ -218,14 +253,35 @@ export function MemberDashboard() {
                     <CheckCircle2 className="w-8 h-8 text-emerald-500 animate-pulse" />
                   </div>
                   <p className="text-lg font-bold text-[var(--color-foreground)]">{todayAttendance?.checkIn}</p>
-                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">Active Shift</p>
+                  <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      Active Shift • {todayPointEval ? `${todayPointEval.finalPoints} Pts` : '10 Pts'}
+                    </span>
+                    {todayPointEval?.penaltyApplied && (
+                      <span className="text-[10px] px-1 rounded bg-red-500/15 text-red-600">Penalty</span>
+                    )}
+                  </div>
                   <div className="flex items-center justify-center gap-2 mt-3 text-sm">
                     <Clock className="w-4 h-4 text-[var(--color-muted-foreground)]" />
                     <span className="font-medium text-xs">Tracking active work hours</span>
                   </div>
-                  <Button variant="outline" className="mt-4 w-full" onClick={handleCheckOut}>
-                    Check Out
-                  </Button>
+                  <div className="mt-4 flex flex-col items-center gap-1.5 w-full">
+                    <Button
+                      variant={punchOutStatus.canPunchOut ? 'destructive' : 'outline'}
+                      className={cn(
+                        'w-full font-semibold',
+                        !punchOutStatus.canPunchOut && 'opacity-60 cursor-not-allowed border-dashed'
+                      )}
+                      disabled={!punchOutStatus.canPunchOut}
+                      onClick={handleCheckOut}
+                      title={punchOutStatus.tooltip}
+                    >
+                      {punchOutStatus.canPunchOut ? 'Check Out (Keep Points)' : punchOutStatus.label}
+                    </Button>
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', punchOutStatus.badgeColor)}>
+                      {punchOutStatus.badgeText}
+                    </span>
+                  </div>
                 </>
               ) : todayAttendance?.checkOut ? (
                 <>
@@ -239,7 +295,7 @@ export function MemberDashboard() {
                   <div className="flex items-center justify-center gap-2 mt-3 text-sm">
                     <Clock className="w-4 h-4 text-blue-500" />
                     <span className="font-semibold text-xs text-[var(--color-foreground)]">
-                      Total: {todayAttendance.workingHours || 'Logged'}
+                      Total: {todayAttendance.workingHours || 'Logged'} • {todayPointEval?.finalPoints || 10} Pts
                     </span>
                   </div>
                   <Button variant="ghost" size="sm" className="mt-3 w-full text-xs text-[var(--color-primary)]" onClick={() => navigate('/member/attendance')}>
@@ -252,9 +308,24 @@ export function MemberDashboard() {
                     <Clock className="w-8 h-8 text-[var(--color-muted-foreground)]" />
                   </div>
                   <p className="text-sm font-medium text-[var(--color-muted-foreground)]">You haven't checked in yet today</p>
-                  <Button className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCheckIn}>
-                    Check In
-                  </Button>
+                  <div className="mt-4 flex flex-col items-center gap-1.5 w-full">
+                    <Button
+                      className={cn(
+                        'w-full font-semibold',
+                        punchInStatus.canPunchIn
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted'
+                      )}
+                      disabled={!punchInStatus.canPunchIn}
+                      onClick={handleCheckIn}
+                      title={punchInStatus.tooltip}
+                    >
+                      {punchInStatus.canPunchIn ? punchInStatus.label : punchInStatus.label}
+                    </Button>
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', punchInStatus.badgeColor)}>
+                      {punchInStatus.badgeText}
+                    </span>
+                  </div>
                 </>
               )}
             </div>

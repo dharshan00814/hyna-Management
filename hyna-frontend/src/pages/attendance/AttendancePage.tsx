@@ -18,9 +18,16 @@ import {
 import { Avatar, Badge, Button, LoadingState } from '@/components/ui';
 import { getStatusColor, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getUsers, getAttendance, getUserById, checkIn, checkOut } from '@/services/api';
+import { getUsers, getAttendance, getUserById, checkIn, checkOut, resetTodayAttendance } from '@/services/api';
 import { toast } from 'sonner';
 import type { AttendanceRecord } from '@/types';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import {
+  getPunchInStatus,
+  getPunchOutStatus,
+  calculateRecordPoints,
+  calculateUserStreakAndPoints,
+} from '@/lib/attendanceRules';
 
 function getElapsedDuration(checkInStr?: string): string {
   if (!checkInStr) return '00:00:00';
@@ -58,8 +65,9 @@ export function AttendancePage() {
   const [isPunching, setIsPunching] = useState(false);
   const [activeTab, setActiveTab] = useState<'team' | 'personal'>('team');
 
-  // Real-time ticking clock
+  // Real-time ticking clock & simulated test override
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [simulatedTime, setSimulatedTime] = useState<Date | null>(null);
 
   const isAdminOrManager = Boolean(
     currentRole === 'admin' ||
@@ -101,8 +109,6 @@ export function AttendancePage() {
     loadAttendance();
   }, []);
 
-  if (isLoading) return <LoadingState message="Loading attendance records..." />;
-
   // User's own today attendance
   const myTodayRecord = attendance.find(
     a => a.userId === currentUser?.id && a.date === todayStr
@@ -110,17 +116,34 @@ export function AttendancePage() {
   const isClockedIn = Boolean(myTodayRecord && myTodayRecord.checkIn && !myTodayRecord.checkOut);
   const isClockedOut = Boolean(myTodayRecord && myTodayRecord.checkOut);
 
+  const effectiveTime = simulatedTime || currentTime;
+  const punchInStatus = getPunchInStatus(effectiveTime);
+  const punchOutStatus = getPunchOutStatus(effectiveTime, myTodayRecord?.checkIn);
+  const todayPointEval = myTodayRecord ? calculateRecordPoints(myTodayRecord, effectiveTime) : null;
+  const userStreak = calculateUserStreakAndPoints(attendance, currentUser?.id || '', effectiveTime);
+
+  if (isLoading) return <LoadingState message="Loading attendance records..." />;
+
   // Handlers for Punch In / Out
   const handlePunchIn = async () => {
     if (!currentUser?.id) {
       toast.error('User session not found.');
       return;
     }
+    const status = getPunchInStatus(effectiveTime);
+    if (!status.canPunchIn) {
+      toast.error(status.tooltip);
+      return;
+    }
     try {
       setIsPunching(true);
-      const record = await checkIn(currentUser.id);
+      const record = await checkIn(currentUser.id, effectiveTime);
       setAttendance(prev => [record, ...prev.filter(a => !(a.userId === currentUser.id && a.date === todayStr))]);
-      toast.success(`Clocked in successfully at ${record.checkIn}! Have a productive day!`);
+      toast.success(
+        status.phase === 'on_time'
+          ? `Clocked in on-time at ${record.checkIn}! +10 Points earned! 🎯`
+          : `Clocked in during grace window at ${record.checkIn}! +5 Points earned! ⏱️`
+      );
     } catch (err: any) {
       toast.error(err?.message || 'Failed to record check-in');
     } finally {
@@ -133,13 +156,32 @@ export function AttendancePage() {
       toast.error('User session not found.');
       return;
     }
+    const status = getPunchOutStatus(effectiveTime, myTodayRecord?.checkIn);
+    if (!status.canPunchOut) {
+      toast.error(status.tooltip);
+      return;
+    }
     try {
       setIsPunching(true);
-      const record = await checkOut(currentUser.id);
+      const record = await checkOut(currentUser.id, effectiveTime);
       setAttendance(prev => [record, ...prev.filter(a => !(a.userId === currentUser.id && a.date === todayStr))]);
-      toast.success(`Clocked out successfully at ${record.checkOut}! Logged: ${record.workingHours || 'today'}`);
+      toast.success(`Clocked out successfully at ${record.checkOut}! Full points preserved! Logged: ${record.workingHours || 'today'}`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to record check-out');
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleResetToday = async () => {
+    if (!currentUser?.id) return;
+    try {
+      setIsPunching(true);
+      await resetTodayAttendance(currentUser.id);
+      setAttendance(prev => prev.filter(a => !(a.userId === currentUser.id && a.date === todayStr)));
+      toast.success("Today's attendance has been completely reset!");
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to reset attendance');
     } finally {
       setIsPunching(false);
     }
@@ -287,6 +329,16 @@ export function AttendancePage() {
         )}
       </div>
 
+      {/* Daily Streaks and Attendance Points Overview */}
+      <StreakAndPointsCard
+        userId={currentUser?.id || ''}
+        attendanceRecords={attendance}
+        onAttendanceUpdated={loadAttendance}
+        simulatedTime={simulatedTime}
+        onSimulatedTimeChange={setSimulatedTime}
+        className="mb-8"
+      />
+
       {/* ============================================================ */}
       {/* REAL-TIME LIVE ATTENDANCE PUNCH CARD (FOR ALL MEMBERS & ADMINS) */}
       {/* ============================================================ */}
@@ -387,39 +439,97 @@ export function AttendancePage() {
                   {myTodayRecord?.checkOut || '--:--'}
                 </p>
               </div>
+
+              {/* Today's Points & Shift Rule */}
+              <div className="bg-[var(--color-muted)]/50 p-3.5 rounded-xl border border-[var(--color-border)]/50 col-span-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-[var(--color-muted-foreground)] font-medium">Shift Points</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-base font-bold font-mono text-[var(--color-foreground)]">
+                        {todayPointEval ? `${todayPointEval.finalPoints} Pts` : punchInStatus.canPunchIn ? `+${punchInStatus.expectedPoints} Pts Available` : '0 Pts'}
+                      </span>
+                      {todayPointEval?.penaltyApplied && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-600 border border-red-500/20">
+                          Penalty Applied
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    🔥 {userStreak.currentStreak}d Streak
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Action Button: Check In / Check Out */}
             <div className="shrink-0 w-full md:w-auto flex flex-col items-center justify-center">
               {isClockedIn ? (
-                <Button
-                  variant="destructive"
-                  size="lg"
-                  onClick={handlePunchOut}
-                  disabled={isPunching}
-                  className="w-full md:w-auto px-6 py-6 shadow-md hover:shadow-lg transition-all rounded-xl font-semibold gap-2"
-                >
-                  <LogOut className="w-5 h-5" />
-                  {isPunching ? 'Clocking Out...' : 'Punch Out'}
-                </Button>
+                <div className="flex flex-col items-center gap-2 w-full md:w-auto">
+                  <Button
+                    variant={punchOutStatus.canPunchOut ? 'destructive' : 'outline'}
+                    size="lg"
+                    onClick={handlePunchOut}
+                    disabled={!punchOutStatus.canPunchOut || isPunching}
+                    className={cn(
+                      'w-full md:w-auto px-6 py-6 shadow-md hover:shadow-lg transition-all rounded-xl font-semibold gap-2',
+                      !punchOutStatus.canPunchOut && 'opacity-60 cursor-not-allowed border-dashed'
+                    )}
+                    title={punchOutStatus.tooltip}
+                  >
+                    <LogOut className="w-5 h-5" />
+                    {isPunching
+                      ? 'Clocking Out...'
+                      : punchOutStatus.canPunchOut
+                      ? 'Punch Out (Keep Points)'
+                      : punchOutStatus.label}
+                  </Button>
+                  <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', punchOutStatus.badgeColor)}>
+                    {punchOutStatus.badgeText}
+                  </span>
+                </div>
               ) : isClockedOut ? (
-                <div className="text-center md:hidden mt-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                <div className="text-center mt-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Day Completed
+                    Day Completed ({todayPointEval?.finalPoints || 10} Pts)
                   </span>
                 </div>
               ) : (
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={handlePunchIn}
+                <div className="flex flex-col items-center gap-2 w-full md:w-auto">
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={handlePunchIn}
+                    disabled={!punchInStatus.canPunchIn || isPunching}
+                    className={cn(
+                      'w-full md:w-auto px-8 py-6 shadow-lg hover:shadow-xl transition-all rounded-xl font-semibold gap-2',
+                      punchInStatus.canPunchIn
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted'
+                    )}
+                    title={punchInStatus.tooltip}
+                  >
+                    <LogIn className="w-5 h-5" />
+                    {isPunching ? 'Recording...' : punchInStatus.label}
+                  </Button>
+                  <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full border', punchInStatus.badgeColor)}>
+                    {punchInStatus.badgeText}
+                  </span>
+                </div>
+              )}
+
+              {/* Reset Today's Shift for Admin/Testing */}
+              {(myTodayRecord?.checkIn || isClockedIn || isClockedOut) && (
+                <button
+                  onClick={handleResetToday}
                   disabled={isPunching}
-                  className="w-full md:w-auto px-8 py-6 shadow-lg hover:shadow-xl transition-all rounded-xl font-semibold gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="mt-3 text-[11px] text-[var(--color-muted-foreground)] hover:text-red-500 underline transition-colors cursor-pointer"
+                  title="Reset today's shift record"
                 >
-                  <LogIn className="w-5 h-5" />
-                  {isPunching ? 'Recording...' : 'Punch In'}
-                </Button>
+                  Reset Today's Attendance
+                </button>
               )}
             </div>
           </div>
@@ -536,12 +646,13 @@ export function AttendancePage() {
                     <th className="px-4 py-3.5 font-semibold text-center">Clock In</th>
                     <th className="px-4 py-3.5 font-semibold text-center">Clock Out</th>
                     <th className="px-4 py-3.5 font-semibold text-center">Duration</th>
+                    <th className="px-4 py-3.5 font-semibold text-center">Points</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {filteredTeamRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-[var(--color-muted-foreground)]">
+                      <td colSpan={8} className="px-4 py-12 text-center text-[var(--color-muted-foreground)]">
                         No team check-in records found for this date.
                       </td>
                     </tr>
@@ -576,6 +687,18 @@ export function AttendancePage() {
                           <td className="px-4 py-3 font-mono text-xs text-center">{record.checkOut || '-'}</td>
                           <td className="px-4 py-3 font-semibold text-xs text-[var(--color-foreground)] text-center">
                             {record.workingHours || (record.checkIn && !record.checkOut ? 'Active' : '-')}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={cn(
+                              'px-2 py-0.5 rounded-full text-[11px] font-bold font-mono',
+                              calculateRecordPoints(record, effectiveTime).finalPoints >= 10
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                : calculateRecordPoints(record, effectiveTime).finalPoints > 0
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                : 'bg-muted text-muted-foreground'
+                            )}>
+                              {calculateRecordPoints(record, effectiveTime).finalPoints} pts
+                            </span>
                           </td>
                         </tr>
                       );
@@ -628,12 +751,13 @@ export function AttendancePage() {
                     <th className="px-4 py-3 font-semibold text-center">Check In</th>
                     <th className="px-4 py-3 font-semibold text-center">Check Out</th>
                     <th className="px-4 py-3 font-semibold text-center">Working Hours</th>
+                    <th className="px-4 py-3 font-semibold text-center">Points</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {myRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-12 text-center text-[var(--color-muted-foreground)]">
+                      <td colSpan={6} className="px-4 py-12 text-center text-[var(--color-muted-foreground)]">
                         No attendance history found. Punch in above to record your first shift!
                       </td>
                     </tr>
@@ -650,6 +774,18 @@ export function AttendancePage() {
                         <td className="px-4 py-3 font-mono text-xs text-center">{record.checkOut || '-'}</td>
                         <td className="px-4 py-3 font-semibold text-xs text-[var(--color-foreground)] text-center">
                           {record.workingHours || (record.checkIn && !record.checkOut ? 'Active' : '-')}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn(
+                            'px-2 py-0.5 rounded-full text-[11px] font-bold font-mono',
+                            calculateRecordPoints(record, effectiveTime).finalPoints >= 10
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                              : calculateRecordPoints(record, effectiveTime).finalPoints > 0
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                              : 'bg-muted text-muted-foreground'
+                          )}>
+                            {calculateRecordPoints(record, effectiveTime).finalPoints} pts
+                          </span>
                         </td>
                       </tr>
                     ))

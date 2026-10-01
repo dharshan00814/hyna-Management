@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores';
 import {
   getProjects, getTasks, getMeetings, getUsers, getAttendance, getUserById,
 } from '@/services/api';
+import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
 import type { Project, Task, Meeting, User, AttendanceRecord } from '@/types';
 
 const weeklyTaskData = [
@@ -35,32 +36,29 @@ export function AdminDashboard() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      try {
-        const [u, p, t, m, a] = await Promise.all([
-          getUsers(),
-          getProjects(),
-          getTasks(),
-          getMeetings(),
-          getAttendance(),
-        ]);
-        if (isMounted) {
-          setUsers(u);
-          setProjects(p);
-          setTasks(t);
-          setMeetings(m);
-          setAttendance(a);
-        }
-      } catch (err) {
-        console.error('Error loading dashboard data:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+  const loadDashboardData = async () => {
+    try {
+      const [u, p, t, m, a] = await Promise.all([
+        getUsers(),
+        getProjects(),
+        getTasks(),
+        getMeetings(),
+        getAttendance(),
+      ]);
+      setUsers(u);
+      setProjects(p);
+      setTasks(t);
+      setMeetings(m);
+      setAttendance(a);
+    } catch (err) {
+      console.error('Error loading dashboard data:', err);
+    } finally {
+      setIsLoading(false);
     }
-    load();
-    return () => { isMounted = false; };
+  };
+
+  useEffect(() => {
+    loadDashboardData();
   }, []);
 
   if (isLoading) return <LoadingState />;
@@ -113,6 +111,13 @@ export function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left column */}
         <div className="lg:col-span-2 flex flex-col gap-6">
+          {/* Daily Streaks & Attendance Points (Above Project Overview) */}
+          <StreakAndPointsCard
+            userId={currentUser?.id || ''}
+            attendanceRecords={attendance}
+            onAttendanceUpdated={loadDashboardData}
+          />
+
           {/* Project overview */}
           <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-5">
