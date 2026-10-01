@@ -65,8 +65,9 @@ export function AttendancePage() {
   const [isPunching, setIsPunching] = useState(false);
   const [activeTab, setActiveTab] = useState<'team' | 'personal'>('team');
 
-  // Real-time ticking clock
+  // Real-time ticking clock & simulated test override
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [simulatedTime, setSimulatedTime] = useState<Date | null>(null);
 
   const isAdminOrManager = Boolean(
     currentRole === 'admin' ||
@@ -108,8 +109,6 @@ export function AttendancePage() {
     loadAttendance();
   }, []);
 
-  if (isLoading) return <LoadingState message="Loading attendance records..." />;
-
   // User's own today attendance
   const myTodayRecord = attendance.find(
     a => a.userId === currentUser?.id && a.date === todayStr
@@ -117,14 +116,13 @@ export function AttendancePage() {
   const isClockedIn = Boolean(myTodayRecord && myTodayRecord.checkIn && !myTodayRecord.checkOut);
   const isClockedOut = Boolean(myTodayRecord && myTodayRecord.checkOut);
 
-  // Simulated time override for test demos
-  const [simulatedTime, setSimulatedTime] = useState<Date | null>(null);
   const effectiveTime = simulatedTime || currentTime;
-
   const punchInStatus = getPunchInStatus(effectiveTime);
   const punchOutStatus = getPunchOutStatus(effectiveTime, myTodayRecord?.checkIn);
   const todayPointEval = myTodayRecord ? calculateRecordPoints(myTodayRecord, effectiveTime) : null;
   const userStreak = calculateUserStreakAndPoints(attendance, currentUser?.id || '', effectiveTime);
+
+  if (isLoading) return <LoadingState message="Loading attendance records..." />;
 
   // Handlers for Punch In / Out
   const handlePunchIn = async () => {

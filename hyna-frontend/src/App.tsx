@@ -164,6 +164,7 @@ function App() {
           </Route>
 
           {/* Direct Accessible Shared Routes */}
+          <Route path="/attendance" element={<AttendancePage />} />
           <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/meetings/:id" element={<MeetingDetailPage />} />
           <Route path="/my-activity" element={<MyDeveloperActivityPage />} />

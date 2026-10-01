@@ -18,6 +18,7 @@ import {
   POINTS_MISSED_PUNCHOUT_5,
 } from '@/lib/attendanceRules';
 import { checkIn, checkOut } from '@/services/api';
+import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
 
 interface StreakAndPointsCardProps {
@@ -38,6 +39,10 @@ export function StreakAndPointsCard({
   onSimulatedTimeChange,
 }: StreakAndPointsCardProps) {
   const navigate = useNavigate();
+  const { effectiveRole } = useAuthStore();
+  const rolePrefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
+  const attendancePath = `${rolePrefix}/attendance`;
+
   const [internalTime, setInternalTime] = useState<Date>(new Date());
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showSimulator, setShowSimulator] = useState(false);
@@ -54,11 +59,12 @@ export function StreakAndPointsCard({
     return () => clearInterval(interval);
   }, [externalSimulatedTime]);
 
-  const streakData = calculateUserStreakAndPoints(attendanceRecords, userId, effectiveTime);
+  const safeRecords = Array.isArray(attendanceRecords) ? attendanceRecords : [];
+  const streakData = calculateUserStreakAndPoints(safeRecords, userId, effectiveTime);
   const punchInStatus = getPunchInStatus(effectiveTime);
 
   const todayStr = effectiveTime.toISOString().split('T')[0];
-  const todayRecord = attendanceRecords.find(r => r.userId === userId && r.date === todayStr);
+  const todayRecord = safeRecords.find(r => r.userId === userId && r.date === todayStr);
   const isClockedIn = Boolean(todayRecord && todayRecord.checkIn && !todayRecord.checkOut);
   const isClockedOut = Boolean(todayRecord && todayRecord.checkOut);
 
