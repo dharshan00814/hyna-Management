@@ -196,9 +196,15 @@ export class WebRTCManager {
         stream.addTrack(event.track);
       }
 
-      // Always trigger onRemoteStreamUpdate so React renders the updated stream
+      // Create a NEW MediaStream reference so React detects the state change 
+      // and re-assigns the srcObject on the <video> element. This prevents 
+      // dynamically added audio tracks from being ignored by the browser.
+      const newStreamReference = new MediaStream(stream.getTracks());
+      this.remoteStreams.set(peerSocketId, newStreamReference);
+
+      // Always trigger onRemoteStreamUpdate
       if (this.callbacks.onRemoteStreamUpdate) {
-        this.callbacks.onRemoteStreamUpdate(peerSocketId, stream);
+        this.callbacks.onRemoteStreamUpdate(peerSocketId, newStreamReference);
       }
     };
 
