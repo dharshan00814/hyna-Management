@@ -37,12 +37,18 @@ export default defineConfig({
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
           },
           {
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
             handler: 'CacheFirst',
-            options: { cacheName: 'gstatic-fonts-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+            options: {
+              cacheName: 'gstatic-fonts-cache',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
           },
         ],
       },
@@ -50,23 +56,17 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(import.meta.dirname, './src'),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
     port: 5173,
     host: true,
-    allowedHosts: [
-      'hyna-management.onrender.com',
-      '.onrender.com',
-    ],
+    allowedHosts: ['hyna-management.onrender.com'], // ✅ exact host only
   },
   preview: {
     port: 5173,
     host: true,
-    allowedHosts: [
-      'hyna-management.onrender.com',
-      '.onrender.com',
-    ],
+    allowedHosts: ['hyna-management.onrender.com'], // ✅ same here
   },
 });
