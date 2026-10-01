@@ -122,7 +122,19 @@ const css = `
     20px 28px 55px -10px rgba(0, 0, 0, 0.85),
     -8px -8px 24px rgba(255, 255, 255, 0.02),
     0 0 50px rgba(187, 244, 81, 0.07);
+  animation: suCardReveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
   transition: all 0.3s ease;
+}
+
+@keyframes suCardReveal {
+  from {
+    opacity: 0.88;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .su-logo {
