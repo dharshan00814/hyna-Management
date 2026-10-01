@@ -133,6 +133,7 @@ export function MeetingRoom() {
 
   // 3. WebRTC Meeting Core Hook
   const {
+    localStream: meetingLocalStream,
     localParticipantState,
     participants,
     remoteStreams,
@@ -379,7 +380,7 @@ export function MeetingRoom() {
         <div className="flex-1 h-full overflow-hidden">
           <VideoGrid
             localParticipant={localParticipantState}
-            localStream={localStream}
+            localStream={meetingLocalStream}
             participants={participants}
             remoteStreams={remoteStreams}
             pinnedParticipantId={pinnedParticipantId}
