@@ -14,7 +14,7 @@ const DEFAULT_VAPID_PRIVATE_KEY =
   'Go5WBLVixsF0Feh4wTwD4es-iJdJdpUXa-fb2ZxMyBw';
 const DEFAULT_VAPID_SUBJECT = 'mailto:admin@hynastudio.com';
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }

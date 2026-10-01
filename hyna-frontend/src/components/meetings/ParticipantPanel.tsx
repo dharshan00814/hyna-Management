@@ -90,7 +90,9 @@ export function ParticipantPanel({
                     {isLocal ? `${participant.name} (You)` : participant.name}
                   </span>
                   {participant.isHost && (
-                    <Crown className="w-3 h-3 text-amber-400 shrink-0" title="Meeting Host" />
+                    <span title="Meeting Host" className="inline-flex items-center">
+                      <Crown className="w-3 h-3 text-amber-400 shrink-0" />
+                    </span>
                   )}
                 </div>
                 <span className="text-[10px] text-white/40 truncate block">

@@ -1388,6 +1388,7 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
     ? `https://${cleanLink}`
     : cleanLink;
 
+  const roomId = meeting.meetingRoomId || newId;
   const newMeeting: Meeting = {
     id: newId,
     title: meeting.title || 'New Meeting',
@@ -1398,8 +1399,10 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
     hostId: currentUserId,
     participantIds: meeting.participantIds?.length ? meeting.participantIds : [currentUserId],
     type: meeting.type || 'team',
+    meetingType: meeting.meetingType || 'video',
+    meetingRoomId: roomId,
     isRecurring: meeting.isRecurring || false,
-    meetingLink: finalLink,
+    meetingLink: finalLink || `/meeting/${roomId}`,
     notes: meeting.notes || meeting.description || '',
     status: meeting.status || 'scheduled',
   };
@@ -1421,6 +1424,8 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
         host_id: currentUserId,
         participant_ids: newMeeting.participantIds,
         type: newMeeting.type,
+        meeting_type: newMeeting.meetingType,
+        meeting_room_id: newMeeting.meetingRoomId,
         is_recurring: newMeeting.isRecurring,
         meeting_link: newMeeting.meetingLink,
         status: newMeeting.status,
@@ -1479,6 +1484,7 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
     };
     meetingsCache[idx] = updatedMeeting;
   } else {
+    const roomId = updates.meetingRoomId || id;
     updatedMeeting = {
       id,
       title: updates.title || '',
@@ -1489,8 +1495,10 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
       hostId: updates.hostId || 'EMP-001',
       participantIds: updates.participantIds || [],
       type: updates.type || 'team',
+      meetingType: updates.meetingType || 'video',
+      meetingRoomId: roomId,
       isRecurring: updates.isRecurring || false,
-      meetingLink: cleanLink || '',
+      meetingLink: cleanLink || `/meeting/${roomId}`,
       status: updates.status || 'scheduled',
       notes: updates.notes || '',
     };
@@ -1510,6 +1518,8 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
       if (updates.status !== undefined) updatePayload.status = updates.status;
       if (updates.notes !== undefined) updatePayload.notes = updates.notes;
       if (updates.participantIds !== undefined) updatePayload.participant_ids = updates.participantIds;
+      if (updates.meetingType !== undefined) updatePayload.meeting_type = updates.meetingType;
+      if (updates.meetingRoomId !== undefined) updatePayload.meeting_room_id = updates.meetingRoomId;
 
       const { data, error } = await supabase
         .from('meetings')

@@ -362,7 +362,8 @@ export function Select({ label, options, error, className, id, onChange, ...prop
 // Modal / Dialog
 // ============================================================
 interface ModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
+  open?: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
@@ -370,8 +371,9 @@ interface ModalProps {
   footer?: React.ReactNode;
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md', footer }: ModalProps) {
-  if (!isOpen) return null;
+export function Modal({ isOpen, open, onClose, title, children, size = 'md', footer }: ModalProps) {
+  const visible = isOpen ?? open ?? false;
+  if (!visible) return null;
 
   const sizes = {
     sm: 'max-w-sm',

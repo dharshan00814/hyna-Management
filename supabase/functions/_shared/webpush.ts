@@ -134,7 +134,7 @@ async function hkdf(
 ): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     'raw',
-    ikm,
+    ikm as unknown as BufferSource,
     { name: 'HKDF' },
     false,
     ['deriveBits']
@@ -144,8 +144,8 @@ async function hkdf(
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt,
-      info,
+      salt: salt as unknown as BufferSource,
+      info: info as unknown as BufferSource,
     },
     key,
     length * 8
@@ -176,7 +176,7 @@ export async function encryptPayload(
   // 2. Import recipient's public key
   const recipientPublicKey = await crypto.subtle.importKey(
     'raw',
-    userPublicKeyBytes,
+    userPublicKeyBytes as unknown as BufferSource,
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
@@ -215,16 +215,16 @@ export async function encryptPayload(
   // 8. Encrypt using AES-128-GCM
   const aesKey = await crypto.subtle.importKey(
     'raw',
-    cek,
+    cek as unknown as BufferSource,
     { name: 'AES-GCM' },
     false,
     ['encrypt']
   );
 
   const ciphertextBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+    { name: 'AES-GCM', iv: nonce as unknown as BufferSource, tagLength: 128 },
     aesKey,
-    paddedPlaintext
+    paddedPlaintext as unknown as BufferSource
   );
   const ciphertext = new Uint8Array(ciphertextBuffer);
 
@@ -260,7 +260,7 @@ export async function sendWebPush(
         'Content-Encoding': 'aes128gcm',
         'Content-Type': 'application/octet-stream',
       },
-      body: encryptedBody,
+      body: encryptedBody as unknown as BodyInit,
     });
 
     const isPermanent = response.status === 404 || response.status === 410;
