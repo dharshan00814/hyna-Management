@@ -51,8 +51,12 @@ export class WebRTCManager {
     this.localUserId = localUserId;
     this.callbacks = callbacks;
     
-    // In dev, use localhost:5050. In prod, env var.
-    const SERVER_URL = import.meta.env.VITE_SFU_SERVER_URL || 'http://localhost:5050';
+    // Dynamically fallback to the current hostname so LAN testing works on mobile
+    const defaultServerUrl = window.location.protocol === 'https:' 
+      ? `https://${window.location.hostname}:5050` 
+      : `http://${window.location.hostname}:5050`;
+      
+    const SERVER_URL = import.meta.env.VITE_SFU_SERVER_URL || defaultServerUrl;
     this.socket = io(SERVER_URL, { transports: ['websocket'] });
   }
 
@@ -172,9 +176,14 @@ export class WebRTCManager {
         this.callbacks.onRemoteStream(peerSocketId, stream);
       }
       if (!stream.getTracks().find(t => t.id === event.track.id)) {
-        stream.addTrack(event.track);
+        // Create a new stream so React and HTMLVideoElement reliably detect the update
+        const newStream = new MediaStream([
+          ...stream.getTracks(),
+          event.track
+        ]);
+        this.remoteStreams.set(peerSocketId, newStream);
         if (this.callbacks.onRemoteStreamUpdate) {
-          this.callbacks.onRemoteStreamUpdate(peerSocketId, stream);
+          this.callbacks.onRemoteStreamUpdate(peerSocketId, newStream);
         }
       }
     };

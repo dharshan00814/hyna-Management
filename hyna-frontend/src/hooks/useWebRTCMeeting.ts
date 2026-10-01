@@ -209,7 +209,16 @@ export function useWebRTCMeeting({
         const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}) }, audio: false });
         const newVideoTrack = stream.getVideoTracks()[0];
         if (newVideoTrack && localStream) {
-          localStream.addTrack(newVideoTrack);
+          // Create a completely new stream object so React and the HTMLVideoElement detect the change
+          const newStream = new MediaStream([
+            ...localStream.getAudioTracks(),
+            newVideoTrack
+          ]);
+          
+          setLocalStream(newStream);
+          webrtcManagerRef.current?.setLocalStream(newStream);
+          
+          // Force renegotiation for the new track
           await webrtcManagerRef.current?.replaceVideoTrack(newVideoTrack);
         }
         setVideoEnabled(true);
