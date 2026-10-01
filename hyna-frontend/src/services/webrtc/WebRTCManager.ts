@@ -64,7 +64,7 @@ export class WebRTCManager {
 
   public async connectMesh(roomId: string, user: any, micEnabled: boolean, videoEnabled: boolean) {
     return new Promise<void>((resolve, reject) => {
-      this.socket.on('connect', () => {
+      const joinRoom = () => {
         try {
           this.callbacks.onPeerConnectionStateChange('server', 'connected');
           
@@ -85,7 +85,13 @@ export class WebRTCManager {
         } catch (err) {
           reject(err);
         }
-      });
+      };
+
+      if (this.socket.connected) {
+        joinRoom();
+      } else {
+        this.socket.on('connect', joinRoom);
+      }
 
       this.socket.on('connect_error', (err) => {
         this.callbacks.onPeerConnectionStateChange('server', 'failed');
@@ -125,13 +131,10 @@ export class WebRTCManager {
         }
       });
 
-      // When a new participant joins, create an offer and send it to them
+      // When a new participant joins, they will proactively send an offer.
+      // We just log it here or perform any non-offer setups if needed.
       this.socket.on('participant_joined', (participant) => {
-        this.createOffer(participant.socketId).then(offer => {
-          if (offer) {
-            this.socket.emit('offer', { target: participant.socketId, sdp: offer });
-          }
-        }).catch(err => console.error('[WebRTC] Error creating offer:', err));
+        console.log(`[WebRTC] Participant joined: ${participant.userId}. Waiting for their offer.`);
       });
 
       this.socket.on('participant_left', ({ socketId }) => {

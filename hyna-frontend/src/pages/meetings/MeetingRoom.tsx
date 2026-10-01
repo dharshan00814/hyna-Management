@@ -190,10 +190,8 @@ export function MeetingRoom() {
   // Join Action from Pre-Join Screen
   const handleJoin = async () => {
     try {
-      // 1. Physically STOP PreJoin preview stream so it never runs in the background
-      stopLocalStream();
       setMeetingStage('in-meeting');
-      await startMeetingSession(prejoinVideoEnabled, prejoinAudioEnabled);
+      await startMeetingSession(prejoinVideoEnabled, prejoinAudioEnabled, localStream);
       toast.success('Joined meeting session');
     } catch (err) {
       console.error('[MeetingRoom] handleJoin error:', err);

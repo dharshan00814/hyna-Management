@@ -68,7 +68,7 @@ export function useWebRTCMeeting({
     }
   }, []);
 
-  const startMeetingSession = useCallback(async (initialVideo?: boolean, initialAudio?: boolean) => {
+  const startMeetingSession = useCallback(async (initialVideo?: boolean, initialAudio?: boolean, preExistingStream?: MediaStream | null) => {
     if (!meeting) return;
     const isAudioOnly = meeting.meetingType === 'audio';
     const activeVideo = typeof initialVideo === 'boolean' ? (!isAudioOnly && initialVideo) : (!isAudioOnly && videoEnabled);
@@ -78,10 +78,18 @@ export function useWebRTCMeeting({
     setMicEnabled(activeAudio);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : {}) },
-        video: activeVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}) } : false,
-      });
+      let stream = preExistingStream;
+      if (stream) {
+        // Clone the stream to force Chromium to bind a new video frame buffer
+        // when moving a hardware stream from one <video> tag to another
+        stream = new MediaStream(stream.getTracks());
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : {}) },
+          video: activeVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}) } : false,
+        });
+      }
+      
       setLocalStream(stream);
       stream.getAudioTracks().forEach(t => t.enabled = activeAudio);
       stream.getVideoTracks().forEach(t => t.enabled = activeVideo);
@@ -270,10 +278,9 @@ export function useWebRTCMeeting({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
       webrtcManagerRef.current?.cleanupAll();
     };
-  }, [localStream]);
+  }, []);
 
   const localParticipantState: ParticipantState = useMemo(() => ({
     memberId: localUserId, name: localUserName, avatar: localUserAvatar, role: localUserRole, designation: currentUser?.designation,

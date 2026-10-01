@@ -36,6 +36,7 @@ export function ParticipantTile({
     if (videoRef.current) {
       if (stream) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.warn('[ParticipantTile] Autoplay prevented:', e));
       } else {
         videoRef.current.srcObject = null;
       }
