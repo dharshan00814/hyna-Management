@@ -50,16 +50,16 @@ export function ParticipantTile({
           : 'border-white/10 hover:border-white/20'
       }`}
     >
-      {/* Video Stream Element */}
-      {hasVideoStream ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal} // Always mute local video element to avoid audio feedback
-          className={`w-full h-full object-cover ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
-        />
-      ) : (
+      {/* Video / Audio Stream Element */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal} // Always mute local video element to avoid audio feedback
+        className={`w-full h-full object-cover ${!hasVideoStream ? 'hidden' : ''} ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
+      />
+      
+      {!hasVideoStream && (
         /* Avatar Placeholder when camera is disabled or audio meeting */
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-[#181820] to-[#101014]">
           <div className="relative">

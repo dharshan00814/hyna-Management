@@ -66,8 +66,8 @@ export function VideoGrid({
         {/* Filmstrip of other participants */}
         {otherParticipants.length > 0 && (
           <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto w-full lg:w-72 lg:max-h-full shrink-0 py-1">
-            {otherParticipants.map(item => (
-              <div key={item.participant.memberId} className="w-48 lg:w-full aspect-video shrink-0">
+            {otherParticipants.map((item, index) => (
+              <div key={`${item.participant.memberId}-${index}`} className="w-48 lg:w-full aspect-video shrink-0">
                 <ParticipantTile
                   participant={item.participant}
                   stream={item.stream}
@@ -100,8 +100,8 @@ export function VideoGrid({
   return (
     <div className="w-full h-full p-3 md:p-6 flex items-center justify-center overflow-y-auto">
       <div className={`grid ${gridLayoutClass} gap-3 md:gap-4 w-full h-full max-w-7xl max-h-[85vh]`}>
-        {allParticipants.map(item => (
-          <div key={item.participant.memberId} className="w-full h-full min-h-[160px]">
+        {allParticipants.map((item, index) => (
+          <div key={`${item.participant.memberId}-${index}`} className="w-full h-full min-h-[160px]">
             <ParticipantTile
               participant={item.participant}
               stream={item.stream}

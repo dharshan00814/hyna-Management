@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client';
 
 export interface WebRTCEventCallbacks {
   onRemoteStream: (peerId: string, stream: MediaStream) => void;
+  onRemoteStreamUpdate?: (peerId: string, stream: MediaStream) => void;
   onRemoteStreamRemoved: (peerId: string) => void;
   onPeerConnectionStateChange: (peerId: string, state: string) => void;
   onIceCandidate: (targetPeerId: string, candidate: RTCIceCandidate) => void;
@@ -145,6 +146,17 @@ export class WebRTCManager {
       }
     };
 
+    pc.onnegotiationneeded = async () => {
+      try {
+        if (pc.signalingState !== 'stable') return;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.socket.emit('offer', { target: peerSocketId, sdp: pc.localDescription });
+      } catch (err) {
+        console.error('[WebRTC] Error during negotiation for', peerSocketId, err);
+      }
+    };
+
     pc.onconnectionstatechange = () => {
       this.callbacks.onPeerConnectionStateChange(peerSocketId, pc.connectionState);
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -161,6 +173,9 @@ export class WebRTCManager {
       }
       if (!stream.getTracks().find(t => t.id === event.track.id)) {
         stream.addTrack(event.track);
+        if (this.callbacks.onRemoteStreamUpdate) {
+          this.callbacks.onRemoteStreamUpdate(peerSocketId, stream);
+        }
       }
     };
 

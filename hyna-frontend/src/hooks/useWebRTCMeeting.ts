@@ -89,6 +89,10 @@ export function useWebRTCMeeting({
 
       const manager = new WebRTCManager(localUserId, {
         onRemoteStream: (peerId, remoteStream) => setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream)),
+        onRemoteStreamUpdate: (peerId, remoteStream) => {
+          // Force a new map reference so React re-renders with the updated stream tracks
+          setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream));
+        },
         onRemoteStreamRemoved: (peerId) => setRemoteStreams(prev => { const next = new Map(prev); next.delete(peerId); return next; }),
         onPeerConnectionStateChange: (peerId, state) => {
           if (peerId === 'server') {
