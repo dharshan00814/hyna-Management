@@ -326,34 +326,20 @@ export function useWebRTCMeeting({
     if (senderId === localUserId) return;
 
     switch (msg.type) {
-      case 'JOIN': {
-        // Peer joined: create and send offer to them
-        try {
-          const offer = await manager.createOffer(senderId);
-          await signalingServiceRef.current?.sendSignal({
-            type: 'OFFER',
-            senderId: localUserId,
-            targetId: senderId,
-            senderName: localUserName,
-            offer,
-          });
-        } catch (err) {
-          console.error(`[WebRTC] Failed to send offer to ${senderId}:`, err);
-        }
-        break;
-      }
 
       case 'OFFER': {
         if (!msg.offer) return;
         try {
           const answer = await manager.handleOffer(senderId, msg.offer);
-          await signalingServiceRef.current?.sendSignal({
-            type: 'ANSWER',
-            senderId: localUserId,
-            targetId: senderId,
-            senderName: localUserName,
-            answer,
-          });
+          if (answer) {
+            await signalingServiceRef.current?.sendSignal({
+              type: 'ANSWER',
+              senderId: localUserId,
+              targetId: senderId,
+              senderName: localUserName,
+              answer,
+            });
+          }
         } catch (err) {
           console.error(`[WebRTC] Failed to handle offer from ${senderId}:`, err);
         }

@@ -115,19 +115,6 @@ export class SupabaseSignalingService {
             status: 'connected',
           });
 
-          // Broadcast JOIN signal to inform other peers to initiate WebRTC offers
-          await this.sendSignal({
-            type: 'JOIN',
-            senderId: this.localUser.id,
-            senderName: this.localUser.name,
-            senderAvatar: this.localUser.avatar,
-            senderRole: this.localUser.designation || this.localUser.role,
-            micEnabled: initialPresence.micEnabled ?? true,
-            videoEnabled: initialPresence.videoEnabled ?? true,
-            isScreenSharing: false,
-            timestamp: Date.now(),
-          });
-
           resolve();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error(`[SignalingService] Channel subscribe error (${status}):`, err);

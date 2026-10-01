@@ -116,11 +116,10 @@ export class WebRTCManager {
         this.remoteStreams.set(peerId, remoteStream);
       }
 
-      event.streams[0]?.getTracks().forEach(track => {
-        if (!remoteStream?.getTracks().some(t => t.id === track.id)) {
-          remoteStream?.addTrack(track);
-        }
-      });
+      // Ensure we add the track to the stream safely
+      if (!remoteStream.getTracks().some(t => t.id === event.track.id)) {
+        remoteStream.addTrack(event.track);
+      }
 
       // Notify callback with the remote stream
       this.callbacks.onRemoteStream(peerId, remoteStream);
@@ -149,7 +148,7 @@ export class WebRTCManager {
   }
 
   // Handle an OFFER received from a remote peer and create an ANSWER
-  public async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
+  public async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit | null> {
     const pc = this.getOrCreatePeerConnection(peerId);
 
     // If there is an offer collision in have-local-offer state
@@ -162,7 +161,7 @@ export class WebRTCManager {
         ]);
       } else {
         // We are impolite: ignore remote offer
-        return pc.localDescription!;
+        return null;
       }
     } else {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
