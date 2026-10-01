@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -6,6 +6,7 @@ import { useThemeStore, useAuthStore } from './stores';
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
+import { SplashScreen } from './components/common/SplashScreen';
 
 // Admin pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -65,6 +66,21 @@ function App() {
     root.classList.toggle('dark', resolvedTheme === 'dark');
   }, [mode, resolvedTheme, setMode]);
 
+  // Launch splash screen: appears once on initial application startup
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    // Check if splash has already been shown in this tab session
+    const hasShown = sessionStorage.getItem('hyna_splash_shown');
+    // If testing query ?splash=true is passed, always show
+    const forceSplash = new URLSearchParams(window.location.search).get('splash') === 'true';
+    return !hasShown || forceSplash;
+  });
+
+  const handleSplashComplete = () => {
+    sessionStorage.setItem('hyna_splash_shown', 'true');
+    setShowSplash(false);
+  };
+
   // Route prefix calculated strictly from database-verified role
   const rolePrefix =
     effectiveRole === 'admin'
@@ -75,6 +91,7 @@ function App() {
 
   return (
     <>
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <Routes>
         {/* Public Login Route */}
         <Route
