@@ -23,6 +23,7 @@ import type {
   DailyReport, Notification, ChatChannel, ChatMessage,
   FileItem, Folder, LeaveRequest, Announcement,
 } from '@/types';
+import { notifyCheckInSuccess, notifyMeetingScheduled } from '@/services/notificationWorkflow';
 
 // In-memory cache for synchronous lookups (e.g. getUserById in UI rendering)
 let usersCache: User[] = [];
@@ -42,8 +43,10 @@ const DEFAULT_MEETINGS: Meeting[] = [
     hostId: 'EMP-001',
     participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-009', 'EMP-010', 'EMP-011'],
     type: 'standup',
+    meetingType: 'video',
+    meetingRoomId: 'room-standup-daily',
     isRecurring: true,
-    meetingLink: 'https://meet.google.com/new',
+    meetingLink: '/meeting/room-standup-daily',
     status: 'scheduled',
     notes: 'Please review your active task board cards before joining.',
   },
@@ -57,8 +60,10 @@ const DEFAULT_MEETINGS: Meeting[] = [
     hostId: 'EMP-001',
     participantIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-006', 'EMP-008'],
     type: 'review',
+    meetingType: 'video',
+    meetingRoomId: 'room-product-review',
     isRecurring: false,
-    meetingLink: 'https://meet.google.com/new',
+    meetingLink: '/meeting/room-product-review',
     status: 'scheduled',
     notes: 'Live walkthrough of activity tracking metrics and deliverables.',
   },
@@ -72,11 +77,13 @@ const DEFAULT_MEETINGS: Meeting[] = [
     hostId: 'EMP-004',
     participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-010', 'EMP-011'],
     type: 'planning',
+    meetingType: 'video',
+    meetingRoomId: 'room-arch-planning',
     isRecurring: true,
-    meetingLink: 'https://meet.google.com/new',
+    meetingLink: '/meeting/room-arch-planning',
     status: 'scheduled',
-    notes: 'Review database indexes and realtime connection pooling.',
-  }
+    notes: 'Live walkthrough of WebRTC peer connection manager and database schemas.',
+  },
 ];
 
 function initMeetingsCache(): Meeting[] {
@@ -106,7 +113,7 @@ function persistMeetingsCache(meetings: Meeting[]) {
 }
 
 // Helper: Check if string is a valid UUID
-function isValidUuid(val?: string | null): boolean {
+export function isValidUuid(val?: string | null): boolean {
   if (!val) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 }
@@ -129,6 +136,8 @@ function mapUser(row: any): User {
     lastActive: row.last_active || row.updated_at || new Date().toISOString(),
     bio: row.bio || '',
     skills: row.skills || [],
+    bankAccountNumber: row.bank_account_number || row.bankAccountNumber || '',
+    ifsc: row.ifsc_code || row.ifsc || '',
   };
 }
 
@@ -217,6 +226,7 @@ function mapTask(row: any): Task {
 
 // Helper: Transform Meeting row to Frontend Meeting
 function mapMeeting(row: any): Meeting {
+  const roomId = row.meeting_room_id || row.id;
   return {
     id: row.id,
     title: row.title || '',
@@ -224,13 +234,21 @@ function mapMeeting(row: any): Meeting {
     date: row.date || '',
     startTime: row.start_time || '',
     endTime: row.end_time || '',
-    hostId: row.host_id || '',
+    hostId: row.host_id || row.created_by || '',
+    createdBy: row.created_by || row.host_id,
     participantIds: row.participant_ids || [],
     type: row.type || 'team',
+    meetingType: (row.meeting_type as any) || 'video',
+    meetingRoomId: roomId,
     isRecurring: row.is_recurring ?? false,
-    meetingLink: row.meeting_link || '',
+    meetingLink: row.meeting_link || `/meeting/${roomId}`,
     notes: row.notes || '',
     status: row.status || 'scheduled',
+    scheduledAt: row.scheduled_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -275,14 +293,14 @@ function mapDailyReport(row: any): DailyReport {
 function mapNotification(row: any): Notification {
   return {
     id: row.id,
-    type: row.type,
-    title: row.title,
-    message: row.message,
-    userId: row.user_id,
-    read: row.read,
+    type: row.type || 'general',
+    title: row.title || 'Notification',
+    message: row.message || row.body || '',
+    userId: row.user_id || row.member_id || '',
+    read: Boolean(row.read || row.is_read || row.read_at),
     createdAt: row.created_at,
-    actionUrl: row.action_url,
-    icon: row.icon,
+    actionUrl: row.action_url || row.link || row.data?.actionUrl || row.data?.url || '',
+    icon: row.icon || row.data?.icon,
   };
 }
 
@@ -302,9 +320,10 @@ function mapChannel(row: any): ChatChannel {
 
 // Helper: Transform Message row
 function mapMessage(row: any): ChatMessage {
+  const isGlobal = !row.receiver_id || row.channel_id === 'ch_global' || row.channel_id === 'globe';
   return {
     id: row.id,
-    channelId: row.channel_id,
+    channelId: isGlobal ? 'globe' : (row.receiver_id || row.channel_id || ''),
     senderId: row.sender_id,
     content: row.content,
     timestamp: row.timestamp || row.created_at,
@@ -447,6 +466,8 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
   if (updates.bio !== undefined) payload.bio = updates.bio;
   if (updates.skills !== undefined) payload.skills = updates.skills;
   if (updates.avatar !== undefined) payload.avatar = updates.avatar;
+  if (updates.bankAccountNumber !== undefined) payload.bank_account_number = updates.bankAccountNumber;
+  if (updates.ifsc !== undefined) payload.ifsc_code = updates.ifsc;
 
   const { data, error } = await supabase
     .from('profiles')
@@ -464,6 +485,42 @@ export async function updateUserProfile(id: string, updates: Partial<User>): Pro
 
 export async function updateMember(id: string, updates: Partial<User>): Promise<User> {
   return updateUserProfile(id, updates);
+}
+
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const fileExt = file.name.split('.').pop() || 'png';
+  const fileName = `${userId}_${Date.now()}.${fileExt}`;
+  const filePath = `avatars/${fileName}`;
+
+  if (!isSupabaseConfigured()) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from('files')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.warn('Storage avatar upload fallback to base64:', uploadError);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('files')
+    .getPublicUrl(filePath);
+
+  return urlData?.publicUrl || '';
 }
 
 export async function deleteMember(id: string): Promise<void> {
@@ -535,6 +592,8 @@ export interface AddMemberInput {
   designation?: string;
   employeeId?: string;
   phone?: string;
+  bankAccountNumber?: string;
+  ifsc?: string;
 }
 
 export async function addMember(input: AddMemberInput): Promise<User> {
@@ -595,6 +654,12 @@ export async function addMember(input: AddMemberInput): Promise<User> {
   if (employeeId) {
     profilePayload.employee_id = employeeId;
   }
+  if (input.bankAccountNumber !== undefined) {
+    profilePayload.bank_account_number = input.bankAccountNumber.trim();
+  }
+  if (input.ifsc !== undefined) {
+    profilePayload.ifsc_code = input.ifsc.trim().toUpperCase();
+  }
 
   const { data: savedProfile, error: profileError } = await supabase
     .from('profiles')
@@ -622,6 +687,8 @@ export async function addMember(input: AddMemberInput): Promise<User> {
     lastActive: new Date().toISOString(),
     bio: '',
     skills: [],
+    bankAccountNumber: input.bankAccountNumber?.trim() || '',
+    ifsc: input.ifsc?.trim().toUpperCase() || '',
   };
 
   usersCache.unshift(newUser);
@@ -1342,6 +1409,7 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
     ? `https://${cleanLink}`
     : cleanLink;
 
+  const roomId = meeting.meetingRoomId || newId;
   const newMeeting: Meeting = {
     id: newId,
     title: meeting.title || 'New Meeting',
@@ -1352,8 +1420,10 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
     hostId: currentUserId,
     participantIds: meeting.participantIds?.length ? meeting.participantIds : [currentUserId],
     type: meeting.type || 'team',
+    meetingType: meeting.meetingType || 'video',
+    meetingRoomId: roomId,
     isRecurring: meeting.isRecurring || false,
-    meetingLink: finalLink,
+    meetingLink: finalLink || `/meeting/${roomId}`,
     notes: meeting.notes || meeting.description || '',
     status: meeting.status || 'scheduled',
   };
@@ -1375,6 +1445,8 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
         host_id: currentUserId,
         participant_ids: newMeeting.participantIds,
         type: newMeeting.type,
+        meeting_type: newMeeting.meetingType,
+        meeting_room_id: newMeeting.meetingRoomId,
         is_recurring: newMeeting.isRecurring,
         meeting_link: newMeeting.meetingLink,
         status: newMeeting.status,
@@ -1392,6 +1464,20 @@ export async function createMeeting(meeting: Partial<Meeting>): Promise<Meeting>
         const idx = meetingsCache.findIndex(m => m.id === newId);
         if (idx !== -1) meetingsCache[idx] = mapped;
         persistMeetingsCache(meetingsCache);
+
+        if (insertPayload.participant_ids?.length) {
+          const attendees = insertPayload.participant_ids.filter((id: string) => id !== currentUserId);
+          if (attendees.length > 0) {
+            notifyMeetingScheduled({
+              id: data.id,
+              title: data.title,
+              date: data.date,
+              time: data.start_time,
+              attendeeIds: attendees,
+            }).catch(console.error);
+          }
+        }
+
         return mapped;
       }
     } catch (err) {
@@ -1419,6 +1505,7 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
     };
     meetingsCache[idx] = updatedMeeting;
   } else {
+    const roomId = updates.meetingRoomId || id;
     updatedMeeting = {
       id,
       title: updates.title || '',
@@ -1429,8 +1516,10 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
       hostId: updates.hostId || 'EMP-001',
       participantIds: updates.participantIds || [],
       type: updates.type || 'team',
+      meetingType: updates.meetingType || 'video',
+      meetingRoomId: roomId,
       isRecurring: updates.isRecurring || false,
-      meetingLink: cleanLink || '',
+      meetingLink: cleanLink || `/meeting/${roomId}`,
       status: updates.status || 'scheduled',
       notes: updates.notes || '',
     };
@@ -1450,6 +1539,8 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
       if (updates.status !== undefined) updatePayload.status = updates.status;
       if (updates.notes !== undefined) updatePayload.notes = updates.notes;
       if (updates.participantIds !== undefined) updatePayload.participant_ids = updates.participantIds;
+      if (updates.meetingType !== undefined) updatePayload.meeting_type = updates.meetingType;
+      if (updates.meetingRoomId !== undefined) updatePayload.meeting_room_id = updates.meetingRoomId;
 
       const { data, error } = await supabase
         .from('meetings')
@@ -1638,13 +1729,15 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
       console.warn('Supabase check-in rejected (using local session fallback):', res.error);
       return fallbackRecord;
     }
-    const result = mapAttendance(res.data);
-    result.points = pointsAwarded;
-    return result;
-  } catch (err: any) {
-    if (err.message && (err.message.includes('Punch In is disabled') || err.message.includes('Punch In is closed'))) {
-      throw err;
-    }
+
+    // Trigger instant device push confirmation
+    notifyCheckInSuccess({
+      memberId: userId,
+      checkInTime: timeNow,
+    }).catch(console.error);
+
+    return mapAttendance(data);
+  } catch (err) {
     console.warn('Check-in network error (using local session fallback):', err);
     return fallbackRecord;
   }
@@ -1835,6 +1928,7 @@ export async function submitDailyReport(report: Partial<DailyReport>): Promise<D
 // NOTIFICATIONS API
 // ============================================================
 export async function createNotification(notification: any): Promise<void> {
+  if (!isSupabaseConfigured() || !isValidUuid(notification.userId)) return;
   const payload = {
     user_id: notification.userId,
     title: notification.title,
@@ -1848,29 +1942,39 @@ export async function createNotification(notification: any): Promise<void> {
   const { error } = await supabase.from('notifications').insert([payload]);
   if (error) console.error('Failed to create notification:', error);
 }
+
 export async function getNotifications(userId?: string): Promise<Notification[]> {
   if (!isSupabaseConfigured()) return [];
   let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
-  if (userId) {
-    query = query.or(`user_id.eq.${userId},user_id.eq.all`);
+  if (userId && isValidUuid(userId)) {
+    query = query.eq('user_id', userId);
   }
   const { data, error } = await query;
-  if (error) return [];
+  if (error) {
+    console.warn('Error fetching notifications:', error);
+    return [];
+  }
   return (data || []).map(mapNotification);
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  if (isSupabaseConfigured()) {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
+  if (isSupabaseConfigured() && isValidUuid(id)) {
+    await supabase.from('notifications').update({ 
+      is_read: true,
+      read_at: new Date().toISOString()
+    }).eq('id', id);
   }
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  if (isSupabaseConfigured()) {
+  if (isSupabaseConfigured() && isValidUuid(userId)) {
     await supabase
       .from('notifications')
-      .update({ read: true })
-      .or(`user_id.eq.${userId},user_id.eq.all`);
+      .update({ 
+        is_read: true,
+        read_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
   }
 }
 
@@ -1981,28 +2085,32 @@ export async function getChannelMessages(receiverId: string, currentUserId?: str
   
   let query = supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
   
-  if (receiverId === 'globe') {
-    // Global chat is identified by null receiver_id
-    query = query.is('receiver_id', null);
-  } else if (currentUserId) {
+  const isGlobal = receiverId === 'globe' || receiverId === 'ch_global';
+  if (isGlobal) {
+    // Global chat is identified by null receiver_id or channel_id = 'ch_global'
+    query = query.or('receiver_id.is.null,channel_id.eq.ch_global');
+  } else if (currentUserId && isValidUuid(receiverId) && isValidUuid(currentUserId)) {
     // Direct messages between current user and receiver
     query = query.or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${currentUserId})`);
   }
 
   const { data, error } = await query;
-  if (error) return [];
+  if (error) {
+    console.error('Error fetching chat messages:', error);
+    return [];
+  }
   return (data || []).map(mapMessage);
 }
 
 export async function sendMessage(receiverId: string, content: string, senderId: string, attachments: any[] = []): Promise<ChatMessage> {
-  const isGlobal = receiverId === 'globe';
+  const isGlobal = receiverId === 'globe' || receiverId === 'ch_global';
   const now = new Date().toISOString();
   const msgType = attachments.length > 0 && !content.trim() ? 'file' : 'text';
 
   if (!isSupabaseConfigured()) {
     return {
       id: `msg${Date.now()}`,
-      channelId: isGlobal ? 'ch_global' : receiverId,
+      channelId: isGlobal ? 'globe' : receiverId,
       senderId,
       content,
       timestamp: now,
@@ -2014,11 +2122,10 @@ export async function sendMessage(receiverId: string, content: string, senderId:
 
   // Ensure sender_id matches a valid UUID format for public.profiles foreign key
   let validSenderId = senderId;
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(senderId);
-  if (!isUuid) {
+  if (!isValidUuid(senderId)) {
     try {
       const { data: authData } = await supabase.auth.getUser();
-      if (authData?.user?.id) {
+      if (authData?.user?.id && isValidUuid(authData.user.id)) {
         validSenderId = authData.user.id;
       }
     } catch {
@@ -2026,14 +2133,18 @@ export async function sendMessage(receiverId: string, content: string, senderId:
     }
   }
 
-  const insertPayload = {
-    id: `msg_${Math.random().toString(36).substring(2, 10)}`,
-    channel_id: isGlobal ? 'ch_global' : receiverId,
+  const validReceiverId = (!isGlobal && isValidUuid(receiverId)) ? receiverId : null;
+
+  // Note: Do NOT manually pass `id` because public.chat_messages expects a UUID generated by gen_random_uuid()
+  const insertPayload: Record<string, any> = {
+    channel_id: isGlobal ? 'ch_global' : null,
+    receiver_id: validReceiverId,
     sender_id: validSenderId,
     content,
     type: msgType,
     attachments,
     reactions: [],
+    timestamp: now,
   };
 
   const { data, error } = await supabase
@@ -2048,6 +2159,19 @@ export async function sendMessage(receiverId: string, content: string, senderId:
   }
 
   return mapMessage(data);
+}
+
+export async function updateMessageReactions(messageId: string, reactions: any[]): Promise<void> {
+  if (!isSupabaseConfigured() || !isValidUuid(messageId)) return;
+  try {
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ reactions })
+      .eq('id', messageId);
+    if (error) console.error('Error updating reaction in Supabase:', error);
+  } catch (err) {
+    console.error('Failed to update reactions in Supabase:', err);
+  }
 }
 
 

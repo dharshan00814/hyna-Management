@@ -4,337 +4,207 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/stores';
 
 const css = `
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-.su-root * {
+.su * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-.su-root {
-  min-height: 100vh;
-  width: 100%;
+.su {
+  height: 100vh;
+  width: 100vw;
+  background: #0d0e12;
+  background-image: 
+    radial-gradient(at 10% 10%, rgba(32, 65, 240, 0.08) 0px, transparent 50%),
+    radial-gradient(at 90% 90%, rgba(20, 245, 140, 0.05) 0px, transparent 50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 20px;
+  padding: 16px;
   font-family: 'Manrope', system-ui, -apple-system, sans-serif;
   color: #f2f2f2;
   position: relative;
   overflow: hidden;
-  background-color: #08090c;
-  background-image: 
-    radial-gradient(ellipse at 50% 0%, #11141a 0%, transparent 60%),
-    radial-gradient(ellipse at 50% 100%, #0c0f14 0%, transparent 70%),
-    linear-gradient(180deg, #090a0d 0%, #050608 100%);
 }
 
-/* Glowing Ambient Lime Bubbles */
-.su-bubbles-container {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 1;
-}
-
-.su-bubble {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-
-/* Core backlight glow directly behind login card */
-.su-bubble-center {
-  width: 540px;
-  height: 540px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(193, 242, 103, 0.28) 0%, rgba(160, 230, 60, 0.12) 48%, transparent 70%);
-  filter: blur(65px);
-  animation: pulseCoreGlow 8s ease-in-out infinite alternate;
-}
-
-/* Top-left vibrant lime bubble */
-.su-bubble-1 {
-  width: 460px;
-  height: 460px;
-  top: -80px;
-  left: -80px;
-  background: radial-gradient(circle, rgba(200, 246, 115, 0.42) 0%, rgba(180, 235, 75, 0.18) 50%, transparent 70%);
-  filter: blur(60px);
-  animation: floatBubble1 13s ease-in-out infinite;
-}
-
-/* Bottom-right vibrant lime bubble */
-.su-bubble-2 {
-  width: 480px;
-  height: 480px;
-  bottom: -110px;
-  right: -90px;
-  background: radial-gradient(circle, rgba(193, 242, 103, 0.38) 0%, rgba(165, 230, 55, 0.16) 52%, transparent 70%);
-  filter: blur(65px);
-  animation: floatBubble2 15s ease-in-out infinite;
-}
-
-/* Top-right floating lime bubble */
-.su-bubble-3 {
-  width: 340px;
-  height: 340px;
-  top: 12%;
-  right: 8%;
-  background: radial-gradient(circle, rgba(220, 248, 140, 0.32) 0%, rgba(193, 242, 103, 0.12) 50%, transparent 70%);
-  filter: blur(52px);
-  animation: floatBubble3 11s ease-in-out infinite;
-}
-
-/* Bottom-left floating lime bubble */
-.su-bubble-4 {
-  width: 380px;
-  height: 380px;
-  bottom: 8%;
-  left: 6%;
-  background: radial-gradient(circle, rgba(185, 240, 80, 0.34) 0%, rgba(160, 225, 50, 0.14) 50%, transparent 70%);
-  filter: blur(58px);
-  animation: floatBubble1 17s ease-in-out infinite reverse;
-}
-
-/* Subtle top-center floating lime bubble */
-.su-bubble-5 {
-  width: 260px;
-  height: 260px;
-  top: 5%;
-  left: 45%;
-  background: radial-gradient(circle, rgba(210, 250, 130, 0.28) 0%, transparent 70%);
-  filter: blur(48px);
-  animation: floatBubble2 9s ease-in-out infinite;
-}
-
-@keyframes floatBubble1 {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  33% {
-    transform: translate(55px, -40px) scale(1.08);
-  }
-  66% {
-    transform: translate(-35px, 30px) scale(0.96);
-  }
-}
-
-@keyframes floatBubble2 {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  40% {
-    transform: translate(-65px, -45px) scale(1.1);
-  }
-  80% {
-    transform: translate(40px, 25px) scale(0.94);
-  }
-}
-
-@keyframes floatBubble3 {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(45px, 50px) scale(1.12);
-  }
-}
-
-@keyframes pulseCoreGlow {
-  0%, 100% {
-    opacity: 0.4;
-    transform: translate(-50%, -50%) scale(1);
-  }
-  50% {
-    opacity: 0.65;
-    transform: translate(-50%, -50%) scale(1.15);
-  }
-}
-
-/* Main Login Card */
-.su-card-container {
+.su-wrap {
+  display: grid;
+  grid-template-columns: minmax(420px, 470px) 1fr;
+  gap: 16px;
   width: 100%;
-  max-width: 450px;
-  position: relative;
-  z-index: 10;
-  animation: suCardFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes suCardFadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  height: 100%;
+  max-width: 1600px;
 }
 
 .su-card {
+  background: #14151a;
+  border: 1px solid #22232a;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 36px 32px;
+  position: relative;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5);
+}
+
+.su-card::-webkit-scrollbar {
+  width: 4px;
+}
+.su-card::-webkit-scrollbar-thumb {
+  background: #2a2a32;
+  border-radius: 4px;
+}
+
+.su-card-inner {
   width: 100%;
-  background: rgba(18, 19, 23, 0.84);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 36px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 48px 38px 44px;
-  position: relative;
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  box-shadow: 
-    0 36px 90px -18px rgba(0, 0, 0, 0.8),
-    0 0 50px -15px rgba(193, 242, 103, 0.18),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
-  transition: all 0.3s ease;
+  margin: auto 0;
 }
 
-/* Header & Typography */
 .su-logo {
   width: 44px;
   height: 44px;
   object-fit: contain;
-  margin-bottom: 24px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  margin-bottom: 20px;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+  transition: transform 0.2s ease;
 }
+.su-logo:hover {
+  transform: scale(1.05);
+}
+
 .su-badge {
-  font: 500 13px 'JetBrains Mono', monospace;
-  background: rgba(34, 34, 38, 0.9);
-  color: #c4c4cd;
-  padding: 8px 18px;
-  border-radius: 12px;
-  margin-bottom: 22px;
+  font: 500 11px 'JetBrains Mono', monospace;
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  letter-spacing: -0.2px;
-  white-space: nowrap;
+  color: #a1a1aa;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 16px;
+  letter-spacing: 0.2px;
 }
-.su-card h1,
+
 .su h1 {
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.8px;
-  margin-bottom: 10px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
   color: #ffffff;
   text-align: center;
-  line-height: 1.2;
 }
+
 .su-sub {
-  font-size: 15px;
-  color: #9da0aa;
-  margin-bottom: 30px;
+  font-size: 13.5px;
+  color: #8e8e98;
+  margin-bottom: 28px;
   text-align: center;
-  font-weight: 400;
-  line-height: 1.45;
 }
 
-/* Error Banner */
-.su-err {
-  width: 100%;
-  background: rgba(239, 68, 68, 0.14);
-  border: 1px solid rgba(239, 68, 68, 0.28);
-  color: #fca5a5;
-  padding: 10px 14px;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  font: 400 11.5px 'JetBrains Mono', monospace;
-  line-height: 1.4;
-  text-align: center;
-  animation: suErrShake 0.3s ease;
-}
-
-@keyframes suErrShake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
-}
-
-/* Form Fields */
 .su-form {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
+
+.su-err {
+  width: 100%;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: #fca5a5;
+  padding: 10px 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font: 400 12px 'JetBrains Mono', monospace;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .su-field {
   position: relative;
   width: 100%;
-  height: 48px;
-  margin-bottom: 11px;
+  height: 46px;
+  margin-bottom: 14px;
 }
+
 .su-field input {
   width: 100%;
   height: 100%;
-  background: rgba(28, 28, 33, 0.85);
-  border: 1px solid #2d2d35;
-  border-radius: 14px;
-  padding: 0 46px 0 16px;
-  font: 400 13px 'Manrope', sans-serif;
-  color: #f5f5f7;
+  background: #1a1b22;
+  border: 1px solid #282933;
+  border-radius: 12px;
+  padding: 0 42px 0 16px;
+  font: 400 14px 'Manrope', sans-serif;
+  color: #f2f2f2;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
+
 .su-field input::placeholder {
-  color: #72727e;
+  color: #6c6d78;
 }
-.su-field input:focus-visible {
-  border-color: #c1f267;
-  background: #202026;
-  box-shadow: 0 0 0 3px rgba(193, 242, 103, 0.18);
+
+.su-field input:focus {
+  border-color: #3b82f6;
+  background: #1e1f28;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
+
 .su-eye {
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: 0;
-  color: #72727e;
+  color: #71717a;
   cursor: pointer;
   display: grid;
   place-items: center;
-  padding: 4px;
+  padding: 6px;
   border-radius: 6px;
   transition: color 0.15s;
 }
 .su-eye:hover {
-  color: #f2f2f2;
+  color: #e4e4e7;
 }
 
-/* Checkbox & Forgot Password Row */
 .su-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  margin-top: 4px;
-  margin-bottom: 4px;
-  font: 400 11.5px 'JetBrains Mono', monospace;
-  color: #8c8c96;
+  margin-top: 2px;
+  font-size: 13px;
+  color: #8e8e98;
 }
+
 .su-chk {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
 }
+
 .su-chk input {
   cursor: pointer;
-  accent-color: #c1f267;
-  width: 14px;
-  height: 14px;
+  accent-color: #14f58c;
+  width: 15px;
+  height: 15px;
   border-radius: 4px;
 }
+
 .su-link {
-  color: #8c8c96;
+  color: #8e8e98;
   text-decoration: none;
   cursor: pointer;
   background: none;
@@ -344,93 +214,239 @@ const css = `
   transition: color 0.15s;
 }
 .su-link:hover {
-  color: #c1f267;
+  color: #ffffff;
 }
 
-/* Submit Button - Satin Gloss Lime Theme matching reference */
 .su-submit {
   width: 100%;
-  height: 50px;
-  margin-top: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  border-radius: 14px;
-  background: 
-    radial-gradient(circle at 40% 46%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.35) 28%, transparent 64%),
-    linear-gradient(132deg, #d8f8a2 0%, #ebfcd2 22%, #fdfffa 46%, #daf79b 72%, #cbf584 100%);
-  color: #000000;
-  font: 600 16px 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: -0.35px;
+  height: 46px;
+  margin-top: 22px;
+  border: 0;
+  border-radius: 12px;
+  background: #f4f4f6;
+  color: #0d0e12;
+  font: 600 14px 'Manrope', sans-serif;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 
-    0 8px 24px -4px rgba(193, 242, 103, 0.45),
-    0 2px 6px rgba(0, 0, 0, 0.18),
-    inset 0 1px 2px rgba(255, 255, 255, 0.95),
-    inset 0 -1px 2px rgba(150, 215, 45, 0.35);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.su-submit::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -120%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.5) 50%,
-    transparent 100%
-  );
-  transform: skewX(-20deg);
-  transition: left 0.65s cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-}
-.su-submit:hover:not(:disabled)::before {
-  left: 140%;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.08);
 }
 .su-submit:hover:not(:disabled) {
-  transform: translateY(-1.5px);
-  filter: brightness(1.03);
-  box-shadow: 
-    0 12px 30px -4px rgba(193, 242, 103, 0.6),
-    0 0 24px rgba(225, 255, 140, 0.45),
-    inset 0 1px 2.5px #ffffff,
-    inset 0 -1px 2px rgba(150, 215, 45, 0.35);
+  background: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(255, 255, 255, 0.15);
 }
 .su-submit:active:not(:disabled) {
-  transform: translateY(0) scale(0.99);
-  filter: brightness(0.98);
+  transform: translateY(0);
 }
 .su-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  filter: grayscale(0.2);
 }
 
-/* Spinner */
-.su-spin {
-  width: 16px;
-  height: 16px;
-  border: 2.2px solid rgba(0, 0, 0, 0.22);
-  border-top-color: #000000;
-  border-radius: 50%;
-  animation: suSpin 0.8s linear infinite;
+.su-footer {
+  font: 400 11.5px 'JetBrains Mono', monospace;
+  color: #555562;
+  text-align: center;
+  margin-top: 20px;
 }
-@keyframes suSpin {
+
+.su-grid {
+  display: grid;
+  grid-template-columns: minmax(70px, 90px) 1fr 1fr minmax(70px, 90px);
+  grid-template-rows: 1fr 1.6fr 1.6fr 1fr;
+  gap: 12px;
+  height: 100%;
+  width: 100%;
+}
+
+.su-t {
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.su-t:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+}
+
+.su-img {
+  background:
+    radial-gradient(ellipse 60% 45% at 30% 25%, #a6b52a 0 35%, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 75% 60%, #7f8f22 0 30%, transparent 70%),
+    linear-gradient(160deg, #c9cdb8, #dfe1d2 60%, #b9bea6);
+}
+.su-img.b {
+  background:
+    radial-gradient(ellipse 55% 55% at 45% 30%, #93a325 0 35%, transparent 72%),
+    radial-gradient(ellipse 45% 30% at 55% 88%, #3f4436 0 50%, transparent 75%),
+    linear-gradient(180deg, #d6d9c6, #c4c8b0);
+}
+.su-img.c {
+  background:
+    radial-gradient(ellipse 45% 65% at 80% 40%, #8a9a24 0 35%, transparent 72%),
+    linear-gradient(200deg, #dfe2d3, #d0d4c0);
+}
+.su-img.d {
+  background: linear-gradient(150deg, #b9c0a4, #8e9678 60%, #a9b08f);
+}
+.su-img.e {
+  background: radial-gradient(ellipse 60% 50% at 40% 40%, #e5e7db 0 40%, transparent 75%), linear-gradient(180deg, #a5ab92, #7c8468);
+}
+
+.su-dark {
+  background: #14151a;
+  border: 1px solid #22232a;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px 22px;
+  position: relative;
+}
+
+.su-chips {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.su-chip {
+  font: 500 11px 'JetBrains Mono', monospace;
+  background: #272832;
+  color: #e4e4e7;
+  border-radius: 10px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+.su-chip.m {
+  opacity: 0.7;
+  transform: translateY(-4px) scale(0.95);
+}
+.su-chip.n {
+  background: #323340;
+  opacity: 0.9;
+}
+.su-chip.a {
+  background: #f4f4f6;
+  color: #111;
+  font-weight: 600;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+}
+
+.su-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #888;
+  border-top-color: #111;
+  border-radius: 50%;
+  animation: sp 1s linear infinite;
+}
+@keyframes sp {
   to { transform: rotate(360deg); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .su-spin { animation: none; }
+}
 
+.su-dark h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+  color: #ffffff;
+}
+.su-dark p {
+  font-size: 12.5px;
+  color: #9e9ea8;
+  line-height: 1.4;
+}
 
-@media (max-width: 480px) {
+.su-yellow {
+  background: #ebff38;
+  color: #111;
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+}
+.su-yellow h3 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+  color: #0d0e12;
+}
+.su-yellow p {
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 180px;
+  color: #27272a;
+  font-weight: 500;
+}
+.su-shape {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  width: 44px;
+  height: 44px;
+}
+
+.su-green {
+  background: #14f58c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.su-black {
+  background: #0d0e12;
+  border: 1px solid #1c1d24;
+}
+
+@media (max-width: 1024px) {
+  .su-wrap {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+    height: auto;
+    min-height: 100%;
+  }
+  .su-grid {
+    display: none;
+  }
   .su-card {
-    padding: 38px 24px 34px;
-    border-radius: 28px;
+    padding: 40px 24px;
+    min-height: 100%;
+  }
+}
+
+@media (max-height: 680px) {
+  .su {
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+  .su-card {
+    padding: 24px;
+  }
+  .su-card-inner {
+    margin: 12px 0;
   }
 }
 `;
@@ -440,10 +456,16 @@ const Logo = () => (
 );
 
 const Eye = ({ off }: { off: boolean }) => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
-    <circle cx="12" cy="12" r="2.8" />
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.500 6-10 6S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="2.800" />
     {off && <path d="M4 4l16 16" />}
+  </svg>
+);
+
+const Check = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 12l5 5L20 6" />
   </svg>
 );
 
@@ -517,83 +539,148 @@ export function LoginPage() {
 
       <div className="su-card-container">
         <section className="su-card">
-          <Logo />
+          <div className="su-card-inner">
+            <Logo />
 
-          <span className="su-badge">Welcome to Hyna studio</span>
+            <span className="su-badge">Welcome to Hyna studio</span>
 
-          <h1>Sign in account</h1>
+            <h1>Sign in account</h1>
 
-          <p className="su-sub">Enter your credentials to access your account</p>
+            <p className="su-sub">Enter your credentials to access your account</p>
 
-          {errorMessage && <div className="su-err">{errorMessage}</div>}
+            {errorMessage && <div className="su-err">{errorMessage}</div>}
 
-          <form onSubmit={handleSignIn} className="su-form">
-            <div className="su-field">
-              <input
-                type="text"
-                placeholder="Email or Username"
-                value={identifier}
-                onChange={(e) => {
-                  setIdentifier(e.target.value);
-                  if (errorMessage) setErrorMessage('');
-                }}
-                autoComplete="username"
-                required
-              />
-            </div>
-
-            <div className="su-field">
-              <input
-                type={show ? 'text' : 'password'}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errorMessage) setErrorMessage('');
-                }}
-                autoComplete="current-password"
-                required
-              />
-              <button
-                type="button"
-                className="su-eye"
-                onClick={() => setShow(!show)}
-                aria-label={show ? 'Hide password' : 'Show password'}
-              >
-                <Eye off={!show} />
-              </button>
-            </div>
-
-            <div className="su-row">
-              <label className="su-chk">
+            <form onSubmit={handleSignIn} className="su-form">
+              <div className="su-field">
                 <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  type="text"
+                  placeholder="Email or Username"
+                  value={identifier}
+                  onChange={(e) => {
+                    setIdentifier(e.target.value);
+                    if (errorMessage) setErrorMessage('');
+                  }}
+                  autoComplete="username"
+                  required
                 />
-                <span>Remember me</span>
-              </label>
-              <button
-                type="button"
-                className="su-link"
-                onClick={() => toast.info('Please contact your administrator for password recovery.')}
-              >
-                Forgot password?
+              </div>
+
+              <div className="su-field">
+                <input
+                  type={show ? 'text' : 'password'}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMessage) setErrorMessage('');
+                  }}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="su-eye"
+                  onClick={() => setShow(!show)}
+                  aria-label={show ? 'Hide password' : 'Show password'}
+                >
+                  <Eye off={!show} />
+                </button>
+              </div>
+
+              <div className="su-row">
+                <label className="su-chk">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                  />
+                  <span>Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  className="su-link"
+                  onClick={() => toast.info('Please contact your administrator for password recovery.')}
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              <button type="submit" className="su-submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <span className="su-spin" />
+                    <span>Authenticating...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign in</span>
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </>
+                )}
               </button>
+            </form>
+          </div>
+
+          <div className="su-footer">
+            End-to-end encrypted session • Hyna Studio
+          </div>
+        </section>
+
+        <section className="su-grid" aria-hidden="true">
+          <div className="su-t su-img" />
+          <div className="su-t su-img b" />
+          <div className="su-t su-img c" />
+          <div className="su-t su-img d" />
+
+          <div className="su-t su-img e" />
+          <div className="su-t su-img b" />
+          <div className="su-t su-img c" />
+          <div className="su-t su-img d" />
+
+          <div className="su-t su-img d" />
+          <div className="su-t su-dark">
+            <div className="su-chips">
+              <div className="su-chip m"><Check />verify_session</div>
+              <div className="su-chip n"><Check />decrypt_vault</div>
+              <div className="su-chip a"><span className="su-spin" />sync_workspace..</div>
             </div>
+            <h3>Fast Access</h3>
+            <p>Secure session access in milliseconds</p>
+          </div>
+          <div className="su-t su-yellow">
+            <h3>Encrypted<br />Workspace</h3>
+            <p>End-to-end encrypted session with database role enforcement</p>
+            <svg className="su-shape" viewBox="0 0 32 32" fill="#111"><circle cx="11" cy="11" r="9" /><path d="M14 16h13a3 3 0 0 1 3 3v9H17a3 3 0 0 1-3-3v-9Z" /></svg>
+          </div>
+          <div className="su-t su-green">
+            <img
+              src="/logo.png"
+              alt="Hyna Studio Glyph"
+              style={{
+                width: '44px',
+                height: '44px',
+                objectFit: 'contain',
+                filter: 'brightness(0)',
+              }}
+            />
+          </div>
 
-            <button type="submit" className="su-submit" disabled={isLoading} id="login-submit-button">
-              {isLoading ? (
-                <>
-                  <span className="su-spin" />
-                  <span>Authenticating...</span>
-                </>
-              ) : (
-                <span>Sign in</span>
-              )}
-            </button>
-          </form>
-
+          <div className="su-t su-img e" />
+          <div className="su-t su-black" />
+          <div className="su-t su-img e" />
+          <div className="su-t su-img d" />
         </section>
       </div>
     </div>
@@ -601,3 +688,4 @@ export function LoginPage() {
 }
 
 export default LoginPage;
+

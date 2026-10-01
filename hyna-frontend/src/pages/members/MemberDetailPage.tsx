@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, Calendar, Edit3, Trash2, AlertTriangle, UserCheck } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, Edit3, Trash2, AlertTriangle, UserCheck, Landmark, Copy, Check } from 'lucide-react';
 import { Button, Avatar, Badge, Tabs, ProgressBar, EmptyState, LoadingState, Modal, Input, Select } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
@@ -32,7 +32,18 @@ export function MemberDetailPage() {
     employeeId: '',
     phone: '',
     status: 'active' as 'active' | 'inactive',
+    bankAccountNumber: '',
+    ifsc: '',
   });
+
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopy = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    toast.success('Copied to clipboard');
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -73,6 +84,8 @@ export function MemberDetailPage() {
       employeeId: member.employeeId || '',
       phone: member.phone || '',
       status: member.status || 'active',
+      bankAccountNumber: member.bankAccountNumber || '',
+      ifsc: member.ifsc || '',
     });
     setShowEditModal(true);
   };
@@ -95,6 +108,8 @@ export function MemberDetailPage() {
         employeeId: editFormData.employeeId.trim(),
         phone: editFormData.phone.trim(),
         status: editFormData.status,
+        bankAccountNumber: editFormData.bankAccountNumber.trim(),
+        ifsc: editFormData.ifsc.trim().toUpperCase(),
       });
 
       setMember(updated);
@@ -149,7 +164,7 @@ export function MemberDetailPage() {
       <div className="card p-6 mb-6 animate-slide-up">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-5">
           <div className="flex flex-col sm:flex-row items-start gap-5 flex-1">
-            <Avatar name={member.name} size="xl" />
+            <Avatar name={member.name} src={member.avatar} size="xl" />
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-xl font-semibold">{member.name}</h1>
@@ -174,6 +189,10 @@ export function MemberDetailPage() {
                 <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{member.email}</span>
                 <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{member.phone || 'No phone'}</span>
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Joined {formatDate(member.joinDate)}</span>
+                <span className="flex items-center gap-1 font-mono">
+                  <Landmark className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                  {member.bankAccountNumber ? `A/C •••• ${member.bankAccountNumber.slice(-4)}` : 'Bank: Not Set'}
+                </span>
               </div>
               {member.skills && member.skills.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-3">
@@ -208,11 +227,81 @@ export function MemberDetailPage() {
       <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} className="mb-6 w-fit" />
 
       {activeTab === 'profile' && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-fade-in">
-          <div className="card p-4 text-center"><p className="text-2xl font-semibold">{memberProjects.length}</p><p className="text-xs text-[var(--color-muted-foreground)]">Projects</p></div>
-          <div className="card p-4 text-center"><p className="text-2xl font-semibold">{memberTasks.length}</p><p className="text-xs text-[var(--color-muted-foreground)]">Total Tasks</p></div>
-          <div className="card p-4 text-center"><p className="text-2xl font-semibold text-emerald-500">{memberTasks.filter(t => t.status === 'completed').length}</p><p className="text-xs text-[var(--color-muted-foreground)]">Completed</p></div>
-          <div className="card p-4 text-center"><p className="text-2xl font-semibold text-blue-500">{memberTasks.filter(t => t.status === 'in-progress').length}</p><p className="text-xs text-[var(--color-muted-foreground)]">In Progress</p></div>
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="card p-4 text-center"><p className="text-2xl font-semibold">{memberProjects.length}</p><p className="text-xs text-[var(--color-muted-foreground)]">Projects</p></div>
+            <div className="card p-4 text-center"><p className="text-2xl font-semibold">{memberTasks.length}</p><p className="text-xs text-[var(--color-muted-foreground)]">Total Tasks</p></div>
+            <div className="card p-4 text-center"><p className="text-2xl font-semibold text-emerald-500">{memberTasks.filter(t => t.status === 'completed').length}</p><p className="text-xs text-[var(--color-muted-foreground)]">Completed</p></div>
+            <div className="card p-4 text-center"><p className="text-2xl font-semibold text-blue-500">{memberTasks.filter(t => t.status === 'in-progress').length}</p><p className="text-xs text-[var(--color-muted-foreground)]">In Progress</p></div>
+          </div>
+
+          {/* Banking & Direct Settlement Card */}
+          <div className="card p-6 border border-[var(--color-border)] bg-[var(--color-card)] rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-[var(--color-border)]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/10 text-[var(--color-primary)] flex items-center justify-center shrink-0">
+                  <Landmark className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--color-foreground)]">
+                    Banking & Direct Payout Details
+                  </h3>
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    Official account details registered for salary disbursement and expense reimbursements.
+                  </p>
+                </div>
+              </div>
+              {canManageMembers && (
+                <Button variant="outline" size="sm" onClick={handleOpenEditModal} className="text-xs gap-1.5 self-start sm:self-auto cursor-pointer">
+                  <Edit3 className="w-3.5 h-3.5" /> Edit Bank Details
+                </Button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-muted)]/30 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider block mb-1">
+                    Bank Account Number
+                  </span>
+                  <span className="text-base font-mono font-semibold tracking-wide text-[var(--color-foreground)]">
+                    {member.bankAccountNumber || 'Not provided yet'}
+                  </span>
+                </div>
+                {member.bankAccountNumber && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(member.bankAccountNumber!, 'account')}
+                    className="p-2 rounded-lg hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors cursor-pointer"
+                    title="Copy Account Number"
+                  >
+                    {copiedField === 'account' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+              <div className="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-muted)]/30 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider block mb-1">
+                    IFSC Code
+                  </span>
+                  <span className="text-base font-mono font-semibold tracking-wide uppercase text-[var(--color-foreground)]">
+                    {member.ifsc || 'Not provided yet'}
+                  </span>
+                </div>
+                {member.ifsc && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(member.ifsc!, 'ifsc')}
+                    className="p-2 rounded-lg hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors cursor-pointer"
+                    title="Copy IFSC Code"
+                  >
+                    {copiedField === 'ifsc' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -353,6 +442,30 @@ export function MemberDetailPage() {
               { value: 'inactive', label: 'Inactive / Suspended' },
             ]}
           />
+
+          <div className="pt-2 border-t border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Landmark className="w-4 h-4 text-[var(--color-primary)]" />
+              <span className="text-xs font-semibold text-[var(--color-foreground)] uppercase tracking-wider">
+                Banking & Payout Details
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Bank Account Number"
+                placeholder="e.g. 123456789012"
+                value={editFormData.bankAccountNumber}
+                onChange={(e) => setEditFormData(f => ({ ...f, bankAccountNumber: e.target.value }))}
+              />
+              <Input
+                label="IFSC Code"
+                placeholder="e.g. HDFC0001234"
+                value={editFormData.ifsc}
+                onChange={(e) => setEditFormData(f => ({ ...f, ifsc: e.target.value.toUpperCase() }))}
+                maxLength={11}
+              />
+            </div>
+          </div>
         </form>
       </Modal>
 

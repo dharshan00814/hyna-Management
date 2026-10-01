@@ -124,6 +124,8 @@ function mapDatabaseProfile(row: any): User {
     lastActive: row.last_active || row.updated_at || new Date().toISOString(),
     bio: row.bio || '',
     skills: row.skills || [],
+    bankAccountNumber: row.bank_account_number || row.bankAccountNumber || '',
+    ifsc: row.ifsc_code || row.ifsc || '',
   };
 }
 

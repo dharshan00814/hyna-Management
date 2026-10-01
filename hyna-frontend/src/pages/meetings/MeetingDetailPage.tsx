@@ -78,10 +78,11 @@ export function MeetingDetailPage() {
       return;
     }
 
-    let roomId = meeting.id;
-    const parts = rawLink.split('/');
-    const last = parts[parts.length - 1];
-    if (last) roomId = last;
+    let roomId = meeting.meetingRoomId || meeting.id;
+    if (rawLink.includes('/meeting/')) {
+      const parts = rawLink.split('/meeting/');
+      if (parts[1]) roomId = parts[1].split('?')[0];
+    }
     navigate(`/meeting/${roomId}`);
   };
 
