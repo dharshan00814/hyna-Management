@@ -57,7 +57,7 @@ export function ParticipantTile({
         autoPlay
         playsInline
         muted={isLocal} // Always mute local video element to avoid audio feedback
-        className={`w-full h-full object-cover ${!hasVideoStream ? 'hidden' : ''} ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
+        className={`w-full h-full object-cover ${!hasVideoStream ? 'opacity-0 absolute inset-0 -z-10' : 'relative z-0'} ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
       />
       
       {!hasVideoStream && (
