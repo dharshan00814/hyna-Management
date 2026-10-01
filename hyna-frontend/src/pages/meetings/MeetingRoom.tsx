@@ -162,11 +162,11 @@ export function MeetingRoom() {
     },
   });
 
-  // 4. Automatic Attendance Hook (Only activates in 'in-meeting' stage)
+  // 4. Automatic Attendance Hook (Only activates in 'in-meeting' stage when signaling is connected)
   const { finalizeAttendance } = useMeetingAttendance(
     meeting?.id,
     currentUser?.id,
-    meetingStage === 'in-meeting'
+    meetingStage === 'in-meeting' && overallConnectionState === 'connected'
   );
 
   // 5. In-Meeting Chat Hook
