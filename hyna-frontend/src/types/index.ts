@@ -138,6 +138,23 @@ export interface AttendanceRecord {
   checkOut?: string;
   workingHours?: string;
   notes?: string;
+  points?: number;
+}
+
+export interface UserStreakAndPoints {
+  currentStreak: number;
+  longestStreak: number;
+  totalPoints: number;
+  todayPoints: number;
+  todayStatus: 'not_started' | 'checked_in' | 'completed' | 'missed';
+  penaltyAppliedToday: boolean;
+  historyDays: {
+    date: string;
+    dayLabel: string;
+    isToday: boolean;
+    attended: boolean;
+    points: number;
+  }[];
 }
 
 // --- Daily Report ---

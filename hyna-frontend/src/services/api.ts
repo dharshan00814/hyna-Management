@@ -5,6 +5,19 @@
 
 import { supabase, isSupabaseConfigured, createEphemeralClient } from '@/lib/supabase';
 import { getOrgMemberDetails } from '@/stores';
+import {
+  calculateRecordPoints,
+  parseTimeToMinutes,
+  PUNCH_IN_START_MIN,
+  PUNCH_IN_ONTIME_END_MIN,
+  PUNCH_IN_GRACE_END_MIN,
+  PUNCH_OUT_START_MIN,
+  PUNCH_OUT_END_MIN,
+  POINTS_ON_TIME,
+  POINTS_GRACE,
+  POINTS_MISSED_PUNCHOUT_10,
+  POINTS_MISSED_PUNCHOUT_5,
+} from '@/lib/attendanceRules';
 import type {
   User, UserRole, Project, Module, Task, Meeting, AttendanceRecord,
   DailyReport, Notification, ChatChannel, ChatMessage,
@@ -223,7 +236,7 @@ function mapMeeting(row: any): Meeting {
 
 // Helper: Transform Attendance row
 function mapAttendance(row: any): AttendanceRecord {
-  return {
+  const baseRecord: AttendanceRecord = {
     id: row.id,
     userId: row.user_id,
     date: row.date,
@@ -232,7 +245,15 @@ function mapAttendance(row: any): AttendanceRecord {
     checkOut: row.check_out,
     workingHours: row.working_hours,
     notes: row.notes,
+    points: row.points !== undefined && row.points !== null ? Number(row.points) : undefined,
   };
+
+  if (baseRecord.points === undefined) {
+    const evalRes = calculateRecordPoints(baseRecord);
+    baseRecord.points = evalRes.finalPoints;
+  }
+
+  return baseRecord;
 }
 
 // Helper: Transform Daily Report row
@@ -1553,12 +1574,30 @@ export async function getTodayAttendance(userId: string): Promise<AttendanceReco
   return mapAttendance(data);
 }
 
-export async function checkIn(userId: string): Promise<AttendanceRecord> {
+export async function checkIn(userId: string, overrideTime?: Date): Promise<AttendanceRecord> {
   if (!userId) throw new Error('User ID is required to check in.');
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date();
+  const now = overrideTime instanceof Date ? overrideTime : new Date();
+  const today = now.toISOString().split('T')[0];
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const isLate = now.getHours() > 10 || (now.getHours() === 10 && now.getMinutes() > 15);
+
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  let pointsAwarded = 0;
+  let isLate = false;
+  let notes = '';
+
+  if (currentMins >= PUNCH_IN_START_MIN && currentMins <= PUNCH_IN_ONTIME_END_MIN) {
+    pointsAwarded = POINTS_ON_TIME;
+    isLate = false;
+    notes = `Points: ${pointsAwarded} | On-time Punch In (9:00 AM - 10:00 AM)`;
+  } else if (currentMins > PUNCH_IN_ONTIME_END_MIN && currentMins <= PUNCH_IN_GRACE_END_MIN) {
+    pointsAwarded = POINTS_GRACE;
+    isLate = true;
+    notes = `Points: ${pointsAwarded} | Grace Window Punch In (10:00 AM - 10:15 AM)`;
+  } else if (currentMins < PUNCH_IN_START_MIN) {
+    throw new Error('Punch In is disabled before 9:00 AM. Window opens at 9:00 AM.');
+  } else {
+    throw new Error('Punch In is closed for today. Cut-off was 10:15 AM.');
+  }
 
   const fallbackRecord: AttendanceRecord = {
     id: `att_${Date.now()}`,
@@ -1567,6 +1606,8 @@ export async function checkIn(userId: string): Promise<AttendanceRecord> {
     status: isLate ? 'late' : 'present',
     checkIn: timeNow,
     workingHours: '0h 00m',
+    notes,
+    points: pointsAwarded,
   };
 
   try {
@@ -1576,30 +1617,80 @@ export async function checkIn(userId: string): Promise<AttendanceRecord> {
       status: isLate ? 'late' : 'present',
       check_in: timeNow,
       hours_worked: 0,
+      notes,
     };
 
-    const { data, error } = await supabase
+    let res = await supabase
       .from('attendance_records')
-      .upsert(payload, { onConflict: 'user_id,date' })
+      .upsert({ ...payload, points: pointsAwarded }, { onConflict: 'user_id,date' })
       .select()
       .single();
 
-    if (error) {
-      console.warn('Supabase check-in rejected (using local session fallback):', error);
+    if (res.error && (res.error.message?.includes('points') || res.error.code === '42703')) {
+      res = await supabase
+        .from('attendance_records')
+        .upsert(payload, { onConflict: 'user_id,date' })
+        .select()
+        .single();
+    }
+
+    if (res.error) {
+      console.warn('Supabase check-in rejected (using local session fallback):', res.error);
       return fallbackRecord;
     }
-    return mapAttendance(data);
-  } catch (err) {
+    const result = mapAttendance(res.data);
+    result.points = pointsAwarded;
+    return result;
+  } catch (err: any) {
+    if (err.message && (err.message.includes('Punch In is disabled') || err.message.includes('Punch In is closed'))) {
+      throw err;
+    }
     console.warn('Check-in network error (using local session fallback):', err);
     return fallbackRecord;
   }
 }
 
-export async function checkOut(userId: string): Promise<AttendanceRecord> {
+export async function checkOut(userId: string, overrideTime?: Date): Promise<AttendanceRecord> {
   if (!userId) throw new Error('User ID is required to check out.');
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date();
+  const now = overrideTime instanceof Date ? overrideTime : new Date();
+  const today = now.toISOString().split('T')[0];
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+
+  if (currentMins < PUNCH_OUT_START_MIN) {
+    throw new Error('Punch Out is disabled before 9:00 PM. Shifts conclude between 9:00 PM and 10:00 PM.');
+  }
+  if (currentMins > PUNCH_OUT_END_MIN) {
+    throw new Error('Punch Out is closed after 10:00 PM. Missed punch-out penalty has been applied.');
+  }
+
+  let existingCheckIn = '';
+  let existingNotes = '';
+  let basePoints = POINTS_ON_TIME;
+
+  try {
+    const { data: existing } = await supabase
+      .from('attendance_records')
+      .select('check_in, points, notes')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .maybeSingle();
+
+    if (existing) {
+      existingCheckIn = existing.check_in || '';
+      existingNotes = existing.notes || '';
+      const inMins = parseTimeToMinutes(existingCheckIn);
+      if (inMins !== null && inMins > PUNCH_IN_ONTIME_END_MIN && inMins <= PUNCH_IN_GRACE_END_MIN) {
+        basePoints = POINTS_GRACE;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const { formatted, numeric } = calculateDuration(existingCheckIn, timeNow);
+  const finalPoints = basePoints;
+  const notes = `${existingNotes} | Punch Out at ${timeNow} (Full ${finalPoints} pts retained)`.trim();
 
   const fallbackRecord: AttendanceRecord = {
     id: `att_${Date.now()}`,
@@ -1607,41 +1698,48 @@ export async function checkOut(userId: string): Promise<AttendanceRecord> {
     date: today,
     status: 'present',
     checkOut: timeNow,
-    workingHours: '8h 00m',
+    workingHours: formatted,
+    notes,
+    points: finalPoints,
   };
 
   try {
-    // Get existing check_in time to calculate exact working hours
-    const { data: existing } = await supabase
-      .from('attendance_records')
-      .select('check_in')
-      .eq('user_id', userId)
-      .eq('date', today)
-      .maybeSingle();
-
-    const { formatted, numeric } = calculateDuration(existing?.check_in, timeNow);
-
     const updatePayload: any = {
       check_out: timeNow,
       hours_worked: numeric,
+      notes,
     };
 
-    const { data, error } = await supabase
+    let res = await supabase
       .from('attendance_records')
-      .update(updatePayload)
+      .update({ ...updatePayload, points: finalPoints })
       .eq('user_id', userId)
       .eq('date', today)
       .select()
       .single();
 
-    if (error) {
-      console.warn('Supabase check-out rejected (using local session fallback):', error);
+    if (res.error && (res.error.message?.includes('points') || res.error.code === '42703')) {
+      res = await supabase
+        .from('attendance_records')
+        .update(updatePayload)
+        .eq('user_id', userId)
+        .eq('date', today)
+        .select()
+        .single();
+    }
+
+    if (res.error) {
+      console.warn('Supabase check-out rejected (using local session fallback):', res.error);
       return fallbackRecord;
     }
-    const result = mapAttendance(data);
+    const result = mapAttendance(res.data);
     result.workingHours = formatted;
+    result.points = finalPoints;
     return result;
-  } catch (err) {
+  } catch (err: any) {
+    if (err.message && (err.message.includes('Punch Out is disabled') || err.message.includes('Punch Out is closed'))) {
+      throw err;
+    }
     console.warn('Check-out network error (using local session fallback):', err);
     return fallbackRecord;
   }
