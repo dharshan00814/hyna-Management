@@ -18,7 +18,7 @@ import {
 import { Avatar, Badge, Button, LoadingState } from '@/components/ui';
 import { getStatusColor, formatDate, cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getUsers, getAttendance, getUserById, checkIn, checkOut } from '@/services/api';
+import { getUsers, getAttendance, getUserById, checkIn, checkOut, resetTodayAttendance } from '@/services/api';
 import { toast } from 'sonner';
 import type { AttendanceRecord } from '@/types';
 import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
@@ -168,6 +168,20 @@ export function AttendancePage() {
       toast.success(`Clocked out successfully at ${record.checkOut}! Full points preserved! Logged: ${record.workingHours || 'today'}`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to record check-out');
+    } finally {
+      setIsPunching(false);
+    }
+  };
+
+  const handleResetToday = async () => {
+    if (!currentUser?.id) return;
+    try {
+      setIsPunching(true);
+      await resetTodayAttendance(currentUser.id);
+      setAttendance(prev => prev.filter(a => !(a.userId === currentUser.id && a.date === todayStr)));
+      toast.success("Today's attendance has been completely reset!");
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to reset attendance');
     } finally {
       setIsPunching(false);
     }
@@ -504,6 +518,18 @@ export function AttendancePage() {
                     {punchInStatus.badgeText}
                   </span>
                 </div>
+              )}
+
+              {/* Reset Today's Shift for Admin/Testing */}
+              {(myTodayRecord?.checkIn || isClockedIn || isClockedOut) && (
+                <button
+                  onClick={handleResetToday}
+                  disabled={isPunching}
+                  className="mt-3 text-[11px] text-[var(--color-muted-foreground)] hover:text-red-500 underline transition-colors cursor-pointer"
+                  title="Reset today's shift record"
+                >
+                  Reset Today's Attendance
+                </button>
               )}
             </div>
           </div>

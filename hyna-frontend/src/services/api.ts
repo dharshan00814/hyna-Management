@@ -1745,6 +1745,39 @@ export async function checkOut(userId: string, overrideTime?: Date): Promise<Att
   }
 }
 
+export async function resetTodayAttendance(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const { error: delError } = await supabase
+      .from('attendance_records')
+      .delete()
+      .eq('user_id', userId)
+      .eq('date', today);
+
+    if (delError) {
+      console.warn('Supabase delete error (attempting nullify update):', delError);
+      await supabase
+        .from('attendance_records')
+        .update({
+          check_in: null,
+          check_out: null,
+          working_hours: null,
+          hours_worked: 0,
+          status: 'present',
+          notes: 'Reset by user',
+          points: 0,
+        })
+        .eq('user_id', userId)
+        .eq('date', today);
+    }
+    return true;
+  } catch (err) {
+    console.error('Error resetting today attendance:', err);
+    return false;
+  }
+}
+
 // ============================================================
 // DAILY REPORTS API
 // ============================================================
