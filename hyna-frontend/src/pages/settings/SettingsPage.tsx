@@ -721,8 +721,17 @@ export function SettingsPage() {
                       <Send className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                       Send Test Push
                     </Button>
-
-                    {/* Unsubscribe option removed as per mandatory notification policy */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={disablePush}
+                      disabled={isPushLoading}
+                      className="gap-1.5 cursor-pointer text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                    >
+                      <BellOff className="w-3.5 h-3.5" />
+                      Unsubscribe Device
+                    </Button>
                   </>
                 )}
               </div>
@@ -748,10 +757,11 @@ export function SettingsPage() {
                 <span className="text-xs font-semibold text-[var(--color-foreground)]">Global Push</span>
                 <input
                   type="checkbox"
-                  checked={true}
-                  disabled={true}
-                  className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-not-allowed opacity-60"
-                  title="Mandatory for all members"
+                  checked={preferences.push_enabled}
+                  disabled={isLoadingPrefs}
+                  onChange={(e) => handleTogglePreference('push_enabled', e.target.checked)}
+                  className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
+                  title="Enable or disable all push notifications"
                 />
               </div>
             </div>

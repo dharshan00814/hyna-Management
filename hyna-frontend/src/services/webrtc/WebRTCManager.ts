@@ -69,8 +69,17 @@ export class WebRTCManager {
           this.callbacks.onPeerConnectionStateChange('server', 'connected');
           
           this.socket.emit('join-room', { roomId, user, micEnabled, videoEnabled });
-          
           this.socket.once('room-joined', (data) => {
+            // Proactively initiate connections to all existing participants
+            if (data.participants && Array.isArray(data.participants)) {
+              data.participants.forEach((p: any) => {
+                this.createOffer(p.socketId).then(offer => {
+                  if (offer) {
+                    this.socket.emit('offer', { target: p.socketId, sdp: offer });
+                  }
+                }).catch(err => console.error('[WebRTC] Error creating proactive offer:', err));
+              });
+            }
             resolve();
           });
         } catch (err) {
@@ -169,22 +178,17 @@ export class WebRTCManager {
     };
 
     pc.ontrack = (event) => {
-      let stream = this.remoteStreams.get(peerSocketId);
+      // Use the remote stream provided by the browser, or create one if it doesn't exist
+      let stream = event.streams && event.streams[0];
       if (!stream) {
-        stream = new MediaStream();
-        this.remoteStreams.set(peerSocketId, stream);
-        this.callbacks.onRemoteStream(peerSocketId, stream);
+        stream = new MediaStream([event.track]);
       }
-      if (!stream.getTracks().find(t => t.id === event.track.id)) {
-        // Create a new stream so React and HTMLVideoElement reliably detect the update
-        const newStream = new MediaStream([
-          ...stream.getTracks(),
-          event.track
-        ]);
-        this.remoteStreams.set(peerSocketId, newStream);
-        if (this.callbacks.onRemoteStreamUpdate) {
-          this.callbacks.onRemoteStreamUpdate(peerSocketId, newStream);
-        }
+
+      this.remoteStreams.set(peerSocketId, stream);
+      
+      // Always trigger onRemoteStreamUpdate so React replaces the old stream reference
+      if (this.callbacks.onRemoteStreamUpdate) {
+        this.callbacks.onRemoteStreamUpdate(peerSocketId, stream);
       }
     };
 

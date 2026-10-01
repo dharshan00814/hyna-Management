@@ -31,16 +31,16 @@ export function ParticipantTile({
     (participant.videoEnabled || participant.isScreenSharing)
   );
 
-  // Attach stream to video tag
+  // Attach stream to video tag to guarantee audio playback
   useEffect(() => {
     if (videoRef.current) {
-      if (stream && hasVideoStream) {
+      if (stream) {
         videoRef.current.srcObject = stream;
       } else {
         videoRef.current.srcObject = null;
       }
     }
-  }, [stream, participant.videoEnabled, participant.isScreenSharing, hasVideoStream]);
+  }, [stream]);
 
   return (
     <div
