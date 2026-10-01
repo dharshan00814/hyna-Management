@@ -1736,7 +1736,7 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
       checkInTime: timeNow,
     }).catch(console.error);
 
-    return mapAttendance(data);
+    return mapAttendance(res.data);
   } catch (err) {
     console.warn('Check-in network error (using local session fallback):', err);
     return fallbackRecord;
