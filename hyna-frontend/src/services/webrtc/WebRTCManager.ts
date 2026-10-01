@@ -45,15 +45,12 @@ export class WebRTCManager {
     // Attach local tracks to all active peer connections
     if (stream) {
       this.peerConnections.forEach((pc, peerId) => {
-        const senders = pc.getSenders();
         stream.getTracks().forEach(track => {
-          const existingSender = senders.find(s => s.track?.kind === track.kind);
-          if (existingSender) {
-            existingSender.replaceTrack(track).catch(err => {
+          const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === track.kind);
+          if (transceiver) {
+            transceiver.sender.replaceTrack(track).catch(err => {
               this.callbacks.onError(err, `replaceTrack for ${peerId}`);
             });
-          } else {
-            pc.addTrack(track, stream);
           }
         });
       });
@@ -74,14 +71,20 @@ export class WebRTCManager {
     pc = new RTCPeerConnection(this.rtcConfig);
     this.peerConnections.set(peerId, pc);
 
+    // Pre-create transceivers so we can toggle media later without renegotiation
+    const localStreamToUse = this.screenStream || this.localStream || new MediaStream();
+    pc.addTransceiver('audio', { direction: 'sendrecv', streams: [localStreamToUse] });
+    pc.addTransceiver('video', { direction: 'sendrecv', streams: [localStreamToUse] });
+
     // Add local tracks to new peer connection
     const currentStream = this.screenStream || this.localStream;
     if (currentStream) {
       currentStream.getTracks().forEach(track => {
-        try {
-          pc?.addTrack(track, currentStream);
-        } catch (e) {
-          console.warn(`[WebRTC] Failed to add track for peer ${peerId}:`, e);
+        const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === track.kind);
+        if (transceiver) {
+          transceiver.sender.replaceTrack(track).catch(e => {
+            console.warn(`[WebRTC] Failed to attach initial track for peer ${peerId}:`, e);
+          });
         }
       });
     }
@@ -246,9 +249,9 @@ export class WebRTCManager {
 
     // Replace video sender track on all active connections
     for (const [peerId, pc] of this.peerConnections) {
-      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (videoSender) {
-        await videoSender.replaceTrack(screenVideoTrack).catch(err => {
+      const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+      if (transceiver) {
+        await transceiver.sender.replaceTrack(screenVideoTrack).catch(err => {
           this.callbacks.onError(err, `Screen share replaceTrack for ${peerId}`);
         });
       }
@@ -265,9 +268,9 @@ export class WebRTCManager {
 
     // Restore camera video track on all active connections
     for (const [peerId, pc] of this.peerConnections) {
-      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (videoSender && cameraVideoTrack) {
-        await videoSender.replaceTrack(cameraVideoTrack).catch(err => {
+      const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+      if (transceiver) {
+        await transceiver.sender.replaceTrack(cameraVideoTrack || null).catch(err => {
           this.callbacks.onError(err, `Restore camera replaceTrack for ${peerId}`);
         });
       }
@@ -294,9 +297,9 @@ export class WebRTCManager {
   // Replace video track across all active peer connections (or clear if null)
   public async replaceVideoTrack(newTrack: MediaStreamTrack | null): Promise<void> {
     for (const [peerId, pc] of this.peerConnections) {
-      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (videoSender) {
-        await videoSender.replaceTrack(newTrack).catch(err => {
+      const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+      if (transceiver) {
+        await transceiver.sender.replaceTrack(newTrack).catch(err => {
           this.callbacks.onError(err, `replaceVideoTrack for ${peerId}`);
         });
       }

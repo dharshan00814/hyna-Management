@@ -25,23 +25,22 @@ export function ParticipantTile({
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  const hasVideoStream = Boolean(
+    stream && 
+    stream.getVideoTracks().length > 0 && 
+    (participant.videoEnabled || participant.isScreenSharing)
+  );
+
   // Attach stream to video tag
   useEffect(() => {
     if (videoRef.current) {
-      if (stream) {
+      if (stream && hasVideoStream) {
         videoRef.current.srcObject = stream;
       } else {
         videoRef.current.srcObject = null;
       }
     }
-  }, [stream, participant.videoEnabled, participant.isScreenSharing]);
-
-  const hasVideoStream = Boolean(
-    stream && 
-    stream.getVideoTracks().length > 0 && 
-    stream.getVideoTracks().some(t => t.readyState === 'live') &&
-    (participant.videoEnabled || participant.isScreenSharing)
-  );
+  }, [stream, participant.videoEnabled, participant.isScreenSharing, hasVideoStream]);
 
   return (
     <div
