@@ -183,7 +183,7 @@ ALTER TABLE public.meeting_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meeting_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meeting_messages ENABLE ROW LEVEL SECURITY;
 
--- Meetings Policies (Clean, direct, non-recursive)
+-- Meetings Policies (Clean, direct, non-recursive, guest & team accessible)
 DROP POLICY IF EXISTS "meetings_select_policy" ON public.meetings;
 DROP POLICY IF EXISTS "meetings_select_all_authenticated" ON public.meetings;
 DROP POLICY IF EXISTS "meetings_select" ON public.meetings;
@@ -195,17 +195,17 @@ DROP POLICY IF EXISTS "meetings_delete_policy" ON public.meetings;
 DROP POLICY IF EXISTS "meetings_delete" ON public.meetings;
 
 CREATE POLICY "meetings_select_policy" ON public.meetings
-  FOR SELECT TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR SELECT TO authenticated, anon
+  USING (true);
 
 CREATE POLICY "meetings_insert_policy" ON public.meetings
-  FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT TO authenticated, anon
+  WITH CHECK (true);
 
 CREATE POLICY "meetings_update_policy" ON public.meetings
-  FOR UPDATE TO authenticated
-  USING (auth.uid() IS NOT NULL)
-  WITH CHECK (auth.uid() IS NOT NULL);
+  FOR UPDATE TO authenticated, anon
+  USING (true)
+  WITH CHECK (true);
 
 CREATE POLICY "meetings_delete_policy" ON public.meetings
   FOR DELETE TO authenticated
@@ -218,16 +218,16 @@ DROP POLICY IF EXISTS "meeting_participants_update" ON public.meeting_participan
 DROP POLICY IF EXISTS "meeting_participants_delete" ON public.meeting_participants;
 
 CREATE POLICY "meeting_participants_select" ON public.meeting_participants
-  FOR SELECT TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR SELECT TO authenticated, anon
+  USING (true);
 
 CREATE POLICY "meeting_participants_insert" ON public.meeting_participants
-  FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT TO authenticated, anon
+  WITH CHECK (true);
 
 CREATE POLICY "meeting_participants_update" ON public.meeting_participants
-  FOR UPDATE TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR UPDATE TO authenticated, anon
+  USING (true);
 
 CREATE POLICY "meeting_participants_delete" ON public.meeting_participants
   FOR DELETE TO authenticated
@@ -240,33 +240,33 @@ DROP POLICY IF EXISTS "meeting_attendance_update" ON public.meeting_attendance;
 DROP POLICY IF EXISTS "meeting_attendance_delete" ON public.meeting_attendance;
 
 CREATE POLICY "meeting_attendance_select" ON public.meeting_attendance
-  FOR SELECT TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR SELECT TO authenticated, anon
+  USING (true);
 
 CREATE POLICY "meeting_attendance_insert" ON public.meeting_attendance
-  FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT TO authenticated, anon
+  WITH CHECK (true);
 
 CREATE POLICY "meeting_attendance_update" ON public.meeting_attendance
-  FOR UPDATE TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR UPDATE TO authenticated, anon
+  USING (true);
 
 CREATE POLICY "meeting_attendance_delete" ON public.meeting_attendance
   FOR DELETE TO authenticated
   USING (auth.uid() IS NOT NULL);
 
--- Meeting Messages Policies
+-- Meeting Messages Policies (In-Call Chat)
 DROP POLICY IF EXISTS "meeting_messages_select" ON public.meeting_messages;
 DROP POLICY IF EXISTS "meeting_messages_insert" ON public.meeting_messages;
 DROP POLICY IF EXISTS "meeting_messages_delete" ON public.meeting_messages;
 
 CREATE POLICY "meeting_messages_select" ON public.meeting_messages
-  FOR SELECT TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR SELECT TO authenticated, anon
+  USING (true);
 
 CREATE POLICY "meeting_messages_insert" ON public.meeting_messages
-  FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT TO authenticated, anon
+  WITH CHECK (true);
 
 CREATE POLICY "meeting_messages_delete" ON public.meeting_messages
   FOR DELETE TO authenticated
