@@ -57,24 +57,43 @@ export function recordDeletedMeetingId(id: string, roomId?: string) {
   } catch {}
 }
 
+// Explicitly blacklisted/removed meetings requested by user
+export const PURGED_MEETING_TITLES = new Set([
+  'summa',
+  'testing01',
+  'testing02',
+  'daily engineering standup',
+  'product review & sprint demo',
+  'vvv',
+  'hi',
+  'ast',
+  'core architecture & security sync',
+]);
+
+export function isPurgedMeeting(m: { id?: string; meetingRoomId?: string; title?: string }): boolean {
+  if (!m) return false;
+  const deletedIds = getDeletedMeetingIds();
+  if (m.id && deletedIds.has(m.id)) return true;
+  if (m.meetingRoomId && deletedIds.has(m.meetingRoomId)) return true;
+  if (m.id && (
+    m.id === 'mt_standup_daily' || 
+    m.id === 'mt_product_review' || 
+    m.id === 'mt_arch_planning' ||
+    m.id === 'mt_apeavegg' ||
+    m.id === 'mt_wt94rs6f'
+  )) return true;
+  if (m.title && PURGED_MEETING_TITLES.has(m.title.trim().toLowerCase())) return true;
+  return false;
+}
+
 function initMeetingsCache(): Meeting[] {
   try {
     const stored = localStorage.getItem('hyna_meetings_cache');
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) {
-        const deletedIds = getDeletedMeetingIds();
-        // Filter out removed default meetings and deleted meetings
-        const filtered = parsed.filter((m: Meeting) =>
-          !deletedIds.has(m.id) &&
-          (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
-          m.id !== 'mt_standup_daily' &&
-          m.id !== 'mt_product_review' &&
-          m.id !== 'mt_arch_planning' &&
-          m.title !== 'Daily Engineering Standup' &&
-          m.title !== 'Product Review & Sprint Demo' &&
-          m.title !== 'Core Architecture & Security Sync'
-        );
+        // Filter out removed default meetings, user-deleted meetings, and blacklisted titles
+        const filtered = parsed.filter((m: Meeting) => !isPurgedMeeting(m));
         try {
           localStorage.setItem('hyna_meetings_cache', JSON.stringify(filtered));
         } catch {
