@@ -146,6 +146,15 @@ io.on('connection', (socket) => {
         participants: new Map(),
       };
       rooms.set(roomId, room);
+    } else {
+      // If user is reconnecting under a new socket ID, replace previous socket entry cleanly
+      for (const [existingSocketId, existingParticipant] of room.participants.entries()) {
+        if (existingParticipant.userId === resolvedUserId && existingSocketId !== socket.id) {
+          console.log(`[Rejoin] User ${resolvedName} reconnecting. Replacing old socket ${existingSocketId} with ${socket.id}`);
+          room.participants.delete(existingSocketId);
+          socketToRoom.delete(existingSocketId);
+        }
+      }
     }
 
     // Determine host status: strictly verify if user is host

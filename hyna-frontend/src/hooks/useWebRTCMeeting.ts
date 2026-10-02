@@ -100,6 +100,12 @@ export function useWebRTCMeeting({
       stream.getVideoTracks().forEach(t => t.enabled = activeVideo);
       setupSpeechDetection(stream);
 
+      if (webrtcManagerRef.current) {
+        console.log('[useWebRTCMeeting] Cleaning up existing WebRTCManager instance before starting new session');
+        webrtcManagerRef.current.cleanupAll();
+        webrtcManagerRef.current = null;
+      }
+
       const manager = new WebRTCManager(currentUser.id, {
         onRemoteStream: (peerId, remoteStream) => setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream)),
         onRemoteStreamUpdate: (peerId, remoteStream) => {

@@ -64,6 +64,36 @@ export class WebRTCManager {
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
+
+    // Comprehensive Socket.IO Connection Diagnostic & State Listeners
+    this.socket.on('connect', () => {
+      console.log('[Socket.IO] CONNECTED:', this.socket.id);
+      this.callbacks.onPeerConnectionStateChange('server', 'connected');
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('[Socket.IO] DISCONNECTED:', reason);
+      this.callbacks.onPeerConnectionStateChange('server', 'disconnected');
+    });
+
+    this.socket.on('connect_error', (error: any) => {
+      console.error('[Socket.IO] CONNECT ERROR:', {
+        message: error?.message,
+        description: error?.description,
+        type: error?.type,
+      });
+      this.callbacks.onPeerConnectionStateChange('server', 'failed');
+      this.callbacks.onError(error, 'socket connect');
+    });
+
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      console.log('[Socket.IO] RECONNECT ATTEMPT:', attempt);
+    });
+
+    this.socket.io.on('reconnect', (attempt) => {
+      console.log('[Socket.IO] RECONNECTED after attempt:', attempt);
+      this.callbacks.onPeerConnectionStateChange('server', 'connected');
+    });
   }
 
   // Determine deterministic negotiation role (Polite vs Impolite)
@@ -76,6 +106,14 @@ export class WebRTCManager {
 
   public async connectMesh(roomId: string, user: any, micEnabled: boolean, videoEnabled: boolean) {
     return new Promise<void>((resolve, reject) => {
+      // Remove any lingering listeners from previous connections
+      this.socket.off('room-joined');
+      this.socket.off('offer');
+      this.socket.off('answer');
+      this.socket.off('ice-candidate');
+      this.socket.off('participant_joined');
+      this.socket.off('participant_left');
+
       const joinRoom = () => {
         try {
           this.callbacks.onPeerConnectionStateChange('server', 'connected');
@@ -105,18 +143,8 @@ export class WebRTCManager {
       if (this.socket.connected) {
         joinRoom();
       } else {
-        this.socket.on('connect', joinRoom);
+        this.socket.once('connect', joinRoom);
       }
-
-      this.socket.on('connect_error', (err) => {
-        this.callbacks.onPeerConnectionStateChange('server', 'failed');
-        this.callbacks.onError(err, 'socket connect');
-        reject(err);
-      });
-
-      this.socket.on('disconnect', () => {
-        this.callbacks.onPeerConnectionStateChange('server', 'disconnected');
-      });
 
       // Handle incoming WebRTC signaling events
       this.socket.on('offer', async ({ callerSocketId, sdp }) => {

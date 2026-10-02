@@ -64,7 +64,7 @@ export function MeetingChat({
             <p className="text-[11px] text-white/30 mt-1">Send a message to start the discussion.</p>
           </div>
         ) : (
-          messages.map(msg => {
+          messages.map((msg, index) => {
             const isMe = msg.senderId === currentUserId;
             const timeStr = msg.timestamp
               ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -72,7 +72,7 @@ export function MeetingChat({
 
             return (
               <div
-                key={msg.id}
+                key={`${msg.id || 'msg'}-${index}`}
                 className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
               >
                 {!isMe && (
