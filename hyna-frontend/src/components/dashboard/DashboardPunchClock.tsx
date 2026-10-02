@@ -124,7 +124,7 @@ export function DashboardPunchClock({
   });
 
   const formattedDate = effectiveTime.toLocaleDateString('en-US', {
-    weekday: 'long',
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -237,12 +237,12 @@ export function DashboardPunchClock({
     <div
       className={cn(
         'relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-primary/5 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all mb-6',
-        isClockedIn && 'border-emerald-500/30 bg-gradient-to-r from-card via-emerald-500/[0.03] to-emerald-500/10',
-        isClockedOut && 'border-blue-500/30 bg-gradient-to-r from-card via-blue-500/[0.03] to-blue-500/10',
+        isClockedIn && 'border-emerald-500/30 bg-gradient-to-r from-card via-emerald-500/[0.04] to-emerald-500/10',
+        isClockedOut && 'border-blue-500/30 bg-gradient-to-r from-card via-blue-500/[0.04] to-blue-500/10',
         className
       )}
     >
-      {/* Ambient background glow */}
+      {/* Ambient decorative glow */}
       {isClockedIn && (
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
       )}
@@ -256,24 +256,32 @@ export function DashboardPunchClock({
           <div className="flex items-center gap-1.5">
             <Timer className="w-3.5 h-3.5 animate-spin" />
             <span className="font-semibold">
-              Simulation Clock Active: {formattedTime} ({formattedDate})
+              Simulation Active: {formattedTime} ({formattedDate})
             </span>
           </div>
           <button
             onClick={handleClearSimulation}
-            className="hover:underline font-bold text-[11px] text-violet-600 dark:text-violet-400"
+            className="hover:underline font-bold text-[11px] text-violet-600 dark:text-violet-400 cursor-pointer"
           >
             Reset to Real Clock ✕
           </button>
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        {/* Left Section: Live Clock & Date */}
-        <div className="flex items-start sm:items-center gap-3.5">
+      {/* Main Responsive Grid Container:
+          - Mobile / Tablet (< xl): Stacks into 3 neatly aligned rows
+          - Desktop (xl+): 3 cleanly balanced horizontal columns
+      */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        
+        {/* ======================================================== */}
+        {/* ROW 1 (Desktop: Left): Live Clock, Status Badge & Date */}
+        {/* ======================================================== */}
+        <div className="flex items-center gap-3.5 shrink-0">
+          {/* Status Icon */}
           <div
             className={cn(
-              'w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-xs transition-colors',
+              'w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 border shadow-xs transition-colors',
               isClockedIn
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                 : isClockedOut
@@ -282,23 +290,24 @@ export function DashboardPunchClock({
             )}
           >
             {isClockedIn ? (
-              <Zap className="w-6 h-6 animate-pulse" />
+              <Zap className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
             ) : isClockedOut ? (
-              <CheckCircle2 className="w-6 h-6" />
+              <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
             ) : (
-              <Clock className="w-6 h-6" />
+              <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
             )}
           </div>
 
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-2xl sm:text-3xl font-black tracking-tight text-[var(--color-foreground)]">
+          {/* Time, Badge & Subtitle */}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-mono text-xl sm:text-2xl font-black tracking-tight text-[var(--color-foreground)] whitespace-nowrap">
                 {formattedTime}
               </span>
               <Badge
                 variant="outline"
                 className={cn(
-                  'text-xs font-semibold px-2 py-0.5 border flex items-center gap-1.5',
+                  'text-[11px] font-semibold px-2 py-0.5 border flex items-center gap-1.5 shrink-0 whitespace-nowrap',
                   isClockedIn
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                     : isClockedOut
@@ -310,7 +319,7 @@ export function DashboardPunchClock({
               >
                 <span
                   className={cn(
-                    'w-2 h-2 rounded-full',
+                    'w-1.5 h-1.5 rounded-full shrink-0',
                     isClockedIn
                       ? 'bg-emerald-500 animate-ping'
                       : isClockedOut
@@ -321,151 +330,149 @@ export function DashboardPunchClock({
                   )}
                 />
                 {isClockedIn
-                  ? 'Shift In Progress'
+                  ? 'Shift Active'
                   : isClockedOut
                   ? 'Shift Completed'
                   : punchInStatus.badgeText}
               </Badge>
             </div>
-            <p className="text-xs text-[var(--color-muted-foreground)] mt-0.5 flex items-center gap-2">
+            <p className="text-[11px] sm:text-xs text-[var(--color-muted-foreground)] mt-0.5 whitespace-nowrap truncate">
               <span>{formattedDate}</span>
-              <span>•</span>
-              <span>Standard Shift: 9:00 AM – 10:00 PM</span>
+              <span className="mx-1.5 opacity-60">•</span>
+              <span>Shift: 9:00 AM – 10:00 PM</span>
             </p>
           </div>
         </div>
 
-        {/* Center Section: Live Shift / Attendance Metrics */}
-        <div className="flex items-center gap-4 sm:gap-6 py-2 px-3 sm:px-4 rounded-xl bg-background/60 border border-border/50 text-xs">
-          {isClockedIn ? (
-            <>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Punched In At
-                </span>
-                <span className="font-mono font-bold text-sm text-[var(--color-foreground)]">
-                  {todayRecord?.checkIn}
-                </span>
-              </div>
-              <div className="h-7 w-px bg-border/80" />
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Elapsed Time
-                </span>
-                <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <Timer className="w-3.5 h-3.5 animate-spin" />
-                  {getElapsedDuration(todayRecord?.checkIn, effectiveTime)}
-                </span>
-              </div>
-              <div className="h-7 w-px bg-border/80" />
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Points
-                </span>
-                <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  {pointEval?.finalPoints || 10} Pts
-                </span>
-              </div>
-            </>
-          ) : isClockedOut ? (
-            <>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Shift Duration
-                </span>
-                <span className="font-mono font-bold text-sm text-[var(--color-foreground)]">
-                  {todayRecord?.workingHours || 'Logged'}
-                </span>
-              </div>
-              <div className="h-7 w-px bg-border/80" />
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Time Window
-                </span>
-                <span className="font-mono font-bold text-xs text-[var(--color-muted-foreground)]">
-                  {todayRecord?.checkIn} → {todayRecord?.checkOut}
-                </span>
-              </div>
-              <div className="h-7 w-px bg-border/80" />
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Earned
-                </span>
-                <span className="font-bold text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  +{pointEval?.finalPoints || 10} Pts
-                </span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  On-Time Window
-                </span>
-                <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                  9:00 – 10:00 AM (+10 Pts)
-                </span>
-              </div>
-              <div className="h-7 w-px bg-border/80" />
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Grace Window
-                </span>
-                <span className="font-mono font-bold text-xs text-amber-600 dark:text-amber-400">
-                  10:00 – 10:15 AM (+5 Pts)
-                </span>
-              </div>
-              <div className="h-7 w-px bg-border/80" />
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block">
-                  Punch Out
-                </span>
-                <span className="font-mono font-bold text-xs text-[var(--color-muted-foreground)]">
-                  9:00 – 10:00 PM
-                </span>
-              </div>
-            </>
-          )}
+        {/* ======================================================== */}
+        {/* ROW 2 (Desktop: Middle): 3-Column Metrics Matrix        */}
+        {/* ======================================================== */}
+        <div className="w-full xl:w-auto xl:min-w-[380px] 2xl:min-w-[430px] rounded-xl bg-background/70 dark:bg-background/40 border border-border/60 p-2 sm:p-2.5 shadow-xs">
+          <div className="grid grid-cols-3 divide-x divide-border/60 text-center items-center">
+            {isClockedIn ? (
+              <>
+                <div className="px-1.5 sm:px-3">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Punched In
+                  </span>
+                  <span className="font-mono font-bold text-xs sm:text-sm text-[var(--color-foreground)] block whitespace-nowrap mt-0.5">
+                    {todayRecord?.checkIn || '--:--'}
+                  </span>
+                </div>
+                <div className="px-1.5 sm:px-3">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Elapsed Time
+                  </span>
+                  <span className="font-mono font-bold text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1 mt-0.5 whitespace-nowrap">
+                    <Timer className="w-3 h-3 animate-spin shrink-0" />
+                    {getElapsedDuration(todayRecord?.checkIn, effectiveTime)}
+                  </span>
+                </div>
+                <div className="px-1.5 sm:px-3">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Points Earned
+                  </span>
+                  <span className="font-bold text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1 mt-0.5 whitespace-nowrap">
+                    <Sparkles className="w-3 h-3 shrink-0" />
+                    {pointEval?.finalPoints || 10} Pts
+                  </span>
+                </div>
+              </>
+            ) : isClockedOut ? (
+              <>
+                <div className="px-1.5 sm:px-3">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Shift Duration
+                  </span>
+                  <span className="font-mono font-bold text-xs sm:text-sm text-[var(--color-foreground)] block whitespace-nowrap mt-0.5">
+                    {todayRecord?.workingHours || 'Logged'}
+                  </span>
+                </div>
+                <div className="px-1.5 sm:px-3">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Shift Window
+                  </span>
+                  <span className="font-mono font-medium text-[11px] sm:text-xs text-[var(--color-muted-foreground)] block whitespace-nowrap mt-0.5">
+                    {todayRecord?.checkIn} → {todayRecord?.checkOut}
+                  </span>
+                </div>
+                <div className="px-1.5 sm:px-3">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Points Locked
+                  </span>
+                  <span className="font-bold text-xs sm:text-sm text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1 mt-0.5 whitespace-nowrap">
+                    <Sparkles className="w-3 h-3 shrink-0" />
+                    +{pointEval?.finalPoints || 10} Pts
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="px-1 sm:px-2">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    On-Time (+10)
+                  </span>
+                  <span className="font-mono font-semibold text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400 block whitespace-nowrap mt-0.5">
+                    9:00 – 10:00 AM
+                  </span>
+                </div>
+                <div className="px-1 sm:px-2">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Grace (+5)
+                  </span>
+                  <span className="font-mono font-semibold text-[11px] sm:text-xs text-amber-600 dark:text-amber-400 block whitespace-nowrap mt-0.5">
+                    10:00 – 10:15 AM
+                  </span>
+                </div>
+                <div className="px-1 sm:px-2">
+                  <span className="text-[10px] uppercase font-bold text-[var(--color-muted-foreground)] block whitespace-nowrap">
+                    Punch Out
+                  </span>
+                  <span className="font-mono font-semibold text-[11px] sm:text-xs text-[var(--color-muted-foreground)] block whitespace-nowrap mt-0.5">
+                    9:00 – 10:00 PM
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Right Section: Primary Punch In / Punch Out Button */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* ======================================================== */}
+        {/* ROW 3 (Desktop: Right): Action Buttons & Simulator Pill  */}
+        {/* ======================================================== */}
+        <div className="flex items-center gap-2 w-full xl:w-auto shrink-0">
           {notClockedIn && (
             <>
               {punchInStatus.canPunchIn ? (
                 <Button
-                  size="lg"
+                  size="default"
                   onClick={() => handlePunchIn()}
                   disabled={isSubmitting}
-                  className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  className="w-full xl:w-auto bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-5 py-2.5 rounded-xl shadow-md shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer h-10"
                   title={punchInStatus.tooltip}
                 >
-                  <LogIn className="w-5 h-5" />
-                  <span>
+                  <LogIn className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">
                     {punchInStatus.phase === 'on_time'
-                      ? '⚡ Punch In (+10 Pts)'
-                      : '⏱️ Punch In (+5 Pts Grace)'}
+                      ? 'Punch In (+10 Pts)'
+                      : 'Punch In (+5 Pts Grace)'}
                   </span>
                 </Button>
               ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="lg"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      toast.info(punchInStatus.tooltip);
-                      setShowSimMenu(true);
-                    }}
-                    variant="outline"
-                    className="border-dashed font-semibold px-5 py-2.5 rounded-xl opacity-80 hover:opacity-100 flex items-center gap-2"
-                    title={punchInStatus.tooltip}
-                  >
-                    <LogIn className="w-5 h-5 text-muted-foreground" />
-                    <span>{punchInStatus.label}</span>
-                  </Button>
-                </div>
+                <Button
+                  size="default"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    toast.info(punchInStatus.tooltip);
+                    setShowSimMenu(true);
+                  }}
+                  variant="outline"
+                  className="w-full xl:w-auto border-dashed font-semibold px-4 py-2.5 rounded-xl opacity-85 hover:opacity-100 flex items-center justify-center gap-2 h-10"
+                  title={punchInStatus.tooltip}
+                >
+                  <LogIn className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="whitespace-nowrap">{punchInStatus.label}</span>
+                </Button>
               )}
             </>
           )}
@@ -474,54 +481,52 @@ export function DashboardPunchClock({
             <>
               {punchOutStatus.canPunchOut ? (
                 <Button
-                  size="lg"
+                  size="default"
                   variant="destructive"
                   onClick={() => handlePunchOut()}
                   disabled={isSubmitting}
-                  className="bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 text-white font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-rose-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  className="w-full xl:w-auto bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 text-white font-bold px-5 py-2.5 rounded-xl shadow-md shadow-rose-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer h-10"
                   title={punchOutStatus.tooltip}
                 >
-                  <LogOut className="w-5 h-5" />
-                  <span>Punch Out (Keep 10 Pts)</span>
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">Punch Out (Keep 10 Pts)</span>
                 </Button>
               ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="lg"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      toast.info(punchOutStatus.tooltip);
-                      setShowSimMenu(true);
-                    }}
-                    variant="outline"
-                    className="border-dashed font-semibold px-5 py-2.5 rounded-xl opacity-80 hover:opacity-100 flex items-center gap-2"
-                    title={punchOutStatus.tooltip}
-                  >
-                    <LogOut className="w-5 h-5 text-amber-500" />
-                    <span>{punchOutStatus.label}</span>
-                  </Button>
-                </div>
+                <Button
+                  size="default"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    toast.info(punchOutStatus.tooltip);
+                    setShowSimMenu(true);
+                  }}
+                  variant="outline"
+                  className="w-full xl:w-auto border-dashed font-semibold px-4 py-2.5 rounded-xl opacity-85 hover:opacity-100 flex items-center justify-center gap-2 h-10"
+                  title={punchOutStatus.tooltip}
+                >
+                  <LogOut className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="whitespace-nowrap">{punchOutStatus.label}</span>
+                </Button>
               )}
             </>
           )}
 
           {isClockedOut && (
             <Button
-              size="lg"
+              size="default"
               variant="outline"
               onClick={() => navigate(`${rolePrefix}/attendance`)}
-              className="font-semibold px-5 py-2.5 rounded-xl flex items-center gap-2 bg-background/50 hover:bg-background"
+              className="w-full xl:w-auto font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 bg-background/60 hover:bg-background h-10"
             >
-              <span>View Attendance Log</span>
-              <ArrowRight className="w-4 h-4 text-primary" />
+              <span className="whitespace-nowrap">Attendance Log</span>
+              <ArrowRight className="w-4 h-4 text-primary shrink-0" />
             </Button>
           )}
 
           {/* Quick Simulation / Testing Helper Menu */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setShowSimMenu(!showSimMenu)}
-              className="p-2.5 rounded-xl border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              className="h-10 w-10 flex items-center justify-center rounded-xl border border-border/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               title="Test Shift Windows & Simulation"
             >
               <Timer className="w-4 h-4" />
@@ -535,7 +540,7 @@ export function DashboardPunchClock({
                   </span>
                   <button
                     onClick={() => setShowSimMenu(false)}
-                    className="text-muted-foreground hover:text-foreground p-0.5"
+                    className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
                   >
                     ✕
                   </button>
@@ -546,25 +551,25 @@ export function DashboardPunchClock({
                 <div className="grid grid-cols-2 gap-1.5 pt-1">
                   <button
                     onClick={() => handleSimulate(9, 15)}
-                    className="p-1.5 text-left rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-medium"
+                    className="p-1.5 text-left rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-medium cursor-pointer"
                   >
                     9:15 AM (+10 Pts)
                   </button>
                   <button
                     onClick={() => handleSimulate(10, 8)}
-                    className="p-1.5 text-left rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-medium"
+                    className="p-1.5 text-left rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-medium cursor-pointer"
                   >
                     10:08 AM (+5 Pts)
                   </button>
                   <button
                     onClick={() => handleSimulate(21, 30)}
-                    className="p-1.5 text-left rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/20 font-medium"
+                    className="p-1.5 text-left rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/20 font-medium cursor-pointer"
                   >
                     9:30 PM (Punch Out)
                   </button>
                   <button
                     onClick={() => handleSimulate(22, 15)}
-                    className="p-1.5 text-left rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/20 font-medium"
+                    className="p-1.5 text-left rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/20 font-medium cursor-pointer"
                   >
                     10:15 PM (Cut-off)
                   </button>
@@ -572,14 +577,14 @@ export function DashboardPunchClock({
                 <div className="pt-2 border-t border-border/60 flex items-center justify-between">
                   <button
                     onClick={handleReset}
-                    className="text-[11px] font-semibold text-rose-600 hover:underline flex items-center gap-1"
+                    className="text-[11px] font-semibold text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
                     title="Reset today's attendance record"
                   >
                     <RotateCcw className="w-3 h-3" /> Reset Today
                   </button>
                   <button
                     onClick={handleClearSimulation}
-                    className="text-[11px] font-semibold text-primary hover:underline"
+                    className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
                   >
                     Restore Live Clock
                   </button>
@@ -588,6 +593,7 @@ export function DashboardPunchClock({
             )}
           </div>
         </div>
+
       </div>
     </div>
   );

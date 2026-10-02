@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, Menu, ChevronDown, Sun, Moon, Monitor, Clock, CheckCircle2 } from 'lucide-react';
+import { Bell, Search, Menu, ChevronDown, Clock, CheckCircle2 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor, formatRelativeTime } from '@/lib/utils';
-import { useAuthStore, useSidebarStore, useThemeStore } from '@/stores';
+import { useAuthStore, useSidebarStore } from '@/stores';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getTodayAttendance } from '@/services/api';
 import { Avatar } from '@/components/ui';
 import type { UserRole, Notification, AttendanceRecord } from '@/types';
@@ -10,7 +10,6 @@ import type { UserRole, Notification, AttendanceRecord } from '@/types';
 export function Header() {
   const { currentUser, currentRole, effectiveRole } = useAuthStore();
   const { setMobileOpen, toggleMobile } = useSidebarStore();
-  const { mode, setMode } = useThemeStore();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -111,8 +110,7 @@ export function Header() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const themeIcons = { light: Sun, dark: Moon, system: Monitor };
-  const ThemeIcon = themeIcons[mode];
+
 
   return (
     <header className="sticky top-0 z-30 flex items-center h-16 px-4 sm:px-6 border-b border-[var(--color-border)] bg-[var(--color-background)]/95 backdrop-blur-sm">
@@ -198,19 +196,7 @@ export function Header() {
       )}
 
 
-      {/* Theme toggle */}
-      <button
-        onClick={() => {
-          const modes: Array<typeof mode> = ['light', 'dark', 'system'];
-          const next = modes[(modes.indexOf(mode) + 1) % modes.length];
-          setMode(next);
-        }}
-        className="flex items-center justify-center w-9 h-9 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors mr-1"
-        aria-label={`Theme: ${mode}`}
-        title={`Theme: ${mode}`}
-      >
-        <ThemeIcon className="w-[18px] h-[18px]" />
-      </button>
+
 
       {/* Notifications */}
       <div ref={notifRef} className="relative">

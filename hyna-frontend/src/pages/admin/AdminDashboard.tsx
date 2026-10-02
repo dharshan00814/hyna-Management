@@ -15,6 +15,7 @@ import {
   getProjects, getTasks, getMeetings, getUsers, getAttendance, getUserById,
 } from '@/services/api';
 import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import { DashboardPunchClock } from '@/components/dashboard/DashboardPunchClock';
 import type { Project, Task, Meeting, User, AttendanceRecord } from '@/types';
 
 const weeklyTaskData = [
@@ -99,6 +100,12 @@ export function AdminDashboard() {
         </h1>
         <p className="page-description">Here's what's happening at Hyna Studio today.</p>
       </div>
+
+      {/* Top Punch Clock Bar for User-Friendly Attendance Check-In / Check-Out */}
+      <DashboardPunchClock
+        attendanceRecords={attendance}
+        onAttendanceChanged={loadDashboardData}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
