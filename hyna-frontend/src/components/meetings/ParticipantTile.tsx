@@ -24,6 +24,7 @@ export function ParticipantTile({
   onTogglePin,
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const hasVideoStream = Boolean(
     stream && 
@@ -31,17 +32,32 @@ export function ParticipantTile({
     (participant.videoEnabled || participant.isScreenSharing)
   );
 
-  // Attach stream to video tag to guarantee audio playback
+  // Attach stream to video tag
   useEffect(() => {
     if (videoRef.current) {
       if (stream) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(e => console.warn('[ParticipantTile] Autoplay prevented:', e));
+        videoRef.current.play().catch(e => console.warn('[ParticipantTile] Video play error:', e));
       } else {
         videoRef.current.srcObject = null;
       }
     }
   }, [stream]);
+
+  // Dedicated Audio Element for Remote Participants:
+  // Guarantees voice playback regardless of video element visibility, camera state, or background tab
+  useEffect(() => {
+    if (audioRef.current && !isLocal) {
+      if (stream && stream.getAudioTracks().length > 0) {
+        audioRef.current.srcObject = stream;
+        audioRef.current.play().catch(e => {
+          console.warn('[ParticipantTile] Remote audio play prevented:', e);
+        });
+      } else {
+        audioRef.current.srcObject = null;
+      }
+    }
+  }, [stream, isLocal]);
 
   return (
     <div
@@ -51,12 +67,21 @@ export function ParticipantTile({
           : 'border-white/10 hover:border-white/20'
       }`}
     >
-      {/* Video / Audio Stream Element */}
+      {/* Dedicated Remote Audio Player */}
+      {!isLocal && (
+        <audio
+          ref={audioRef}
+          autoPlay
+          playsInline
+        />
+      )}
+
+      {/* Video Stream Element */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isLocal} // Always mute local video element to avoid audio feedback
+        muted={true} // Audio is handled cleanly by audioRef for remote, local is muted to avoid feedback
         className={`w-full h-full object-cover ${!hasVideoStream ? 'opacity-0 absolute inset-0 -z-10' : 'relative z-0'} ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
       />
       
