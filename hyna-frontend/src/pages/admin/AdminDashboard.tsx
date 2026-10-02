@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { StatCard, Avatar, AvatarGroup, Badge, ProgressBar, Button, LoadingState } from '@/components/ui';
 import { cn, getGreeting, formatDate, formatTime, getStatusColor } from '@/lib/utils';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, isExecutiveLeadership } from '@/stores';
 import {
   getProjects, getTasks, getMeetings, getUsers, getAttendance, getUserById,
 } from '@/services/api';
@@ -277,34 +277,36 @@ export function AdminDashboard() {
             </div>
           )}
 
-          {/* Recent members */}
-          <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold">Team Members</h2>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>
-                View all
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {users.slice(0, 6).map(user => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
-                  onClick={() => navigate(`/admin/members/${user.id}`)}
-                >
-                  <Avatar name={user.name} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{user.name}</p>
-                    <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
+          {/* Recent members - Only visible to CEO, CTO, COO */}
+          {isExecutiveLeadership(currentUser) && (
+            <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 stagger-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold">Team Members</h2>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/admin/members')}>
+                  View all
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {users.slice(0, 6).map(user => (
+                  <div
+                    key={user.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors cursor-pointer"
+                    onClick={() => navigate(`/admin/members/${user.id}`)}
+                  >
+                    <Avatar name={user.name} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{user.name}</p>
+                      <p className="text-xs text-[var(--color-muted-foreground)] truncate">{user.designation}</p>
+                    </div>
+                    <div className={cn(
+                      'w-2 h-2 rounded-full shrink-0',
+                      user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300',
+                    )} />
                   </div>
-                  <div className={cn(
-                    'w-2 h-2 rounded-full shrink-0',
-                    user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300',
-                  )} />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right column */}

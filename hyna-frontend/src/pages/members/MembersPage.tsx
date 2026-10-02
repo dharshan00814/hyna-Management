@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Mail, Phone, Eye, EyeOff, ShieldCheck, UserCheck, Edit3, Trash2, AlertTriangle, X, Star, Landmark } from 'lucide-react';
 import { Button, Avatar, Modal, Input, Select, Badge, EmptyState, LoadingState } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, isCeoOrCto } from '@/stores';
 import { getUsers, getTasks, addMember, updateMember, deleteMember } from '@/services/api';
 import { toast } from 'sonner';
 import type { User, Task, UserRole } from '@/types';
@@ -13,6 +13,7 @@ export function MembersPage() {
   const { currentRole, effectiveRole, currentUser } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const canManageMembers = effectiveRole === 'admin' || effectiveRole === 'manager' || currentRole !== 'member';
+  const canEditMembers = isCeoOrCto(currentUser);
 
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -49,6 +50,8 @@ export function MembersPage() {
     employeeId: '',
     phone: '',
     status: 'active' as 'active' | 'inactive',
+    bankAccountNumber: '',
+    ifsc: '',
   });
 
   // Delete Member Confirmation State
@@ -71,6 +74,63 @@ export function MembersPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleOpenEditModal = (user: User) => {
+    if (!canEditMembers) {
+      toast.error('Unauthorized: Only CEO and CTO are permitted to edit member details.');
+      return;
+    }
+    setEditingUser(user);
+    setEditFormData({
+      name: user.name || '',
+      role: user.role || 'member',
+      department: user.department || 'Engineering',
+      designation: user.designation || 'Software Engineer',
+      employeeId: user.employeeId || '',
+      phone: user.phone || '',
+      status: user.status || 'active',
+      bankAccountNumber: user.bankAccountNumber || '',
+      ifsc: user.ifsc || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEditMembers) {
+      toast.error('Unauthorized: Only CEO and CTO are permitted to edit member details.');
+      return;
+    }
+    if (!editingUser) return;
+    if (!editFormData.name.trim()) {
+      toast.error('Please enter the member\'s full name');
+      return;
+    }
+
+    setIsEditing(true);
+    try {
+      const updated = await updateMember(editingUser.id, {
+        name: editFormData.name.trim(),
+        role: editFormData.role,
+        department: editFormData.department.trim(),
+        designation: editFormData.designation.trim(),
+        employeeId: editFormData.employeeId.trim(),
+        phone: editFormData.phone.trim(),
+        status: editFormData.status,
+        bankAccountNumber: editFormData.bankAccountNumber.trim(),
+        ifsc: editFormData.ifsc.trim().toUpperCase(),
+      });
+
+      toast.success(`Member "${updated.name}" updated successfully!`);
+      setShowEditModal(false);
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to update member:', err);
+      toast.error(err.message || 'Failed to update member');
+    } finally {
+      setIsEditing(false);
+    }
+  };
 
   // Helper to suggest next Employee ID (e.g. EMP-014)
   const getNextEmployeeId = () => {
@@ -258,6 +318,19 @@ export function MembersPage() {
                       className={cn('w-2.5 h-2.5 rounded-full', user.status === 'active' ? 'bg-emerald-500' : 'bg-zinc-300')}
                       title={user.status === 'active' ? 'Active' : 'Inactive'}
                     />
+                    {canEditMembers && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditModal(user);
+                        }}
+                        className="p-1 rounded hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+                        title="Edit Member (CEO / CTO only)"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <h3 className="text-sm font-semibold truncate group-hover:text-[var(--color-primary)] transition-colors">
@@ -439,6 +512,138 @@ export function MembersPage() {
             <p className="text-xs text-[var(--color-muted-foreground)]">
               The member can use their Email or Employee ID with this password to sign in immediately.
             </p>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Member Modal (CEO and CTO Only) */}
+      <Modal
+        isOpen={showEditModal && canEditMembers}
+        onClose={() => !isEditing && setShowEditModal(false)}
+        title="Edit Member & Role"
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={isEditing}
+              onClick={() => setShowEditModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              isLoading={isEditing}
+              onClick={handleUpdateMember}
+            >
+              <UserCheck className="w-4 h-4 mr-1.5" />
+              Save Changes
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleUpdateMember} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Full Name *"
+              placeholder="e.g. Priya Sharma"
+              value={editFormData.name}
+              onChange={(e) => setEditFormData(f => ({ ...f, name: e.target.value }))}
+              required
+            />
+            <Input
+              label="Employee ID"
+              placeholder="e.g. EMP-014"
+              value={editFormData.employeeId}
+              onChange={(e) => setEditFormData(f => ({ ...f, employeeId: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">Email Address</label>
+            <div className="w-full h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)] text-sm flex items-center cursor-not-allowed">
+              {editingUser?.email}
+            </div>
+            <p className="text-[11px] text-[var(--color-muted-foreground)] mt-1">
+              Email is managed via authentication credentials.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="Role *"
+              value={editFormData.role}
+              onChange={(val) => setEditFormData(f => ({ ...f, role: val as UserRole }))}
+              options={[
+                { value: 'member', label: 'Member' },
+                { value: 'manager', label: 'Manager' },
+                { value: 'admin', label: 'Executive Admin' },
+              ]}
+            />
+            <Select
+              label="Department"
+              value={editFormData.department}
+              onChange={(val) => setEditFormData(f => ({ ...f, department: val }))}
+              options={[
+                { value: 'Engineering', label: 'Engineering' },
+                { value: 'Design', label: 'Design' },
+                { value: 'Quality Assurance', label: 'Quality Assurance' },
+                { value: 'Product', label: 'Product' },
+                { value: 'Operations', label: 'Operations' },
+                { value: 'Marketing', label: 'Marketing' },
+                { value: 'Executive', label: 'Executive' },
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Designation"
+              placeholder="e.g. Software Engineer"
+              value={editFormData.designation}
+              onChange={(e) => setEditFormData(f => ({ ...f, designation: e.target.value }))}
+            />
+            <Input
+              label="Phone Number"
+              placeholder="e.g. +91 98765 43210"
+              value={editFormData.phone}
+              onChange={(e) => setEditFormData(f => ({ ...f, phone: e.target.value }))}
+            />
+          </div>
+
+          <Select
+            label="Account Status"
+            value={editFormData.status}
+            onChange={(val) => setEditFormData(f => ({ ...f, status: val as 'active' | 'inactive' }))}
+            options={[
+              { value: 'active', label: 'Active Member' },
+              { value: 'inactive', label: 'Inactive / Suspended' },
+            ]}
+          />
+
+          <div className="pt-2 border-t border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Landmark className="w-4 h-4 text-[var(--color-primary)]" />
+              <span className="text-xs font-semibold text-[var(--color-foreground)] uppercase tracking-wider">
+                Banking & Payout Details
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Bank Account Number"
+                placeholder="e.g. 123456789012"
+                value={editFormData.bankAccountNumber}
+                onChange={(e) => setEditFormData(f => ({ ...f, bankAccountNumber: e.target.value }))}
+              />
+              <Input
+                label="IFSC Code"
+                placeholder="e.g. HDFC0001234"
+                value={editFormData.ifsc}
+                onChange={(e) => setEditFormData(f => ({ ...f, ifsc: e.target.value.toUpperCase() }))}
+                maxLength={11}
+              />
+            </div>
           </div>
         </form>
       </Modal>
