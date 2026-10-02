@@ -1,11 +1,3 @@
--- ====================================================================
--- HYNA MANAGEMENT: COMPLETE MEETINGS & WEBRTC BACKEND SETUP
--- Execute this query in your Supabase SQL Editor:
--- https://supabase.com/dashboard/project/bpawtpzyodgzqjeglsye/sql
--- Fully idempotent and safe to run multiple times.
--- ====================================================================
-
--- 1. CREATE OR ENSURE EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 2. CREATE / ENSURE MEETINGS TABLE
