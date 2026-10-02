@@ -104,24 +104,14 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden animate-fade-in"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
+      {/* Sidebar - Desktop only */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full flex flex-col border-r transition-all duration-200',
+          'fixed top-0 left-0 z-30 h-full flex flex-col border-r transition-all duration-200',
           'bg-[var(--color-sidebar-bg)] border-[var(--color-sidebar-border)]',
           // Desktop
           'hidden md:flex',
           isCollapsed ? 'w-[68px]' : 'w-[260px]',
-          // Mobile
-          isMobileOpen && '!flex w-[280px] md:hidden',
         )}
       >
         {/* Logo area */}
@@ -151,13 +141,6 @@ export function Sidebar() {
           >
             <ChevronLeft className={cn('w-4 h-4 transition-transform', isCollapsed && 'rotate-180')} />
           </button>
-          {/* Close - mobile */}
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="flex md:hidden items-center justify-center w-6 h-6 rounded-md ml-auto text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Navigation */}
@@ -186,7 +169,7 @@ export function Sidebar() {
         </nav>
 
         {/* Bottom section */}
-        <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1">
+        <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1 shrink-0 pb-16 md:pb-3">
           {bottomItems.map((item) => {
             const itemPath = `${prefix}${item.path}`;
             const isActive = location.pathname === itemPath;

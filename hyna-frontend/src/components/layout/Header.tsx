@@ -9,7 +9,7 @@ import type { UserRole, Notification, AttendanceRecord } from '@/types';
 
 export function Header() {
   const { currentUser, currentRole, effectiveRole } = useAuthStore();
-  const { setMobileOpen } = useSidebarStore();
+  const { setMobileOpen, toggleMobile } = useSidebarStore();
   const { mode, setMode } = useThemeStore();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -115,9 +115,9 @@ export function Header() {
     <header className="sticky top-0 z-30 flex items-center h-16 px-4 sm:px-6 border-b border-[var(--color-border)] bg-[var(--color-background)]/95 backdrop-blur-sm">
       {/* Mobile menu button */}
       <button
-        onClick={() => setMobileOpen(true)}
-        className="flex md:hidden items-center justify-center w-9 h-9 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] mr-2 transition-colors"
-        aria-label="Open menu"
+        onClick={toggleMobile}
+        className="flex md:hidden items-center justify-center w-9 h-9 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] mr-2 transition-colors cursor-pointer"
+        aria-label="Toggle menu"
       >
         <Menu className="w-5 h-5" />
       </button>
