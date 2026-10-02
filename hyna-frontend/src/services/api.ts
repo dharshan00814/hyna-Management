@@ -1328,23 +1328,13 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
         .order('date', { ascending: true });
 
       if (!error && data) {
-        const deletedIds = getDeletedMeetingIds();
         const dbMeetings = data
           .map(mapMeeting)
-          .filter(m =>
-            !deletedIds.has(m.id) &&
-            (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
-            m.id !== 'mt_standup_daily' &&
-            m.id !== 'mt_product_review' &&
-            m.id !== 'mt_arch_planning' &&
-            m.title !== 'Daily Engineering Standup' &&
-            m.title !== 'Product Review & Sprint Demo' &&
-            m.title !== 'Core Architecture & Security Sync'
-          );
+          .filter(m => !isPurgedMeeting(m));
+
         // Merge with local-only meetings so freshly created meetings are preserved
         const localOnly = meetingsCache.filter(m => 
-          !deletedIds.has(m.id) &&
-          (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
+          !isPurgedMeeting(m) &&
           !dbMeetings.some(dbm => dbm.id === m.id)
         );
         const merged = [...dbMeetings, ...localOnly];
@@ -1355,18 +1345,8 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
     console.warn('Error fetching meetings from Supabase, using cache fallback:', err);
   }
 
-  // Ensure removed default meetings and deleted meetings are never included in cache
-  const deletedIds = getDeletedMeetingIds();
-  meetingsCache = meetingsCache.filter(m =>
-    !deletedIds.has(m.id) &&
-    (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
-    m.id !== 'mt_standup_daily' &&
-    m.id !== 'mt_product_review' &&
-    m.id !== 'mt_arch_planning' &&
-    m.title !== 'Daily Engineering Standup' &&
-    m.title !== 'Product Review & Sprint Demo' &&
-    m.title !== 'Core Architecture & Security Sync'
-  );
+  // Ensure removed default meetings, blacklisted meetings, and deleted meetings are never in cache
+  meetingsCache = meetingsCache.filter(m => !isPurgedMeeting(m));
 
   let result = [...meetingsCache];
   if (userId) {
