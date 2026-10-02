@@ -138,10 +138,39 @@ ALTER TABLE public.meeting_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAM
 CREATE INDEX IF NOT EXISTS idx_meeting_messages_meeting_id ON public.meeting_messages(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_meeting_messages_created_at ON public.meeting_messages(created_at);
 
--- 6. REMOVE DEMO / SAMPLE MEETINGS IF PREVIOUSLY SEEDED
+-- 6. REMOVE DEMO / SAMPLE / SPECIFIED MEETINGS
+DELETE FROM public.meeting_messages
+WHERE meeting_id IN (
+  SELECT id FROM public.meetings
+  WHERE LOWER(TRIM(title)) IN (
+    'summa', 'testing01', 'testing02', 'daily engineering standup',
+    'product review & sprint demo', 'vvv', 'hi', 'ast', 'core architecture & security sync'
+  ) OR id IN ('mt_standup_daily', 'mt_product_review', 'mt_arch_planning', 'mt_apeavegg', 'mt_wt94rs6f')
+);
+
+DELETE FROM public.meeting_attendance
+WHERE meeting_id IN (
+  SELECT id FROM public.meetings
+  WHERE LOWER(TRIM(title)) IN (
+    'summa', 'testing01', 'testing02', 'daily engineering standup',
+    'product review & sprint demo', 'vvv', 'hi', 'ast', 'core architecture & security sync'
+  ) OR id IN ('mt_standup_daily', 'mt_product_review', 'mt_arch_planning', 'mt_apeavegg', 'mt_wt94rs6f')
+);
+
+DELETE FROM public.meeting_participants
+WHERE meeting_id IN (
+  SELECT id FROM public.meetings
+  WHERE LOWER(TRIM(title)) IN (
+    'summa', 'testing01', 'testing02', 'daily engineering standup',
+    'product review & sprint demo', 'vvv', 'hi', 'ast', 'core architecture & security sync'
+  ) OR id IN ('mt_standup_daily', 'mt_product_review', 'mt_arch_planning', 'mt_apeavegg', 'mt_wt94rs6f')
+);
+
 DELETE FROM public.meetings 
-WHERE id IN ('mt_standup_daily', 'mt_product_review', 'mt_arch_planning')
-   OR title IN ('Daily Engineering Standup', 'Product Review & Sprint Demo', 'Core Architecture & Security Sync');
+WHERE LOWER(TRIM(title)) IN (
+  'summa', 'testing01', 'testing02', 'daily engineering standup',
+  'product review & sprint demo', 'vvv', 'hi', 'ast', 'core architecture & security sync'
+) OR id IN ('mt_standup_daily', 'mt_product_review', 'mt_arch_planning', 'mt_apeavegg', 'mt_wt94rs6f');
 
 -- 7. ENABLE REALTIME BROADCASTING
 DO $$
@@ -208,8 +237,8 @@ CREATE POLICY "meetings_update_policy" ON public.meetings
   WITH CHECK (true);
 
 CREATE POLICY "meetings_delete_policy" ON public.meetings
-  FOR DELETE TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR DELETE TO authenticated, anon
+  USING (true);
 
 -- Meeting Participants Policies
 DROP POLICY IF EXISTS "meeting_participants_select" ON public.meeting_participants;
@@ -230,8 +259,8 @@ CREATE POLICY "meeting_participants_update" ON public.meeting_participants
   USING (true);
 
 CREATE POLICY "meeting_participants_delete" ON public.meeting_participants
-  FOR DELETE TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR DELETE TO authenticated, anon
+  USING (true);
 
 -- Meeting Attendance Policies
 DROP POLICY IF EXISTS "meeting_attendance_select" ON public.meeting_attendance;
@@ -252,8 +281,8 @@ CREATE POLICY "meeting_attendance_update" ON public.meeting_attendance
   USING (true);
 
 CREATE POLICY "meeting_attendance_delete" ON public.meeting_attendance
-  FOR DELETE TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR DELETE TO authenticated, anon
+  USING (true);
 
 -- Meeting Messages Policies (In-Call Chat)
 DROP POLICY IF EXISTS "meeting_messages_select" ON public.meeting_messages;
@@ -269,5 +298,5 @@ CREATE POLICY "meeting_messages_insert" ON public.meeting_messages
   WITH CHECK (true);
 
 CREATE POLICY "meeting_messages_delete" ON public.meeting_messages
-  FOR DELETE TO authenticated
-  USING (auth.uid() IS NOT NULL);
+  FOR DELETE TO authenticated, anon
+  USING (true);

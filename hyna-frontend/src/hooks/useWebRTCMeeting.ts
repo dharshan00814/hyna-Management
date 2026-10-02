@@ -59,18 +59,13 @@ export function useWebRTCMeeting({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const announceTimerRef = useRef<any>(null);
 
-  // Stable Unique Peer/Session ID per browser tab (Prevents same-account/guest collisions)
-  const roomKey = meeting?.meetingRoomId || meeting?.id || 'default_room';
-  const localPeerId = useMemo(() => {
-    const storageKey = `hyna_rtc_peer_${roomKey}`;
-    let stored = sessionStorage.getItem(storageKey);
-    if (!stored) {
-      stored = `${currentUser?.id || 'guest'}_${Math.random().toString(36).slice(2, 9)}`;
-      sessionStorage.setItem(storageKey, stored);
-    }
-    return stored;
-  }, [roomKey, currentUser?.id]);
+  // Truly unique Peer ID per browser tab (Prevents same-account/guest collisions across tabs)
+  const localPeerIdRef = useRef<string>(
+    `peer_${currentUser?.id || 'usr'}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`
+  );
+  const localPeerId = localPeerIdRef.current;
 
   const localUserId = currentUser?.id || localPeerId;
   const localUserName = currentUser?.name || 'Guest Member';
@@ -160,9 +155,16 @@ export function useWebRTCMeeting({
 
     switch (msg.type) {
       case 'JOIN': {
-        // Peer joined: create and send WebRTC offer to them
+        // Peer joined: send JOIN_ACK and create WebRTC offer
         try {
-          console.log(`[WebRTC] Peer ${senderId} joined. Creating offer...`);
+          console.log(`[WebRTC] Peer ${senderId} joined. Sending ACK and creating offer...`);
+          await signalingServiceRef.current?.sendSignal({
+            type: 'JOIN_ACK',
+            senderId: localPeerId,
+            targetId: senderId,
+            senderName: localUserName,
+          });
+
           const offer = await manager.createOffer(senderId);
           await signalingServiceRef.current?.sendSignal({
             type: 'OFFER',
@@ -173,6 +175,46 @@ export function useWebRTCMeeting({
           });
         } catch (err) {
           console.error(`[WebRTC] Failed to send offer to ${senderId}:`, err);
+        }
+        break;
+      }
+
+      case 'JOIN_ACK': {
+        console.log(`[WebRTC] Peer ${senderId} acknowledged JOIN.`);
+        if (!manager.hasPeerConnection(senderId)) {
+          try {
+            console.log(`[WebRTC] Creating offer to ${senderId} from JOIN_ACK...`);
+            const offer = await manager.createOffer(senderId);
+            await signalingServiceRef.current?.sendSignal({
+              type: 'OFFER',
+              senderId: localPeerId,
+              targetId: senderId,
+              senderName: localUserName,
+              offer,
+            });
+          } catch (err) {
+            console.warn(`[WebRTC] Offer error on JOIN_ACK for ${senderId}:`, err);
+          }
+        }
+        break;
+      }
+
+      case 'ANNOUNCE': {
+        // Active peer heartbeat announcement: ensure connected
+        if (!manager.hasPeerConnection(senderId) || manager.getConnectionState(senderId) === 'failed') {
+          try {
+            console.log(`[WebRTC] Peer ${senderId} announced presence. Initiating offer...`);
+            const offer = await manager.createOffer(senderId);
+            await signalingServiceRef.current?.sendSignal({
+              type: 'OFFER',
+              senderId: localPeerId,
+              targetId: senderId,
+              senderName: localUserName,
+              offer,
+            });
+          } catch (err) {
+            console.warn(`[WebRTC] Offer error on ANNOUNCE for ${senderId}:`, err);
+          }
         }
         break;
       }
@@ -300,23 +342,22 @@ export function useWebRTCMeeting({
 
           next.set(key, {
             memberId: latest.memberId || key,
-            name: latest.name || 'Team Member',
-            avatar: latest.avatar || '',
-            role: latest.role || 'member',
-            designation: latest.designation || 'Software Engineer',
-            micEnabled: latest.micEnabled ?? true,
-            videoEnabled: latest.videoEnabled ?? true,
-            isScreenSharing: latest.isScreenSharing ?? false,
+            name: latest.name || existing?.name || 'Team Member',
+            avatar: latest.avatar || existing?.avatar || '',
+            role: latest.role || existing?.role || 'member',
+            designation: latest.designation || existing?.designation || 'Software Engineer',
+            micEnabled: latest.micEnabled ?? existing?.micEnabled ?? true,
+            videoEnabled: latest.videoEnabled ?? existing?.videoEnabled ?? true,
+            isScreenSharing: latest.isScreenSharing ?? existing?.isScreenSharing ?? false,
             isSpeaking: existing?.isSpeaking ?? false,
-            isHost: latest.isHost ?? false,
-            joinedAt: latest.joinedAt || new Date().toISOString(),
+            isHost: latest.isHost ?? existing?.isHost ?? false,
+            joinedAt: existing?.joinedAt || new Date().toISOString(),
             connectionState: existing?.connectionState || 'connecting',
           });
 
-          // Tie-breaker: If no peer connection exists yet and localPeerId > remotePeerId,
-          // initiate an offer to ensure connection succeeds even if JOIN broadcast was missed
-          if (manager && !manager.hasPeerConnection(key) && localPeerId > key) {
-            console.log(`[WebRTC] Deterministic offer initiation to ${key} from presence sync.`);
+          // Proactively initiate offer if no peer connection exists or if connection failed
+          if (manager && (!manager.hasPeerConnection(key) || manager.getConnectionState(key) === 'failed')) {
+            console.log(`[WebRTC] Proactive offer initiation to ${key} from presence sync.`);
             manager.createOffer(key).then(offer => {
               signalingServiceRef.current?.sendSignal({
                 type: 'OFFER',
@@ -329,14 +370,6 @@ export function useWebRTCMeeting({
           }
         }
       });
-
-      // Cleanup departed peers
-      for (const peerId of next.keys()) {
-        if (!presences[peerId]) {
-          manager?.cleanupPeer(peerId);
-          next.delete(peerId);
-        }
-      }
 
       return next;
     });
@@ -488,6 +521,19 @@ export function useWebRTCMeeting({
                 isHost: latest.isHost ?? false,
                 connectionState: 'connecting',
               });
+
+              const mgr = webrtcManagerRef.current;
+              if (mgr && (!mgr.hasPeerConnection(key) || mgr.getConnectionState(key) === 'failed')) {
+                mgr.createOffer(key).then(offer => {
+                  signalingServiceRef.current?.sendSignal({
+                    type: 'OFFER',
+                    senderId: localPeerId,
+                    targetId: key,
+                    senderName: localUserName,
+                    offer,
+                  });
+                }).catch(e => console.warn(`[WebRTC] onPresenceJoin offer creation failed:`, e));
+              }
             }
           },
           onPresenceLeave: (key) => {
@@ -529,6 +575,16 @@ export function useWebRTCMeeting({
         joinedAt: new Date().toISOString(),
         connectionState: 'connected',
       });
+
+      // Start periodic announcement heartbeat so all peers discover each other instantly
+      if (announceTimerRef.current) clearInterval(announceTimerRef.current);
+      announceTimerRef.current = setInterval(() => {
+        signalingServiceRef.current?.sendSignal({
+          type: 'ANNOUNCE',
+          senderId: localPeerId,
+          senderName: localUserName,
+        }).catch(() => {});
+      }, 3500);
 
       setOverallConnectionState('connected');
 
@@ -680,6 +736,12 @@ export function useWebRTCMeeting({
     }
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close().catch(() => {});
+    }
+
+    // Stop announcement heartbeat
+    if (announceTimerRef.current) {
+      clearInterval(announceTimerRef.current);
+      announceTimerRef.current = null;
     }
 
     // Cleanup WebRTC and signaling

@@ -39,7 +39,7 @@ export const DEFAULT_RTC_CONFIG: RTCConfiguration = {
       credential: 'openrelayproject',
     },
   ],
-  iceCandidatePoolSize: 10,
+  iceCandidatePoolSize: 0,
 };
 
 export class WebRTCManager {
@@ -91,6 +91,11 @@ export class WebRTCManager {
   public hasPeerConnection(peerId: string): boolean {
     const pc = this.peerConnections.get(peerId);
     return Boolean(pc && pc.signalingState !== 'closed');
+  }
+
+  public getConnectionState(peerId: string): RTCPeerConnectionState | null {
+    const pc = this.peerConnections.get(peerId);
+    return pc ? pc.connectionState : null;
   }
 
   // Create or retrieve an RTCPeerConnection for a remote peer
