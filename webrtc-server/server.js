@@ -5,8 +5,25 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
+const rawClientUrl = process.env.CLIENT_URL || '*';
+const clientOrigins = rawClientUrl === '*'
+  ? '*'
+  : rawClientUrl.split(',').map(url => url.trim().replace(/\/+$/, ''));
+
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || clientOrigins === '*') return callback(null, true);
+    const normalized = origin.replace(/\/+$/, '');
+    if (Array.isArray(clientOrigins) && clientOrigins.includes(normalized)) {
+      return callback(null, true);
+    }
+    console.warn(`[Express CORS Blocked] Origin: ${origin}. Allowed:`, clientOrigins);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+}));
 app.use(express.json());
 
 const PORT = process.env.PORT || 5050;
@@ -38,17 +55,14 @@ app.get('/health', (req, res) => {
 
 const server = http.createServer(app);
 
-const clientOrigins = process.env.CLIENT_URL 
-  ? process.env.CLIENT_URL.split(',').map(url => url.trim()) 
-  : '*';
-
 const io = new Server(server, {
+  path: '/socket.io/',
   cors: {
     origin: clientOrigins,
     methods: ['GET', 'POST'],
     credentials: clientOrigins !== '*',
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   pingTimeout: 30000,
   pingInterval: 10000,
 });
@@ -99,8 +113,14 @@ async function updateDbMeetingStatus(roomId, status) {
   }
 }
 
+console.log('[Socket.IO] initialized with origins:', clientOrigins);
+
 io.on('connection', (socket) => {
-  console.log(`[Connect] Socket ${socket.id} connected`);
+  console.log('[Socket.IO] CONNECTED', {
+    socketId: socket.id,
+    transport: socket.conn?.transport?.name,
+    origin: socket.handshake?.headers?.origin,
+  });
 
   // 1. Join Room
   socket.on('join-room', async ({ roomId, user, micEnabled = true, videoEnabled = true }) => {
