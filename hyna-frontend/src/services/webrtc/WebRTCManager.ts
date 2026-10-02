@@ -59,7 +59,7 @@ export class WebRTCManager {
       
     const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_SFU_SERVER_URL || defaultServerUrl;
     this.socket = io(SERVER_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
