@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, Menu, ChevronDown, Sun, Moon, Monitor, Clock, CheckCircle2, Download } from 'lucide-react';
+import { Bell, Search, Menu, ChevronDown, Sun, Moon, Monitor, Clock, CheckCircle2 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor, formatRelativeTime } from '@/lib/utils';
 import { useAuthStore, useSidebarStore, useThemeStore } from '@/stores';
-import { usePWA } from '@/hooks/usePWA';
-import { InstallAppModal } from '@/components/common/InstallAppModal';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getTodayAttendance } from '@/services/api';
 import { Avatar } from '@/components/ui';
 import type { UserRole, Notification, AttendanceRecord } from '@/types';
@@ -13,7 +11,6 @@ export function Header() {
   const { currentUser, currentRole, effectiveRole } = useAuthStore();
   const { setMobileOpen } = useSidebarStore();
   const { mode, setMode } = useThemeStore();
-  const { isInstallable, isInstalled, showModal, setShowModal, promptInstall } = usePWA();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -197,16 +194,6 @@ export function Header() {
         </button>
       )}
 
-      {/* Install App Button */}
-      <button
-        type="button"
-        onClick={() => setShowModal(true)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-all mr-2"
-        title="Download / Install Hyna App"
-      >
-        <Download className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">{isInstalled ? 'App Ready' : 'Install App'}</span>
-      </button>
 
       {/* Theme toggle */}
       <button
@@ -346,14 +333,6 @@ export function Header() {
         )}
       </div>
 
-      {/* PWA Install Modal */}
-      <InstallAppModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onInstallPrompt={promptInstall}
-        isInstallable={isInstallable}
-        isInstalled={isInstalled}
-      />
     </header>
   );
 }
