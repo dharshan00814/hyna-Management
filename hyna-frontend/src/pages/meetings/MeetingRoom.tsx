@@ -22,6 +22,7 @@ import { DeviceSettingsModal } from '@/components/meetings/DeviceSettingsModal';
 import { MeetingSummary } from '@/components/meetings/MeetingSummary';
 import { Button } from '@/components/ui';
 import type { Meeting } from '@/types/meeting';
+import type { User } from '@/types';
 
 export function MeetingRoom() {
   const { id: routeIdentifier } = useParams<{ id: string }>();
@@ -147,7 +148,11 @@ export function MeetingRoom() {
       avatar: '',
       role: 'member' as const,
       designation: 'Guest Participant',
-    };
+      department: 'Guest',
+      phone: '',
+      joinDate: new Date().toISOString(),
+      status: 'active' as const,
+    } as User;
   }, [currentUser, guestName]);
 
   const isHost = useMemo(() => {
