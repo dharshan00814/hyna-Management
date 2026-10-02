@@ -67,19 +67,23 @@ export function isCeoOrCto(user: { role?: string; designation?: string; name?: s
     nameLower.includes('vignesh') ||
     emailLower.includes('vignesh');
 
-  // CTO: Explicit CTO / Chief Technology / Chief Technical Officer designation
+  
   const isCto =
     designationUpper.includes('CTO') ||
     designationUpper.includes('CHIEF TECHNOLOGY') ||
-    designationUpper.includes('CHIEF TECHNICAL');
+    designationUpper.includes('CHIEF TECHNICAL') ||
+    empIdUpper === 'EMP-003' ||
+    nameLower.includes('dharshan') ||
+    emailLower.includes('dharshan');
 
   return isCeo || isCto;
 }
 
-// Helper: Determine if user is CEO, CTO, or COO (Top Executive Authority)
-// Only CEO, CTO, and COO can view: Members, Live Developers, Activity Analytics, Files, Privacy & Tracking
+// Helper: Determine if user is CEO, CTO, COO, or Admin (Top Executive Authority)
+// CEO, CTO, COO, and Admin can view: Members, Live Developers, Activity Analytics, Files, Privacy & Tracking
 export function isExecutiveLeadership(user: { role?: string; designation?: string; name?: string; email?: string; employeeId?: string } | null | undefined): boolean {
   if (!user) return false;
+  const roleLower = ((user.role || '') as string).trim().toLowerCase();
   const designationUpper = (user.designation || '').trim().toUpperCase();
   const nameLower = (user.name || '').trim().toLowerCase();
   const emailLower = (user.email || '').trim().toLowerCase();
@@ -93,11 +97,14 @@ export function isExecutiveLeadership(user: { role?: string; designation?: strin
     nameLower.includes('vignesh') ||
     emailLower.includes('vignesh');
 
-  // CTO: Explicit CTO / Chief Technology / Chief Technical Officer designation
+  // CTO: Dharshan (EMP-003) or explicit CTO / Chief Technology / Chief Technical Officer designation
   const isCto =
     designationUpper.includes('CTO') ||
     designationUpper.includes('CHIEF TECHNOLOGY') ||
-    designationUpper.includes('CHIEF TECHNICAL');
+    designationUpper.includes('CHIEF TECHNICAL') ||
+    empIdUpper === 'EMP-003' ||
+    nameLower.includes('dharshan') ||
+    emailLower.includes('dharshan');
 
   // COO: Jashwin (EMP-002) or explicit COO designation
   const isCoo =
@@ -107,7 +114,9 @@ export function isExecutiveLeadership(user: { role?: string; designation?: strin
     nameLower.includes('jashwin') ||
     emailLower.includes('jashwin');
 
-  return isCeo || isCto || isCoo;
+  const isAdminRole = roleLower === 'admin' || designationUpper.includes('ADMIN');
+
+  return isCeo || isCto || isCoo || isAdminRole;
 }
 
 export function getOrgMemberDetails(rawId: string, email?: string) {
@@ -122,7 +131,7 @@ export function getOrgMemberDetails(rawId: string, email?: string) {
     return { name: 'Jashwin', role: 'admin' as UserRole, designation: 'COO', department: 'Executive', employeeId: 'EMP-002', email: 'jashwin@hynastudio.com' };
   }
   if (idUpper === 'EMP-003' || idLower.includes('dharshan') || emailLower.includes('dharshan')) {
-    return { name: 'Dharshan', role: 'admin' as UserRole, designation: 'Admin', department: 'Executive', employeeId: 'EMP-003', email: 'dharshan@hynastudio.com' };
+    return { name: 'Dharshan', role: 'admin' as UserRole, designation: 'CTO', department: 'Executive', employeeId: 'EMP-003', email: 'dharshan@hynastudio.com' };
   }
   if (idUpper === 'EMP-004' || idLower.includes('asthamil') || emailLower.includes('asthamil')) {
     return { name: 'Asthamil', role: 'manager' as UserRole, designation: 'Engineering Manager', department: 'Engineering', employeeId: 'EMP-004', email: 'asthamil@hynastudio.com' };
