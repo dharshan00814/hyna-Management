@@ -12,6 +12,7 @@ import {
   submitDailyReport, checkIn, checkOut, getUserById, getUsers,
 } from '@/services/api';
 import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import { DashboardPunchClock } from '@/components/dashboard/DashboardPunchClock';
 import {
   getPunchInStatus,
   getPunchOutStatus,
