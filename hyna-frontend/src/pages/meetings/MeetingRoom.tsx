@@ -51,21 +51,26 @@ export function MeetingRoom() {
         const found = await fetchMeetingByIdOrRoomId(routeIdentifier);
         if (isMounted) {
           if (found) {
-            // Check Access Control:
-            // Allow if user is host, creator, invited participant, or admin/manager
-            const userId = currentUser?.id;
-            const isCreator = found.hostId === userId || found.createdBy === userId;
-            const isInvited = (found.participantIds || []).includes(userId || '');
-            const isExecutiveOrManager = effectiveRole === 'admin' || effectiveRole === 'manager';
-
-            if (!isCreator && !isInvited && !isExecutiveOrManager && userId) {
-              setAccessDenied(true);
-            } else {
-              setMeeting(found);
-            }
+            setMeeting(found);
           } else {
-            // Meeting record not found
-            setMeeting(null);
+            // Direct link joinable: fallback ad-hoc meeting object
+            const adHocMeeting: Meeting = {
+              id: routeIdentifier,
+              title: 'Hyna Video Meeting',
+              description: 'Direct Room Meeting',
+              date: new Date().toISOString().split('T')[0],
+              startTime: '00:00',
+              endTime: '23:59',
+              hostId: currentUser?.id || 'host',
+              participantIds: [],
+              type: 'team',
+              meetingType: 'video',
+              meetingRoomId: routeIdentifier,
+              isRecurring: false,
+              meetingLink: `/meeting/${routeIdentifier}`,
+              status: 'live',
+            };
+            setMeeting(adHocMeeting);
           }
         }
       } catch (err) {
