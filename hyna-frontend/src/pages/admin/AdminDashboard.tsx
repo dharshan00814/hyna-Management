@@ -15,6 +15,7 @@ import {
   getProjects, getTasks, getMeetings, getUsers, getAttendance, getUserById,
 } from '@/services/api';
 import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import { DashboardPunchClock } from '@/components/dashboard/DashboardPunchClock';
 import type { Project, Task, Meeting, User, AttendanceRecord } from '@/types';
 
 const weeklyTaskData = [
