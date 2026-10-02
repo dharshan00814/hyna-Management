@@ -152,6 +152,13 @@ export function MemberDashboard() {
         <p className="page-description">Here's your work overview for today.</p>
       </div>
 
+      {/* Top Punch Clock Bar for User-Friendly Attendance Check-In / Check-Out */}
+      <DashboardPunchClock
+        todayRecord={todayAttendance}
+        attendanceRecords={attendance}
+        onAttendanceChanged={loadData}
+      />
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="My Tasks" value={tasks.length} change={5} icon={CheckSquare} iconColor="text-blue-500" />
