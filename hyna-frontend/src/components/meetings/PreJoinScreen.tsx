@@ -16,6 +16,8 @@ import { formatDate, formatTime } from '@/lib/utils';
 export interface PreJoinScreenProps {
   meeting: Meeting | null;
   currentUser: User | null;
+  guestName?: string;
+  onGuestNameChange?: (name: string) => void;
   cameras: MediaDeviceOption[];
   microphones: MediaDeviceOption[];
   speakers: MediaDeviceOption[];
@@ -39,6 +41,8 @@ export interface PreJoinScreenProps {
 export function PreJoinScreen({
   meeting,
   currentUser,
+  guestName,
+  onGuestNameChange,
   cameras,
   microphones,
   speakers,
@@ -348,18 +352,31 @@ export function PreJoinScreen({
               </div>
             </div>
 
-            <div className="p-3.5 bg-white/5 rounded-xl border border-white/5 text-xs text-white/60 space-y-1">
-              <p className="font-medium text-white/80">Joining as:</p>
-              <div className="flex items-center gap-2 pt-1">
-                <Avatar 
-                  name={currentUser?.name || 'Team Member'} 
-                  src={currentUser?.avatar} 
-                  className="w-6 h-6 text-[10px]" 
-                />
-                <span className="font-medium text-white">{currentUser?.name}</span>
-                <span className="text-white/40">({currentUser?.designation || currentUser?.role})</span>
+            {currentUser ? (
+              <div className="p-3.5 bg-white/5 rounded-xl border border-white/5 text-xs text-white/60 space-y-1">
+                <p className="font-medium text-white/80">Joining as:</p>
+                <div className="flex items-center gap-2 pt-1">
+                  <Avatar 
+                    name={currentUser.name} 
+                    src={currentUser.avatar} 
+                    className="w-6 h-6 text-[10px]" 
+                  />
+                  <span className="font-medium text-white">{currentUser.name}</span>
+                  <span className="text-white/40">({currentUser.designation || currentUser.role})</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-3.5 bg-white/5 rounded-xl border border-white/10 text-xs text-white/60 space-y-2">
+                <label className="font-medium text-white/80 block">Joining as Guest:</label>
+                <input
+                  type="text"
+                  value={guestName || ''}
+                  onChange={(e) => onGuestNameChange?.(e.target.value)}
+                  placeholder="Enter your name (e.g. Alex)"
+                  className="w-full text-xs bg-black/40 border border-white/10 rounded-lg p-2.5 text-white placeholder-white/30 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            )}
 
             <div className="pt-4 space-y-3">
               <Button

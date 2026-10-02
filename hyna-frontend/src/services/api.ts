@@ -31,74 +31,81 @@ let projectsCache: Project[] = [];
 let modulesCache: Module[] = [];
 let tasksCache: Task[] = [];
 
-// Seed default meetings to ensure instant, uninterrupted meetings functionality
-const DEFAULT_MEETINGS: Meeting[] = [
-  {
-    id: 'mt_standup_daily',
-    title: 'Daily Engineering Standup',
-    description: 'Daily team sync on active sprints, blockers, and upcoming releases.',
-    date: new Date().toISOString().split('T')[0],
-    startTime: '10:00',
-    endTime: '10:30',
-    hostId: 'EMP-001',
-    participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-009', 'EMP-010', 'EMP-011'],
-    type: 'standup',
-    meetingType: 'video',
-    meetingRoomId: 'room-standup-daily',
-    isRecurring: true,
-    meetingLink: '/meeting/room-standup-daily',
-    status: 'scheduled',
-    notes: 'Please review your active task board cards before joining.',
-  },
-  {
-    id: 'mt_product_review',
-    title: 'Product Review & Sprint Demo',
-    description: 'Bi-weekly demo of finished features with Design and Product teams.',
-    date: new Date().toISOString().split('T')[0],
-    startTime: '14:30',
-    endTime: '15:30',
-    hostId: 'EMP-001',
-    participantIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-006', 'EMP-008'],
-    type: 'review',
-    meetingType: 'video',
-    meetingRoomId: 'room-product-review',
-    isRecurring: false,
-    meetingLink: '/meeting/room-product-review',
-    status: 'scheduled',
-    notes: 'Live walkthrough of activity tracking metrics and deliverables.',
-  },
-  {
-    id: 'mt_arch_planning',
-    title: 'Core Architecture & Security Sync',
-    description: 'Technical deep-dive on realtime sync, WebRTC performance, and API scaling.',
-    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-    startTime: '11:00',
-    endTime: '12:00',
-    hostId: 'EMP-004',
-    participantIds: ['EMP-001', 'EMP-004', 'EMP-005', 'EMP-010', 'EMP-011'],
-    type: 'planning',
-    meetingType: 'video',
-    meetingRoomId: 'room-arch-planning',
-    isRecurring: true,
-    meetingLink: '/meeting/room-arch-planning',
-    status: 'scheduled',
-    notes: 'Live walkthrough of WebRTC peer connection manager and database schemas.',
-  },
-];
+// Default meetings list (empty by default)
+const DEFAULT_MEETINGS: Meeting[] = [];
+
+// Persistent tracker for deleted meeting IDs to prevent deleted meetings from ever coming back
+const DELETED_MEETINGS_KEY = 'hyna_deleted_meetings';
+
+export function getDeletedMeetingIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_MEETINGS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function recordDeletedMeetingId(id: string, roomId?: string) {
+  const set = getDeletedMeetingIds();
+  if (id) set.add(id);
+  if (roomId) set.add(roomId);
+  try {
+    localStorage.setItem(DELETED_MEETINGS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+// Explicitly blacklisted/removed meetings requested by user
+export const PURGED_MEETING_TITLES = new Set([
+  'summa',
+  'testing01',
+  'testing02',
+  'daily engineering standup',
+  'product review & sprint demo',
+  'vvv',
+  'hi',
+  'ast',
+  'core architecture & security sync',
+]);
+
+export function isPurgedMeeting(m: { id?: string; meetingRoomId?: string; title?: string }): boolean {
+  if (!m) return false;
+  const deletedIds = getDeletedMeetingIds();
+  if (m.id && deletedIds.has(m.id)) return true;
+  if (m.meetingRoomId && deletedIds.has(m.meetingRoomId)) return true;
+  if (m.id && (
+    m.id === 'mt_standup_daily' || 
+    m.id === 'mt_product_review' || 
+    m.id === 'mt_arch_planning' ||
+    m.id === 'mt_apeavegg' ||
+    m.id === 'mt_wt94rs6f'
+  )) return true;
+  if (m.title && PURGED_MEETING_TITLES.has(m.title.trim().toLowerCase())) return true;
+  return false;
+}
 
 function initMeetingsCache(): Meeting[] {
   try {
     const stored = localStorage.getItem('hyna_meetings_cache');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Filter out removed default meetings, user-deleted meetings, and blacklisted titles
+        const filtered = parsed.filter((m: Meeting) => !isPurgedMeeting(m));
+        try {
+          localStorage.setItem('hyna_meetings_cache', JSON.stringify(filtered));
+        } catch {
+          // Ignore
+        }
+        return filtered;
       }
     }
   } catch (e) {
     console.warn('Failed to read meetings cache from storage:', e);
   }
-  return [...DEFAULT_MEETINGS];
+  return [];
 }
 
 let meetingsCache: Meeting[] = initMeetingsCache();
@@ -1320,10 +1327,16 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
         .select('*')
         .order('date', { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        const dbMeetings = data.map(mapMeeting);
+      if (!error && data) {
+        const dbMeetings = data
+          .map(mapMeeting)
+          .filter(m => !isPurgedMeeting(m));
+
         // Merge with local-only meetings so freshly created meetings are preserved
-        const localOnly = meetingsCache.filter(m => !dbMeetings.some(dbm => dbm.id === m.id));
+        const localOnly = meetingsCache.filter(m => 
+          !isPurgedMeeting(m) &&
+          !dbMeetings.some(dbm => dbm.id === m.id)
+        );
         const merged = [...dbMeetings, ...localOnly];
         persistMeetingsCache(merged);
       }
@@ -1332,10 +1345,8 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
     console.warn('Error fetching meetings from Supabase, using cache fallback:', err);
   }
 
-  // Ensure cache is never completely empty
-  if (meetingsCache.length === 0) {
-    persistMeetingsCache([...DEFAULT_MEETINGS]);
-  }
+  // Ensure removed default meetings, blacklisted meetings, and deleted meetings are never in cache
+  meetingsCache = meetingsCache.filter(m => !isPurgedMeeting(m));
 
   let result = [...meetingsCache];
   if (userId) {
@@ -1566,12 +1577,38 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
 }
 
 export async function deleteMeeting(id: string): Promise<boolean> {
-  meetingsCache = meetingsCache.filter(m => m.id !== id);
+  const meeting = meetingsCache.find(m => m.id === id || m.meetingRoomId === id);
+  const roomId = meeting?.meetingRoomId;
+
+  // 1. Immediately record in persistent deleted set to prevent any auto-undelete
+  recordDeletedMeetingId(id, roomId);
+
+  // 2. Remove from local cache immediately
+  meetingsCache = meetingsCache.filter(m => m.id !== id && m.meetingRoomId !== id && (!roomId || m.id !== roomId));
   persistMeetingsCache(meetingsCache);
 
+  // 3. Delete from Supabase with child record cleanup
   if (isSupabaseConfigured()) {
     try {
-      await supabase.from('meetings').delete().eq('id', id);
+      // First clean child records to prevent foreign key errors
+      await supabase.from('meeting_messages').delete().eq('meeting_id', id);
+      await supabase.from('meeting_attendance').delete().eq('meeting_id', id);
+      await supabase.from('meeting_participants').delete().eq('meeting_id', id);
+      if (roomId) {
+        await supabase.from('meeting_messages').delete().eq('meeting_id', roomId);
+        await supabase.from('meeting_attendance').delete().eq('meeting_id', roomId);
+        await supabase.from('meeting_participants').delete().eq('meeting_id', roomId);
+      }
+
+      // Delete from meetings table by id and meeting_room_id
+      const { error: err1 } = await supabase.from('meetings').delete().eq('id', id);
+      if (err1) {
+        console.warn('Supabase delete by id failed, attempting by room_id:', err1.message);
+      }
+      if (roomId) {
+        await supabase.from('meetings').delete().eq('meeting_room_id', roomId);
+      }
+      await supabase.from('meetings').delete().eq('meeting_room_id', id);
     } catch (e) {
       console.warn('Could not delete meeting from Supabase:', e);
     }

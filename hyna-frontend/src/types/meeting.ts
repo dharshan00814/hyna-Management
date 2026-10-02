@@ -71,6 +71,8 @@ export interface MeetingChatMessage {
 
 export type SignalingMessageType = 
   | 'JOIN' 
+  | 'JOIN_ACK'
+  | 'ANNOUNCE'
   | 'LEAVE' 
   | 'OFFER' 
   | 'ANSWER' 

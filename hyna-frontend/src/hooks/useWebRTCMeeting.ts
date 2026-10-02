@@ -1,8 +1,19 @@
+// ============================================================
+// Hyna Studio Management - WebRTC Group Meeting Core Hook
+// Mesh WebRTC Peer Management + Supabase Realtime Signaling
+// Cloud-native: Automatic peer discovery, audio/video streaming
+// ============================================================
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { WebRTCManager } from '@/services/webrtc/WebRTCManager';
+import { SupabaseSignalingService } from '@/services/signaling/SupabaseSignalingService';
 import { updateMeetingStatus } from '@/services/meetingService';
 import { toast } from 'sonner';
-import type { Meeting, ParticipantState } from '@/types/meeting';
+import type { 
+  Meeting, 
+  ParticipantState, 
+  SignalingMessage 
+} from '@/types/meeting';
 import type { User } from '@/types';
 
 export interface UseWebRTCMeetingProps {
@@ -17,67 +28,365 @@ export interface UseWebRTCMeetingProps {
 }
 
 export function useWebRTCMeeting({
-  meeting, currentUser, isHost, initialMicEnabled = true, initialVideoEnabled = true,
-  selectedCameraId, selectedMicrophoneId, onMeetingEndedByHost,
+  meeting,
+  currentUser,
+  isHost,
+  initialMicEnabled = true,
+  initialVideoEnabled = true,
+  selectedCameraId,
+  selectedMicrophoneId,
+  onMeetingEndedByHost,
 }: UseWebRTCMeetingProps) {
+  // Local media state
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micEnabled, setMicEnabled] = useState<boolean>(initialMicEnabled);
-  const [videoEnabled, setVideoEnabled] = useState<boolean>(meeting?.meetingType === 'audio' ? false : initialVideoEnabled);
+  const [videoEnabled, setVideoEnabled] = useState<boolean>(
+    meeting?.meetingType === 'audio' ? false : initialVideoEnabled
+  );
   const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const [isLocalSpeaking, setIsLocalSpeaking] = useState<boolean>(false);
 
+  // Connection and remote participants state
   const [participants, setParticipants] = useState<Map<string, ParticipantState>>(new Map());
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const [overallConnectionState, setOverallConnectionState] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
 
+  // References
   const webrtcManagerRef = useRef<WebRTCManager | null>(null);
+  const signalingServiceRef = useRef<SupabaseSignalingService | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const announceTimerRef = useRef<any>(null);
 
-  const localUserId = currentUser?.id || '';
-  const localUserName = currentUser?.name || '';
+  // Truly unique Peer ID per browser tab (Prevents same-account/guest collisions across tabs)
+  const localPeerIdRef = useRef<string>(
+    `peer_${currentUser?.id || 'usr'}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`
+  );
+  const localPeerId = localPeerIdRef.current;
+
+  const localUserId = currentUser?.id || localPeerId;
+  const localUserName = currentUser?.name || 'Guest Member';
   const localUserAvatar = currentUser?.avatar || '';
-  const localUserRole = currentUser?.designation || currentUser?.role || '';
+  const localUserRole = currentUser?.designation || currentUser?.role || 'Member';
 
+  // 1. Initialize Web Audio Analyser for Speaking Detection
   const setupSpeechDetection = useCallback((stream: MediaStream) => {
     try {
       const audioTrack = stream.getAudioTracks()[0];
       if (!audioTrack) return;
+
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
+
       const audioCtx = new AudioCtx();
       audioContextRef.current = audioCtx;
+
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
       analyserRef.current = analyser;
-      audioCtx.createMediaStreamSource(stream).connect(analyser);
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
       const checkAudioLevel = () => {
         if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
+
         let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        setIsLocalSpeaking((sum / dataArray.length) > 18);
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+
+        // If average frequency amplitude > threshold, user is speaking
+        setIsLocalSpeaking(average > 18);
         animFrameRef.current = requestAnimationFrame(checkAudioLevel);
       };
+
       checkAudioLevel();
     } catch (e) {
       console.warn('[useWebRTCMeeting] Audio analyser setup failed:', e);
     }
   }, []);
 
+  // Helper: Guarantees a remote participant is registered in UI state
+  const ensureParticipant = useCallback((peerId: string, meta?: Partial<ParticipantState>) => {
+    setParticipants(prev => {
+      const existing = prev.get(peerId);
+      const next = new Map(prev);
+      next.set(peerId, {
+        memberId: meta?.memberId || existing?.memberId || peerId,
+        name: meta?.name || existing?.name || 'Team Member',
+        avatar: meta?.avatar || existing?.avatar || '',
+        role: meta?.role || existing?.role || 'member',
+        designation: meta?.designation || existing?.designation || 'Software Engineer',
+        micEnabled: meta?.micEnabled ?? existing?.micEnabled ?? true,
+        videoEnabled: meta?.videoEnabled ?? existing?.videoEnabled ?? true,
+        isScreenSharing: meta?.isScreenSharing ?? existing?.isScreenSharing ?? false,
+        isSpeaking: existing?.isSpeaking ?? false,
+        isHost: meta?.isHost ?? existing?.isHost ?? false,
+        joinedAt: existing?.joinedAt || new Date().toISOString(),
+        connectionState: meta?.connectionState || existing?.connectionState || 'connecting',
+      });
+      return next;
+    });
+  }, []);
+
+  // 2. Handle incoming WebRTC signaling messages
+  const handleIncomingSignal = useCallback(async (msg: SignalingMessage) => {
+    const manager = webrtcManagerRef.current;
+    if (!manager) return;
+
+    const senderId = msg.senderId;
+    if (!senderId || senderId === localPeerId) return;
+
+    // Immediately guarantee sender is registered in participants state with metadata
+    ensureParticipant(senderId, {
+      name: msg.senderName,
+      avatar: msg.senderAvatar,
+      role: msg.senderRole,
+      designation: msg.senderRole,
+    });
+
+    switch (msg.type) {
+      case 'JOIN': {
+        // Peer joined: send JOIN_ACK and create WebRTC offer
+        try {
+          console.log(`[WebRTC] Peer ${senderId} joined. Sending ACK and creating offer...`);
+          await signalingServiceRef.current?.sendSignal({
+            type: 'JOIN_ACK',
+            senderId: localPeerId,
+            targetId: senderId,
+            senderName: localUserName,
+          });
+
+          const offer = await manager.createOffer(senderId);
+          await signalingServiceRef.current?.sendSignal({
+            type: 'OFFER',
+            senderId: localPeerId,
+            targetId: senderId,
+            senderName: localUserName,
+            offer,
+          });
+        } catch (err) {
+          console.error(`[WebRTC] Failed to send offer to ${senderId}:`, err);
+        }
+        break;
+      }
+
+      case 'JOIN_ACK': {
+        console.log(`[WebRTC] Peer ${senderId} acknowledged JOIN.`);
+        if (!manager.hasPeerConnection(senderId)) {
+          try {
+            console.log(`[WebRTC] Creating offer to ${senderId} from JOIN_ACK...`);
+            const offer = await manager.createOffer(senderId);
+            await signalingServiceRef.current?.sendSignal({
+              type: 'OFFER',
+              senderId: localPeerId,
+              targetId: senderId,
+              senderName: localUserName,
+              offer,
+            });
+          } catch (err) {
+            console.warn(`[WebRTC] Offer error on JOIN_ACK for ${senderId}:`, err);
+          }
+        }
+        break;
+      }
+
+      case 'ANNOUNCE': {
+        // Active peer heartbeat announcement: ensure connected
+        if (!manager.hasPeerConnection(senderId) || manager.getConnectionState(senderId) === 'failed') {
+          try {
+            console.log(`[WebRTC] Peer ${senderId} announced presence. Initiating offer...`);
+            const offer = await manager.createOffer(senderId);
+            await signalingServiceRef.current?.sendSignal({
+              type: 'OFFER',
+              senderId: localPeerId,
+              targetId: senderId,
+              senderName: localUserName,
+              offer,
+            });
+          } catch (err) {
+            console.warn(`[WebRTC] Offer error on ANNOUNCE for ${senderId}:`, err);
+          }
+        }
+        break;
+      }
+
+      case 'OFFER': {
+        if (!msg.offer) return;
+        try {
+          console.log(`[WebRTC] Received offer from ${senderId}. Creating answer...`);
+          const answer = await manager.handleOffer(senderId, msg.offer);
+          if (answer && answer.type === 'answer') {
+            await signalingServiceRef.current?.sendSignal({
+              type: 'ANSWER',
+              senderId: localPeerId,
+              targetId: senderId,
+              senderName: localUserName,
+              answer,
+            });
+          }
+        } catch (err) {
+          console.error(`[WebRTC] Failed to handle offer from ${senderId}:`, err);
+        }
+        break;
+      }
+
+      case 'ANSWER': {
+        if (!msg.answer) return;
+        try {
+          console.log(`[WebRTC] Received answer from ${senderId}.`);
+          await manager.handleAnswer(senderId, msg.answer);
+        } catch (err) {
+          console.error(`[WebRTC] Failed to handle answer from ${senderId}:`, err);
+        }
+        break;
+      }
+
+      case 'ICE_CANDIDATE': {
+        if (!msg.candidate) return;
+        try {
+          await manager.addIceCandidate(senderId, msg.candidate);
+        } catch (err) {
+          console.error(`[WebRTC] Failed to add ICE candidate from ${senderId}:`, err);
+        }
+        break;
+      }
+
+      case 'MUTE_CHANGED': {
+        setParticipants(prev => {
+          const next = new Map(prev);
+          const p = next.get(senderId);
+          if (p) {
+            next.set(senderId, { ...p, micEnabled: Boolean(msg.micEnabled) });
+          }
+          return next;
+        });
+        break;
+      }
+
+      case 'CAMERA_CHANGED': {
+        setParticipants(prev => {
+          const next = new Map(prev);
+          const p = next.get(senderId);
+          if (p) {
+            next.set(senderId, { ...p, videoEnabled: Boolean(msg.videoEnabled) });
+          }
+          return next;
+        });
+        break;
+      }
+
+      case 'SCREEN_SHARE_STARTED': {
+        setParticipants(prev => {
+          const next = new Map(prev);
+          const p = next.get(senderId);
+          if (p) {
+            next.set(senderId, { ...p, isScreenSharing: true });
+          }
+          return next;
+        });
+        break;
+      }
+
+      case 'SCREEN_SHARE_STOPPED': {
+        setParticipants(prev => {
+          const next = new Map(prev);
+          const p = next.get(senderId);
+          if (p) {
+            next.set(senderId, { ...p, isScreenSharing: false });
+          }
+          return next;
+        });
+        break;
+      }
+
+      case 'LEAVE': {
+        manager.cleanupPeer(senderId);
+        setParticipants(prev => {
+          const next = new Map(prev);
+          next.delete(senderId);
+          return next;
+        });
+        setRemoteStreams(prev => {
+          const next = new Map(prev);
+          next.delete(senderId);
+          return next;
+        });
+        break;
+      }
+
+      default:
+        break;
+    }
+  }, [localPeerId, localUserName]);
+
+  // 3. Handle presence sync
+  const handlePresenceSync = useCallback((presences: Record<string, any[]>) => {
+    const manager = webrtcManagerRef.current;
+
+    setParticipants(prev => {
+      const next = new Map(prev);
+
+      Object.entries(presences).forEach(([key, presenceList]) => {
+        if (key !== localPeerId && presenceList && presenceList.length > 0) {
+          const latest = presenceList[presenceList.length - 1];
+          const existing = next.get(key);
+
+          next.set(key, {
+            memberId: latest.memberId || key,
+            name: latest.name || existing?.name || 'Team Member',
+            avatar: latest.avatar || existing?.avatar || '',
+            role: latest.role || existing?.role || 'member',
+            designation: latest.designation || existing?.designation || 'Software Engineer',
+            micEnabled: latest.micEnabled ?? existing?.micEnabled ?? true,
+            videoEnabled: latest.videoEnabled ?? existing?.videoEnabled ?? true,
+            isScreenSharing: latest.isScreenSharing ?? existing?.isScreenSharing ?? false,
+            isSpeaking: existing?.isSpeaking ?? false,
+            isHost: latest.isHost ?? existing?.isHost ?? false,
+            joinedAt: existing?.joinedAt || new Date().toISOString(),
+            connectionState: existing?.connectionState || 'connecting',
+          });
+
+          // Proactively initiate offer if no peer connection exists or if connection failed
+          if (manager && (!manager.hasPeerConnection(key) || manager.getConnectionState(key) === 'failed')) {
+            console.log(`[WebRTC] Proactive offer initiation to ${key} from presence sync.`);
+            manager.createOffer(key).then(offer => {
+              signalingServiceRef.current?.sendSignal({
+                type: 'OFFER',
+                senderId: localPeerId,
+                targetId: key,
+                senderName: localUserName,
+                offer,
+              });
+            }).catch(e => console.warn('[WebRTC] Presence offer initiation error:', e));
+          }
+        }
+      });
+
+      return next;
+    });
+  }, [localPeerId, localUserName]);
+
+  // 4. Initialize Media Stream and WebRTC Manager
   const startMeetingSession = useCallback(async (initialVideo?: boolean, initialAudio?: boolean, preExistingStream?: MediaStream | null) => {
     if (!meeting) return;
-    if (!currentUser || !currentUser.id) {
-      toast.error('Authentication required. Please sign in to join meetings.');
-      setOverallConnectionState('disconnected');
-      return;
-    }
+
     const isAudioOnly = meeting.meetingType === 'audio';
-    const activeVideo = typeof initialVideo === 'boolean' ? (!isAudioOnly && initialVideo) : (!isAudioOnly && videoEnabled);
-    const activeAudio = typeof initialAudio === 'boolean' ? initialAudio : micEnabled;
+
+    const activeVideo = typeof initialVideo === 'boolean'
+      ? (!isAudioOnly && initialVideo)
+      : (!isAudioOnly && videoEnabled);
+    const activeAudio = typeof initialAudio === 'boolean'
+      ? initialAudio
+      : micEnabled;
 
     setVideoEnabled(activeVideo);
     setMicEnabled(activeAudio);
@@ -85,222 +394,430 @@ export function useWebRTCMeeting({
     try {
       let stream = preExistingStream;
       if (stream) {
-        // Clone the stream to force Chromium to bind a new video frame buffer
-        // when moving a hardware stream from one <video> tag to another
         stream = new MediaStream(stream.getTracks());
       } else {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : {}) },
-          video: activeVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}) } : false,
-        });
+        const constraints: MediaStreamConstraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            ...(selectedMicrophoneId ? { deviceId: { exact: selectedMicrophoneId } } : {}),
+          },
+          video: (!isAudioOnly && activeVideo)
+            ? {
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 },
+                frameRate: { ideal: 30, max: 30 },
+                ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}),
+              }
+            : false,
+        };
+
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
       }
-      
+
       setLocalStream(stream);
-      stream.getAudioTracks().forEach(t => t.enabled = activeAudio);
-      stream.getVideoTracks().forEach(t => t.enabled = activeVideo);
+
+      // Apply initial track enabled state
+      stream.getAudioTracks().forEach(t => {
+        t.enabled = activeAudio;
+      });
+      stream.getVideoTracks().forEach(t => {
+        t.enabled = activeVideo;
+      });
+
       setupSpeechDetection(stream);
 
+      // Initialize WebRTC Manager
       if (webrtcManagerRef.current) {
-        console.log('[useWebRTCMeeting] Cleaning up existing WebRTCManager instance before starting new session');
         webrtcManagerRef.current.cleanupAll();
         webrtcManagerRef.current = null;
       }
 
-      const manager = new WebRTCManager(currentUser.id, {
-        onRemoteStream: (peerId, remoteStream) => setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream)),
-        onRemoteStreamUpdate: (peerId, remoteStream) => {
-          // Force a new map reference so React re-renders with the updated stream tracks
+      const manager = new WebRTCManager(localPeerId, {
+        onRemoteStream: (peerId, remoteStream) => {
+          console.log(`[WebRTC Hook] Received remote stream from peer ${peerId}`, {
+            audioTracks: remoteStream.getAudioTracks().length,
+            videoTracks: remoteStream.getVideoTracks().length,
+          });
           setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream));
+          ensureParticipant(peerId);
         },
-        onRemoteStreamRemoved: (peerId) => setRemoteStreams(prev => { const next = new Map(prev); next.delete(peerId); return next; }),
+        onRemoteStreamUpdate: (peerId, remoteStream) => {
+          setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream));
+          ensureParticipant(peerId);
+        },
+        onRemoteStreamRemoved: (peerId) => {
+          setRemoteStreams(prev => {
+            const next = new Map(prev);
+            next.delete(peerId);
+            return next;
+          });
+        },
         onPeerConnectionStateChange: (peerId, state) => {
-          if (peerId === 'server') {
-            if (state === 'connected') setOverallConnectionState('connected');
-            else if (state === 'disconnected' || state === 'failed') setOverallConnectionState('reconnecting');
+          setParticipants(prev => {
+            const next = new Map(prev);
+            const p = next.get(peerId);
+            if (p) {
+              next.set(peerId, { ...p, connectionState: state });
+            }
+            return next;
+          });
+
+          if (state === 'connected') {
+            setOverallConnectionState('connected');
+          } else if (state === 'disconnected' || state === 'failed') {
+            setOverallConnectionState('reconnecting');
           }
         },
-        onIceCandidate: () => {},
-        onError: (err, ctx) => console.error(`[WebRTC Error in ${ctx}]:`, err),
+        onIceCandidate: (targetPeerId, candidate) => {
+          signalingServiceRef.current?.sendSignal({
+            type: 'ICE_CANDIDATE',
+            senderId: localPeerId,
+            targetId: targetPeerId,
+            senderName: localUserName,
+            candidate: candidate.toJSON(),
+          });
+        },
+        onError: (error, ctx) => {
+          console.error(`[WebRTC Error in ${ctx}]:`, error);
+        },
       });
 
       manager.setLocalStream(stream);
       webrtcManagerRef.current = manager;
 
-      const roomKey = meeting.meetingRoomId || meeting.id;
-      const userPayload = { userId: currentUser.id, name: currentUser.name, avatar: currentUser.avatar, role: currentUser.role, designation: currentUser.designation };
-      
-      const socket = manager.getSocket();
+      // Initialize Supabase Signaling Service
+      const currentRoomKey = meeting.meetingRoomId || meeting.id;
+      const signaling = new SupabaseSignalingService(
+        currentRoomKey,
+        localPeerId,
+        {
+          id: localUserId,
+          name: localUserName,
+          avatar: localUserAvatar,
+          role: localUserRole,
+          designation: currentUser?.designation,
+        },
+        {
+          onSignal: async (msg: SignalingMessage) => {
+            await handleIncomingSignal(msg);
+          },
+          onPresenceSync: (presences) => {
+            handlePresenceSync(presences);
+          },
+          onPresenceJoin: (key, newPresences) => {
+            if (key !== localPeerId) {
+              const latest = newPresences?.[0] || {};
+              ensureParticipant(key, {
+                memberId: latest.memberId || key,
+                name: latest.name || 'Team Member',
+                avatar: latest.avatar || '',
+                role: latest.role || 'member',
+                designation: latest.designation || 'Software Engineer',
+                micEnabled: latest.micEnabled ?? true,
+                videoEnabled: latest.videoEnabled ?? true,
+                isScreenSharing: latest.isScreenSharing ?? false,
+                isHost: latest.isHost ?? false,
+                connectionState: 'connecting',
+              });
 
-      socket.on('room-joined', (data) => {
-        const newMap = new Map<string, ParticipantState>();
-        for (const p of data.participants) {
-          newMap.set(p.socketId, {
-            memberId: p.userId, name: p.name, avatar: p.avatar, role: p.role, designation: p.designation,
-            micEnabled: p.micEnabled, videoEnabled: p.videoEnabled, isScreenSharing: p.isScreenSharing,
-            isSpeaking: p.isSpeaking, isHost: p.isHost, joinedAt: p.joinedAt, connectionState: 'connected'
-          });
+              const mgr = webrtcManagerRef.current;
+              if (mgr && (!mgr.hasPeerConnection(key) || mgr.getConnectionState(key) === 'failed')) {
+                mgr.createOffer(key).then(offer => {
+                  signalingServiceRef.current?.sendSignal({
+                    type: 'OFFER',
+                    senderId: localPeerId,
+                    targetId: key,
+                    senderName: localUserName,
+                    offer,
+                  });
+                }).catch(e => console.warn(`[WebRTC] onPresenceJoin offer creation failed:`, e));
+              }
+            }
+          },
+          onPresenceLeave: (key) => {
+            if (key !== localPeerId) {
+              webrtcManagerRef.current?.cleanupPeer(key);
+              setParticipants(prev => {
+                const next = new Map(prev);
+                next.delete(key);
+                return next;
+              });
+              setRemoteStreams(prev => {
+                const next = new Map(prev);
+                next.delete(key);
+                return next;
+              });
+            }
+          },
+          onMeetingEnded: () => {
+            if (onMeetingEndedByHost) {
+              onMeetingEndedByHost();
+            }
+          },
         }
-        setParticipants(newMap);
+      );
+
+      signalingServiceRef.current = signaling;
+
+      // Connect signaling and broadcast presence
+      await signaling.connect({
+        memberId: localUserId,
+        name: localUserName,
+        avatar: localUserAvatar,
+        role: localUserRole,
+        designation: currentUser?.designation,
+        micEnabled: activeAudio,
+        videoEnabled: activeVideo,
+        isScreenSharing: false,
+        isHost,
+        joinedAt: new Date().toISOString(),
+        connectionState: 'connected',
       });
 
-      socket.on('participant_joined', (p) => {
-        setParticipants(prev => {
-          const next = new Map(prev);
-          next.set(p.socketId, {
-            memberId: p.userId, name: p.name, avatar: p.avatar, role: p.role, designation: p.designation,
-            micEnabled: p.micEnabled, videoEnabled: p.videoEnabled, isScreenSharing: p.isScreenSharing,
-            isSpeaking: p.isSpeaking, isHost: p.isHost, joinedAt: p.joinedAt, connectionState: 'connected'
-          });
-          return next;
-        });
-      });
+      // Start periodic announcement heartbeat so all peers discover each other instantly
+      if (announceTimerRef.current) clearInterval(announceTimerRef.current);
+      announceTimerRef.current = setInterval(() => {
+        signalingServiceRef.current?.sendSignal({
+          type: 'ANNOUNCE',
+          senderId: localPeerId,
+          senderName: localUserName,
+        }).catch(() => {});
+      }, 3500);
 
-      socket.on('participant-media-changed', (data) => {
-        setParticipants(prev => {
-          const next = new Map(prev);
-          const p = next.get(data.socketId);
-          if (p) next.set(data.socketId, { ...p, micEnabled: data.micEnabled, videoEnabled: data.videoEnabled, isScreenSharing: data.isScreenSharing });
-          return next;
-        });
-      });
+      setOverallConnectionState('connected');
 
-      socket.on('participant-speaking-changed', (data) => {
-        setParticipants(prev => {
-          const next = new Map(prev);
-          const p = next.get(data.socketId);
-          if (p) next.set(data.socketId, { ...p, isSpeaking: data.isSpeaking });
-          return next;
-        });
-      });
-
-      socket.on('participant_left', (data) => {
-        setParticipants(prev => { const next = new Map(prev); next.delete(data.socketId); return next; });
-      });
-
-      socket.on('forced-mute', () => {
-        setMicEnabled(false);
-        manager.setAudioEnabled(false);
-        toast.info('You were muted by the host.');
-      });
-
-      socket.on('removed-by-host', () => {
-        leaveMeeting();
-        toast.error('You have been removed from the meeting by the host.');
-      });
-
-      socket.on('meeting-ended', () => {
-        if (onMeetingEndedByHost) onMeetingEndedByHost();
-      });
-
-      await manager.connectMesh(roomKey, userPayload, activeAudio, activeVideo);
-      if (meeting.status === 'scheduled') updateMeetingStatus(meeting.id, 'live').catch(() => {});
-    } catch (err) {
-      console.error(err);
+      // Update meeting status in DB to 'live' if it's currently scheduled
+      if (meeting.status === 'scheduled') {
+        updateMeetingStatus(meeting.id, 'live').catch(() => {});
+      }
+    } catch (err: any) {
+      console.error('[useWebRTCMeeting] Failed to start meeting session:', err);
       setOverallConnectionState('disconnected');
     }
-  }, [meeting, localUserId, localUserName, micEnabled, videoEnabled, isHost, selectedCameraId, selectedMicrophoneId, setupSpeechDetection, onMeetingEndedByHost]);
+  }, [
+    meeting,
+    localPeerId,
+    localUserId,
+    localUserName,
+    localUserAvatar,
+    localUserRole,
+    currentUser?.designation,
+    micEnabled,
+    videoEnabled,
+    isHost,
+    selectedCameraId,
+    selectedMicrophoneId,
+    setupSpeechDetection,
+    handleIncomingSignal,
+    handlePresenceSync,
+    onMeetingEndedByHost,
+  ]);
 
-  useEffect(() => {
-    if (webrtcManagerRef.current && overallConnectionState === 'connected') {
-      webrtcManagerRef.current.getSocket().emit('speaking-change', { isSpeaking: isLocalSpeaking });
-    }
-  }, [isLocalSpeaking, overallConnectionState]);
-
+  // 5. Toggle microphone
   const toggleMute = useCallback(() => {
     const nextState = !micEnabled;
     setMicEnabled(nextState);
-    webrtcManagerRef.current?.setAudioEnabled(nextState);
-    webrtcManagerRef.current?.getSocket().emit('media-toggle', { micEnabled: nextState, videoEnabled, isScreenSharing });
-  }, [micEnabled, videoEnabled, isScreenSharing]);
 
+    if (webrtcManagerRef.current) {
+      webrtcManagerRef.current.setAudioEnabled(nextState);
+    }
+
+    signalingServiceRef.current?.sendSignal({
+      type: 'MUTE_CHANGED',
+      senderId: localPeerId,
+      senderName: localUserName,
+      micEnabled: nextState,
+    });
+
+    signalingServiceRef.current?.updatePresence({
+      micEnabled: nextState,
+    });
+  }, [micEnabled, localPeerId, localUserName]);
+
+  // 6. Toggle camera
   const toggleCamera = useCallback(async () => {
-    if (meeting?.meetingType === 'audio') return;
+    if (meeting?.meetingType === 'audio') {
+      toast.info('This is an audio-only meeting.');
+      return;
+    }
+
     const nextState = !videoEnabled;
-    if (!nextState) {
-      setVideoEnabled(false);
-      if (localStream) {
-        localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); });
-      }
-      await webrtcManagerRef.current?.replaceVideoTrack(null);
-      webrtcManagerRef.current?.getSocket().emit('media-toggle', { micEnabled, videoEnabled: false, isScreenSharing });
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, ...(selectedCameraId ? { deviceId: { exact: selectedCameraId } } : {}) }, audio: false });
-        const newVideoTrack = stream.getVideoTracks()[0];
-        if (newVideoTrack && localStream) {
-          // Create a completely new stream object so React and the HTMLVideoElement detect the change
-          const newStream = new MediaStream([
-            ...localStream.getAudioTracks(),
-            newVideoTrack
-          ]);
-          
-          setLocalStream(newStream);
-          webrtcManagerRef.current?.setLocalStream(newStream);
-          
-          // Force renegotiation for the new track
-          await webrtcManagerRef.current?.replaceVideoTrack(newVideoTrack);
-        }
-        setVideoEnabled(true);
-        webrtcManagerRef.current?.getSocket().emit('media-toggle', { micEnabled, videoEnabled: true, isScreenSharing });
-      } catch (err) {
-        toast.error('Unable to access camera device.');
-      }
-    }
-  }, [meeting?.meetingType, videoEnabled, micEnabled, isScreenSharing, localStream, selectedCameraId]);
+    setVideoEnabled(nextState);
 
+    if (webrtcManagerRef.current) {
+      webrtcManagerRef.current.setVideoEnabled(nextState);
+    }
+
+    signalingServiceRef.current?.sendSignal({
+      type: 'CAMERA_CHANGED',
+      senderId: localPeerId,
+      senderName: localUserName,
+      videoEnabled: nextState,
+    });
+
+    signalingServiceRef.current?.updatePresence({
+      videoEnabled: nextState,
+    });
+  }, [videoEnabled, meeting?.meetingType, localPeerId, localUserName]);
+
+  // 7. Toggle Screen Share
   const toggleScreenShare = useCallback(async () => {
+    const manager = webrtcManagerRef.current;
+    if (!manager) return;
+
     if (isScreenSharing) {
-      await webrtcManagerRef.current?.stopScreenShare();
+      // Stop screen share
+      await manager.stopScreenShare();
       setIsScreenSharing(false);
-      webrtcManagerRef.current?.getSocket().emit('media-toggle', { micEnabled, videoEnabled, isScreenSharing: false });
+
+      signalingServiceRef.current?.sendSignal({
+        type: 'SCREEN_SHARE_STOPPED',
+        senderId: localPeerId,
+        senderName: localUserName,
+      });
+
+      signalingServiceRef.current?.updatePresence({
+        isScreenSharing: false,
+      });
     } else {
+      // Start screen share
       try {
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        setIsScreenSharing(true);
-        await webrtcManagerRef.current?.startScreenShare(displayStream);
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30 } },
+          audio: true,
+        });
+
+        screenStreamRef.current = displayStream;
+
         displayStream.getVideoTracks()[0].onended = () => {
-          webrtcManagerRef.current?.stopScreenShare();
-          setIsScreenSharing(false);
-          webrtcManagerRef.current?.getSocket().emit('media-toggle', { micEnabled, videoEnabled, isScreenSharing: false });
+          toggleScreenShare();
         };
-        webrtcManagerRef.current?.getSocket().emit('media-toggle', { micEnabled, videoEnabled, isScreenSharing: true });
+
+        await manager.startScreenShare(displayStream);
+        setIsScreenSharing(true);
+
+        signalingServiceRef.current?.sendSignal({
+          type: 'SCREEN_SHARE_STARTED',
+          senderId: localPeerId,
+          senderName: localUserName,
+        });
+
+        signalingServiceRef.current?.updatePresence({
+          isScreenSharing: true,
+        });
       } catch (err: any) {
-        if (err.name !== 'NotAllowedError') console.error(err);
+        if (err.name !== 'NotAllowedError') {
+          console.error('[WebRTC] Screen share failed:', err);
+          toast.error('Failed to start screen share.');
+        }
       }
     }
-  }, [isScreenSharing, micEnabled, videoEnabled]);
+  }, [isScreenSharing, localPeerId, localUserName]);
 
+  // 8. Leave Meeting
   const leaveMeeting = useCallback(async () => {
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); setLocalStream(null); }
+    // Stop local media
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+
+    // Stop screen share
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    // Stop audio analyser
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+    }
+
+    // Stop announcement heartbeat
+    if (announceTimerRef.current) {
+      clearInterval(announceTimerRef.current);
+      announceTimerRef.current = null;
+    }
+
+    // Cleanup WebRTC and signaling
     webrtcManagerRef.current?.cleanupAll();
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+    await signalingServiceRef.current?.disconnect();
+
+    setParticipants(new Map());
+    setRemoteStreams(new Map());
     setOverallConnectionState('disconnected');
   }, [localStream]);
 
+  // 9. End Meeting for Everyone (Host only)
   const endMeetingForEveryone = useCallback(async () => {
-    if (!meeting) return;
-    webrtcManagerRef.current?.getSocket().emit('host-end-meeting');
-    await updateMeetingStatus(meeting.id, 'completed');
-    await leaveMeeting();
-  }, [meeting, leaveMeeting]);
+    if (!isHost || !meeting) return;
 
+    try {
+      await signalingServiceRef.current?.broadcastMeetingEnded();
+      await updateMeetingStatus(meeting.id, 'completed');
+      await leaveMeeting();
+    } catch (err) {
+      console.error('[WebRTC] Error ending meeting:', err);
+    }
+  }, [isHost, meeting, leaveMeeting]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
-      webrtcManagerRef.current?.cleanupAll();
+      leaveMeeting();
     };
   }, []);
 
+  // Compute current local participant state
   const localParticipantState: ParticipantState = useMemo(() => ({
-    memberId: localUserId, name: localUserName, avatar: localUserAvatar, role: localUserRole, designation: currentUser?.designation,
-    micEnabled, videoEnabled: meeting?.meetingType === 'audio' ? false : videoEnabled, isScreenSharing, isSpeaking: isLocalSpeaking,
-    isHost, joinedAt: new Date().toISOString(), connectionState: 'connected',
-  }), [localUserId, localUserName, localUserAvatar, localUserRole, currentUser?.designation, micEnabled, videoEnabled, meeting?.meetingType, isScreenSharing, isLocalSpeaking, isHost]);
+    memberId: localUserId,
+    name: localUserName,
+    avatar: localUserAvatar,
+    role: currentUser?.role || 'member',
+    designation: currentUser?.designation || 'Software Engineer',
+    micEnabled,
+    videoEnabled,
+    isScreenSharing,
+    isSpeaking: isLocalSpeaking,
+    isHost,
+    joinedAt: new Date().toISOString(),
+    connectionState: overallConnectionState === 'connected' ? 'connected' : 'connecting',
+  }), [
+    localUserId,
+    localUserName,
+    localUserAvatar,
+    currentUser?.role,
+    currentUser?.designation,
+    micEnabled,
+    videoEnabled,
+    isScreenSharing,
+    isLocalSpeaking,
+    isHost,
+    overallConnectionState,
+  ]);
 
   return {
-    localStream, localParticipantState, participants, remoteStreams, micEnabled, videoEnabled, isScreenSharing, isSpeaking: isLocalSpeaking,
-    overallConnectionState, pinnedParticipantId, startMeetingSession, toggleMute, toggleCamera, toggleScreenShare, setPinnedParticipantId, leaveMeeting, endMeetingForEveryone,
+    localStream,
+    localParticipantState,
+    participants,
+    remoteStreams,
+    micEnabled,
+    videoEnabled,
+    isScreenSharing,
+    isLocalSpeaking,
+    overallConnectionState,
+    pinnedParticipantId,
+    startMeetingSession,
+    toggleMute,
+    toggleCamera,
+    toggleScreenShare,
+    setPinnedParticipantId,
+    leaveMeeting,
+    endMeetingForEveryone,
   };
 }

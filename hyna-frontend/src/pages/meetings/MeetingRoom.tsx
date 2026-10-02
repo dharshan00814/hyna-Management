@@ -22,6 +22,7 @@ import { DeviceSettingsModal } from '@/components/meetings/DeviceSettingsModal';
 import { MeetingSummary } from '@/components/meetings/MeetingSummary';
 import { Button } from '@/components/ui';
 import type { Meeting } from '@/types/meeting';
+import type { User } from '@/types';
 
 export function MeetingRoom() {
   const { id: routeIdentifier } = useParams<{ id: string }>();
@@ -51,21 +52,26 @@ export function MeetingRoom() {
         const found = await fetchMeetingByIdOrRoomId(routeIdentifier);
         if (isMounted) {
           if (found) {
-            // Check Access Control:
-            // Allow if user is host, creator, invited participant, or admin/manager
-            const userId = currentUser?.id;
-            const isCreator = found.hostId === userId || found.createdBy === userId;
-            const isInvited = (found.participantIds || []).includes(userId || '');
-            const isExecutiveOrManager = effectiveRole === 'admin' || effectiveRole === 'manager';
-
-            if (!isCreator && !isInvited && !isExecutiveOrManager && userId) {
-              setAccessDenied(true);
-            } else {
-              setMeeting(found);
-            }
+            setMeeting(found);
           } else {
-            // Meeting record not found
-            setMeeting(null);
+            // Direct link joinable: fallback ad-hoc meeting object
+            const adHocMeeting: Meeting = {
+              id: routeIdentifier,
+              title: 'Hyna Video Meeting',
+              description: 'Direct Room Meeting',
+              date: new Date().toISOString().split('T')[0],
+              startTime: '00:00',
+              endTime: '23:59',
+              hostId: currentUser?.id || 'host',
+              participantIds: [],
+              type: 'team',
+              meetingType: 'video',
+              meetingRoomId: routeIdentifier,
+              isRecurring: false,
+              meetingLink: `/meeting/${routeIdentifier}`,
+              status: 'live',
+            };
+            setMeeting(adHocMeeting);
           }
         }
       } catch (err) {
@@ -122,13 +128,43 @@ export function MeetingRoom() {
     };
   }, [stopLocalStream]);
 
+  // Guest user handling for direct link joiners
+  const [guestName, setGuestName] = useState<string>(() => {
+    return sessionStorage.getItem('hyna_meeting_guest_name') || '';
+  });
+
+  const handleGuestNameChange = (name: string) => {
+    setGuestName(name);
+    sessionStorage.setItem('hyna_meeting_guest_name', name);
+  };
+
+  const effectiveUser = useMemo(() => {
+    if (currentUser) return currentUser;
+    const name = guestName.trim() || 'Guest Member';
+    return {
+      id: `guest_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+      name,
+      email: 'guest@hyna.io',
+      avatar: '',
+      role: 'member' as const,
+      designation: 'Guest Participant',
+      department: 'Guest',
+      phone: '',
+      joinDate: new Date().toISOString(),
+      status: 'active' as const,
+    } as User;
+  }, [currentUser, guestName]);
+
   const isHost = useMemo(() => {
-    if (!meeting || !currentUser) return false;
-    return (
-      meeting.hostId === currentUser.id ||
-      meeting.createdBy === currentUser.id ||
-      effectiveRole === 'admin'
-    );
+    if (!meeting) return false;
+    if (currentUser) {
+      return (
+        meeting.hostId === currentUser.id ||
+        meeting.createdBy === currentUser.id ||
+        effectiveRole === 'admin'
+      );
+    }
+    return false;
   }, [meeting, currentUser, effectiveRole]);
 
   // 3. WebRTC Meeting Core Hook
@@ -151,7 +187,7 @@ export function MeetingRoom() {
     endMeetingForEveryone,
   } = useWebRTCMeeting({
     meeting,
-    currentUser,
+    currentUser: effectiveUser,
     isHost,
     initialMicEnabled: prejoinAudioEnabled,
     initialVideoEnabled: !isAudioOnly && prejoinVideoEnabled,
@@ -166,7 +202,7 @@ export function MeetingRoom() {
   // 4. Automatic Attendance Hook (Only activates in 'in-meeting' stage)
   const { finalizeAttendance } = useMeetingAttendance(
     meeting?.id,
-    currentUser?.id,
+    effectiveUser?.id,
     meetingStage === 'in-meeting' && overallConnectionState === 'connected'
   );
 
@@ -176,7 +212,7 @@ export function MeetingRoom() {
     unreadCount: unreadChatCount,
     setChatOpen,
     sendMessage: sendChatMessage,
-  } = useMeetingChat(meeting?.id, currentUser);
+  } = useMeetingChat(meeting?.id, effectiveUser);
 
   // Handle panel toggling
   const handleTogglePanel = (panel: 'chat' | 'participants') => {
@@ -283,6 +319,8 @@ export function MeetingRoom() {
       <PreJoinScreen
         meeting={meeting}
         currentUser={currentUser}
+        guestName={guestName}
+        onGuestNameChange={handleGuestNameChange}
         cameras={cameras}
         microphones={microphones}
         speakers={speakers}
@@ -341,6 +379,13 @@ export function MeetingRoom() {
     );
   }
 
+  const handleCopyInviteLink = () => {
+    const roomId = meeting?.meetingRoomId || routeIdentifier || '';
+    const fullUrl = `${window.location.origin}/meeting/${roomId}`;
+    navigator.clipboard.writeText(fullUrl);
+    toast.success('Meeting invite link copied! Share this with your friend.');
+  };
+
   // STAGE 2: IN-MEETING ROOM (FULL SCREEN)
   return (
     <div className="relative w-screen h-screen bg-[#08080a] text-white flex flex-col overflow-hidden select-none">
@@ -367,9 +412,15 @@ export function MeetingRoom() {
             </span>
           )}
 
-          <span className="text-xs text-white/50 font-mono hidden md:inline-block">
-            Room: {meeting.meetingRoomId}
-          </span>
+          <button
+            type="button"
+            onClick={handleCopyInviteLink}
+            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-white/10 hover:bg-white/20 text-white/90 border border-white/10 transition-all flex items-center gap-1.5"
+            title="Copy Meeting Invite Link"
+          >
+            <span className="font-mono text-[11px] text-white/60">Room: {meeting.meetingRoomId}</span>
+            <span className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider ml-1">Copy Link</span>
+          </button>
         </div>
       </header>
 
@@ -423,6 +474,7 @@ export function MeetingRoom() {
         onToggleScreenShare={toggleScreenShare}
         onTogglePanel={handleTogglePanel}
         onOpenSettings={() => setShowSettingsModal(true)}
+        onCopyLink={handleCopyInviteLink}
         onLeaveMeeting={handleLeave}
         onEndMeetingForEveryone={isHost ? handleEndForEveryone : undefined}
       />
