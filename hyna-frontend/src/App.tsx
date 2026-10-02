@@ -122,6 +122,7 @@ function App() {
 
           {/* Protected App Routes Layout */}
           <Route element={<AppLayout />}>
+
             {/* Executive Leadership Only Routes (CEO, CTO, COO) */}
             <Route element={<ProtectedRoute requireExecutiveLeadership={true} />}>
               {/* Members */}
@@ -154,6 +155,8 @@ function App() {
               <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
             </Route>
 
+            {/* Executive / Admin Only Routes */}
+
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/projects" element={<ProjectsPage />} />
@@ -169,8 +172,10 @@ function App() {
               <Route path="/admin/announcements" element={<AnnouncementsPage />} />
               <Route path="/admin/settings" element={<SettingsPage />} />
               <Route path="/admin/settings/integrations" element={<ConnectIntegrationsPage />} />
+              <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
             </Route>
 
+            {/* Manager Routes */}
             <Route element={<ProtectedRoute allowedRoles={['manager', 'admin']} />}>
               <Route path="/manager/dashboard" element={<ManagerDashboard />} />
               <Route path="/manager/projects" element={<ProjectsPage />} />
@@ -186,8 +191,10 @@ function App() {
               <Route path="/manager/announcements" element={<AnnouncementsPage />} />
               <Route path="/manager/settings" element={<SettingsPage />} />
               <Route path="/manager/settings/integrations" element={<ConnectIntegrationsPage />} />
+              <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />
             </Route>
 
+            {/* Member Routes */}
             <Route element={<ProtectedRoute allowedRoles={['member', 'manager', 'admin']} />}>
               <Route path="/member/dashboard" element={<MemberDashboard />} />
               <Route path="/member/tasks" element={<TasksPage />} />
@@ -202,6 +209,7 @@ function App() {
               <Route path="/member/payroll" element={<PayrollPage />} />
               <Route path="/member/settings" element={<SettingsPage />} />
               <Route path="/member/settings/integrations" element={<ConnectIntegrationsPage />} />
+              <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
             </Route>
 
             {/* Direct Accessible Shared Routes */}
@@ -210,6 +218,8 @@ function App() {
             <Route path="/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/payroll" element={<PayrollPage />} />
             <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
+
+            <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
           </Route>
 
           {/* Meeting Room - Without AppLayout (Full screen, direct link joinable) */}

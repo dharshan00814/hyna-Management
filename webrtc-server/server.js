@@ -445,6 +445,10 @@ io.on('connection', (socket) => {
   });
 });
 
+// Render Load Balancer Timeout Configuration (Prevents 502 Bad Gateway / Connection Reset)
+server.keepAliveTimeout = 120000; // 120 seconds (greater than Render proxy's 90s timeout)
+server.headersTimeout = 125000;   // 125 seconds (must be > keepAliveTimeout)
+
 if (!process.env.VERCEL) {
   server.listen(PORT, HOST, () => {
     console.log(`=======================================================`);
