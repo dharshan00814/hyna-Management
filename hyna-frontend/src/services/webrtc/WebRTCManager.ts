@@ -58,7 +58,12 @@ export class WebRTCManager {
       : `https://${hostname}`;
       
     const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_SFU_SERVER_URL || defaultServerUrl;
-    this.socket = io(SERVER_URL, { transports: ['websocket'] });
+    this.socket = io(SERVER_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+    });
   }
 
   // Determine deterministic negotiation role (Polite vs Impolite)
