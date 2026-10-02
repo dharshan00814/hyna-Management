@@ -34,14 +34,40 @@ let tasksCache: Task[] = [];
 // Default meetings list (empty by default)
 const DEFAULT_MEETINGS: Meeting[] = [];
 
+// Persistent tracker for deleted meeting IDs to prevent deleted meetings from ever coming back
+const DELETED_MEETINGS_KEY = 'hyna_deleted_meetings';
+
+export function getDeletedMeetingIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_MEETINGS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function recordDeletedMeetingId(id: string, roomId?: string) {
+  const set = getDeletedMeetingIds();
+  if (id) set.add(id);
+  if (roomId) set.add(roomId);
+  try {
+    localStorage.setItem(DELETED_MEETINGS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 function initMeetingsCache(): Meeting[] {
   try {
     const stored = localStorage.getItem('hyna_meetings_cache');
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) {
-        // Filter out removed default meetings
+        const deletedIds = getDeletedMeetingIds();
+        // Filter out removed default meetings and deleted meetings
         const filtered = parsed.filter((m: Meeting) =>
+          !deletedIds.has(m.id) &&
+          (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
           m.id !== 'mt_standup_daily' &&
           m.id !== 'mt_product_review' &&
           m.id !== 'mt_arch_planning' &&
@@ -1282,10 +1308,13 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
         .select('*')
         .order('date', { ascending: true });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
+        const deletedIds = getDeletedMeetingIds();
         const dbMeetings = data
           .map(mapMeeting)
           .filter(m =>
+            !deletedIds.has(m.id) &&
+            (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
             m.id !== 'mt_standup_daily' &&
             m.id !== 'mt_product_review' &&
             m.id !== 'mt_arch_planning' &&
@@ -1294,7 +1323,11 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
             m.title !== 'Core Architecture & Security Sync'
           );
         // Merge with local-only meetings so freshly created meetings are preserved
-        const localOnly = meetingsCache.filter(m => !dbMeetings.some(dbm => dbm.id === m.id));
+        const localOnly = meetingsCache.filter(m => 
+          !deletedIds.has(m.id) &&
+          (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
+          !dbMeetings.some(dbm => dbm.id === m.id)
+        );
         const merged = [...dbMeetings, ...localOnly];
         persistMeetingsCache(merged);
       }
@@ -1303,8 +1336,11 @@ export async function getMeetings(userId?: string): Promise<Meeting[]> {
     console.warn('Error fetching meetings from Supabase, using cache fallback:', err);
   }
 
-  // Ensure removed default meetings are never included in cache
+  // Ensure removed default meetings and deleted meetings are never included in cache
+  const deletedIds = getDeletedMeetingIds();
   meetingsCache = meetingsCache.filter(m =>
+    !deletedIds.has(m.id) &&
+    (!m.meetingRoomId || !deletedIds.has(m.meetingRoomId)) &&
     m.id !== 'mt_standup_daily' &&
     m.id !== 'mt_product_review' &&
     m.id !== 'mt_arch_planning' &&
@@ -1542,12 +1578,38 @@ export async function updateMeeting(id: string, updates: Partial<Meeting>): Prom
 }
 
 export async function deleteMeeting(id: string): Promise<boolean> {
-  meetingsCache = meetingsCache.filter(m => m.id !== id);
+  const meeting = meetingsCache.find(m => m.id === id || m.meetingRoomId === id);
+  const roomId = meeting?.meetingRoomId;
+
+  // 1. Immediately record in persistent deleted set to prevent any auto-undelete
+  recordDeletedMeetingId(id, roomId);
+
+  // 2. Remove from local cache immediately
+  meetingsCache = meetingsCache.filter(m => m.id !== id && m.meetingRoomId !== id && (!roomId || m.id !== roomId));
   persistMeetingsCache(meetingsCache);
 
+  // 3. Delete from Supabase with child record cleanup
   if (isSupabaseConfigured()) {
     try {
-      await supabase.from('meetings').delete().eq('id', id);
+      // First clean child records to prevent foreign key errors
+      await supabase.from('meeting_messages').delete().eq('meeting_id', id);
+      await supabase.from('meeting_attendance').delete().eq('meeting_id', id);
+      await supabase.from('meeting_participants').delete().eq('meeting_id', id);
+      if (roomId) {
+        await supabase.from('meeting_messages').delete().eq('meeting_id', roomId);
+        await supabase.from('meeting_attendance').delete().eq('meeting_id', roomId);
+        await supabase.from('meeting_participants').delete().eq('meeting_id', roomId);
+      }
+
+      // Delete from meetings table by id and meeting_room_id
+      const { error: err1 } = await supabase.from('meetings').delete().eq('id', id);
+      if (err1) {
+        console.warn('Supabase delete by id failed, attempting by room_id:', err1.message);
+      }
+      if (roomId) {
+        await supabase.from('meetings').delete().eq('meeting_room_id', roomId);
+      }
+      await supabase.from('meetings').delete().eq('meeting_room_id', id);
     } catch (e) {
       console.warn('Could not delete meeting from Supabase:', e);
     }

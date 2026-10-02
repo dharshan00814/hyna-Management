@@ -374,6 +374,13 @@ export function MeetingRoom() {
     );
   }
 
+  const handleCopyInviteLink = () => {
+    const roomId = meeting?.meetingRoomId || routeIdentifier || '';
+    const fullUrl = `${window.location.origin}/meeting/${roomId}`;
+    navigator.clipboard.writeText(fullUrl);
+    toast.success('Meeting invite link copied! Share this with your friend.');
+  };
+
   // STAGE 2: IN-MEETING ROOM (FULL SCREEN)
   return (
     <div className="relative w-screen h-screen bg-[#08080a] text-white flex flex-col overflow-hidden select-none">
@@ -400,9 +407,15 @@ export function MeetingRoom() {
             </span>
           )}
 
-          <span className="text-xs text-white/50 font-mono hidden md:inline-block">
-            Room: {meeting.meetingRoomId}
-          </span>
+          <button
+            type="button"
+            onClick={handleCopyInviteLink}
+            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-white/10 hover:bg-white/20 text-white/90 border border-white/10 transition-all flex items-center gap-1.5"
+            title="Copy Meeting Invite Link"
+          >
+            <span className="font-mono text-[11px] text-white/60">Room: {meeting.meetingRoomId}</span>
+            <span className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider ml-1">Copy Link</span>
+          </button>
         </div>
       </header>
 
@@ -456,6 +469,7 @@ export function MeetingRoom() {
         onToggleScreenShare={toggleScreenShare}
         onTogglePanel={handleTogglePanel}
         onOpenSettings={() => setShowSettingsModal(true)}
+        onCopyLink={handleCopyInviteLink}
         onLeaveMeeting={handleLeave}
         onEndMeetingForEveryone={isHost ? handleEndForEveryone : undefined}
       />

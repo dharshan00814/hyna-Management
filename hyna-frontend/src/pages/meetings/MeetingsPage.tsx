@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Plus, Clock, Video, Mic, Volume2, Users, Check, Copy, ExternalLink, Link2, Radio 
+  Plus, Clock, Video, Mic, Volume2, Users, Check, Copy, ExternalLink, Link2, Radio, Trash2 
 } from 'lucide-react';
 import { Button, Avatar, Badge, Modal, Input, Textarea, Select, EmptyState, LoadingState } from '@/components/ui';
 import { cn, formatDate, formatTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
-import { getMeetings, getUsers, getUserById, createNotification } from '@/services/api';
+import { getMeetings, getUsers, getUserById, createNotification, deleteMeeting } from '@/services/api';
 import { createNewMeeting } from '@/services/meetingService';
 import { toast } from 'sonner';
 import type { Meeting, MeetingType, MeetingMediaType, User } from '@/types';
@@ -71,6 +71,43 @@ export function MeetingsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleDeleteMeeting = async (e: React.MouseEvent, meetingId: string) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to permanently delete this meeting?')) return;
+    try {
+      await deleteMeeting(meetingId);
+      setMeetings(prev => prev.filter(m => m.id !== meetingId && m.meetingRoomId !== meetingId));
+      toast.success('Meeting permanently deleted');
+    } catch (err) {
+      toast.error('Failed to delete meeting');
+    }
+  };
+
+  const handleDeleteAllMeetings = async () => {
+    if (meetings.length === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete all ${meetings.length} meetings? This cannot be undone.`)) return;
+    try {
+      for (const m of meetings) {
+        await deleteMeeting(m.id);
+      }
+      setMeetings([]);
+      toast.success('All meetings permanently deleted');
+    } catch {
+      toast.error('Failed to delete some meetings');
+    }
+  };
+
+  const handleCopyMeetingLink = (e: React.MouseEvent, meeting: Meeting) => {
+    e.stopPropagation();
+    const rawLink = (meeting.meetingLink || '').trim();
+    const roomId = meeting.meetingRoomId || rawLink.split('/').pop() || meeting.id;
+    const fullUrl = rawLink.startsWith('http://') || rawLink.startsWith('https://')
+      ? rawLink
+      : `${window.location.origin}/meeting/${roomId}`;
+    navigator.clipboard.writeText(fullUrl);
+    toast.success('Meeting invite link copied!');
+  };
 
   const handleCreateMeeting = async () => {
     if (!newMeeting.title.trim()) {
@@ -201,9 +238,21 @@ export function MeetingsPage() {
             ))}
           </div>
           {currentRole !== 'member' && (
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="w-4 h-4 mr-1" /> New Meeting
-            </Button>
+            <div className="flex items-center gap-2">
+              {meetings.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleDeleteAllMeetings}
+                  className="text-red-400 hover:text-red-500 hover:bg-red-500/10 border-red-500/30 text-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete All
+                </Button>
+              )}
+              <Button onClick={() => setShowCreate(true)}>
+                <Plus className="w-4 h-4 mr-1" /> New Meeting
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -298,7 +347,29 @@ export function MeetingsPage() {
                     <span className="text-xs text-[var(--color-muted-foreground)]">{host?.name || 'Host'}</span>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => handleCopyMeetingLink(e, meeting)}
+                      className="text-xs h-7 px-2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                      title="Copy meeting invite link"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+
+                    {currentRole !== 'member' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => handleDeleteMeeting(e, meeting.id)}
+                        className="text-xs h-7 px-2 text-red-400 hover:text-red-500 hover:bg-red-500/10"
+                        title="Permanently delete meeting"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+
                     <Button 
                       variant={isLive ? "primary" : "outline"}
                       size="sm" 

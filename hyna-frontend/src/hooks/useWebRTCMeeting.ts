@@ -119,6 +119,29 @@ export function useWebRTCMeeting({
     }
   }, []);
 
+  // Helper: Guarantees a remote participant is registered in UI state
+  const ensureParticipant = useCallback((peerId: string, meta?: Partial<ParticipantState>) => {
+    setParticipants(prev => {
+      const existing = prev.get(peerId);
+      const next = new Map(prev);
+      next.set(peerId, {
+        memberId: meta?.memberId || existing?.memberId || peerId,
+        name: meta?.name || existing?.name || 'Team Member',
+        avatar: meta?.avatar || existing?.avatar || '',
+        role: meta?.role || existing?.role || 'member',
+        designation: meta?.designation || existing?.designation || 'Software Engineer',
+        micEnabled: meta?.micEnabled ?? existing?.micEnabled ?? true,
+        videoEnabled: meta?.videoEnabled ?? existing?.videoEnabled ?? true,
+        isScreenSharing: meta?.isScreenSharing ?? existing?.isScreenSharing ?? false,
+        isSpeaking: existing?.isSpeaking ?? false,
+        isHost: meta?.isHost ?? existing?.isHost ?? false,
+        joinedAt: existing?.joinedAt || new Date().toISOString(),
+        connectionState: meta?.connectionState || existing?.connectionState || 'connecting',
+      });
+      return next;
+    });
+  }, []);
+
   // 2. Handle incoming WebRTC signaling messages
   const handleIncomingSignal = useCallback(async (msg: SignalingMessage) => {
     const manager = webrtcManagerRef.current;
@@ -127,28 +150,17 @@ export function useWebRTCMeeting({
     const senderId = msg.senderId;
     if (!senderId || senderId === localPeerId) return;
 
+    // Immediately guarantee sender is registered in participants state with metadata
+    ensureParticipant(senderId, {
+      name: msg.senderName,
+      avatar: msg.senderAvatar,
+      role: msg.senderRole,
+      designation: msg.senderRole,
+    });
+
     switch (msg.type) {
       case 'JOIN': {
-        // Peer joined: register participant and send WebRTC offer
-        setParticipants(prev => {
-          const next = new Map(prev);
-          next.set(senderId, {
-            memberId: msg.senderId,
-            name: msg.senderName || 'Team Member',
-            avatar: msg.senderAvatar || '',
-            role: msg.senderRole || 'member',
-            designation: msg.senderRole || 'Software Engineer',
-            micEnabled: msg.micEnabled ?? true,
-            videoEnabled: msg.videoEnabled ?? true,
-            isScreenSharing: false,
-            isSpeaking: false,
-            isHost: false,
-            joinedAt: new Date().toISOString(),
-            connectionState: 'connecting',
-          });
-          return next;
-        });
-
+        // Peer joined: create and send WebRTC offer to them
         try {
           console.log(`[WebRTC] Peer ${senderId} joined. Creating offer...`);
           const offer = await manager.createOffer(senderId);
@@ -396,9 +408,11 @@ export function useWebRTCMeeting({
             videoTracks: remoteStream.getVideoTracks().length,
           });
           setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream));
+          ensureParticipant(peerId);
         },
         onRemoteStreamUpdate: (peerId, remoteStream) => {
           setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream));
+          ensureParticipant(peerId);
         },
         onRemoteStreamRemoved: (peerId) => {
           setRemoteStreams(prev => {
@@ -461,27 +475,19 @@ export function useWebRTCMeeting({
           },
           onPresenceJoin: (key, newPresences) => {
             if (key !== localPeerId) {
-              const latest = newPresences?.[0];
-              if (latest) {
-                setParticipants(prev => {
-                  const next = new Map(prev);
-                  next.set(key, {
-                    memberId: latest.memberId || key,
-                    name: latest.name || 'Team Member',
-                    avatar: latest.avatar || '',
-                    role: latest.role || 'member',
-                    designation: latest.designation || 'Software Engineer',
-                    micEnabled: latest.micEnabled ?? true,
-                    videoEnabled: latest.videoEnabled ?? true,
-                    isScreenSharing: latest.isScreenSharing ?? false,
-                    isSpeaking: false,
-                    isHost: latest.isHost ?? false,
-                    joinedAt: latest.joinedAt || new Date().toISOString(),
-                    connectionState: 'connecting',
-                  });
-                  return next;
-                });
-              }
+              const latest = newPresences?.[0] || {};
+              ensureParticipant(key, {
+                memberId: latest.memberId || key,
+                name: latest.name || 'Team Member',
+                avatar: latest.avatar || '',
+                role: latest.role || 'member',
+                designation: latest.designation || 'Software Engineer',
+                micEnabled: latest.micEnabled ?? true,
+                videoEnabled: latest.videoEnabled ?? true,
+                isScreenSharing: latest.isScreenSharing ?? false,
+                isHost: latest.isHost ?? false,
+                connectionState: 'connecting',
+              });
             }
           },
           onPresenceLeave: (key) => {

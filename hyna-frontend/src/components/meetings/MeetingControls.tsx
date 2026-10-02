@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, 
-  MessageSquare, Users, Settings, PhoneOff, AlertTriangle
+  MessageSquare, Users, Settings, PhoneOff, AlertTriangle, Link2
 } from 'lucide-react';
 import { Modal, Button } from '@/components/ui';
 
@@ -24,6 +24,7 @@ export interface MeetingControlsProps {
   onToggleScreenShare: () => void;
   onTogglePanel: (panel: 'chat' | 'participants') => void;
   onOpenSettings: () => void;
+  onCopyLink?: () => void;
   onLeaveMeeting: () => void;
   onEndMeetingForEveryone?: () => void;
 }
@@ -42,6 +43,7 @@ export function MeetingControls({
   onToggleScreenShare,
   onTogglePanel,
   onOpenSettings,
+  onCopyLink,
   onLeaveMeeting,
   onEndMeetingForEveryone,
 }: MeetingControlsProps) {
@@ -142,6 +144,18 @@ export function MeetingControls({
           >
             <Settings className="w-5 h-5" />
           </button>
+
+          {/* 7. Copy Invite Link */}
+          {onCopyLink && (
+            <button
+              type="button"
+              onClick={onCopyLink}
+              className="p-3 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all flex items-center justify-center"
+              title="Copy Meeting Invite Link"
+            >
+              <Link2 className="w-5 h-5" />
+            </button>
+          )}
 
           <div className="h-6 w-px bg-white/10 mx-1" />
 

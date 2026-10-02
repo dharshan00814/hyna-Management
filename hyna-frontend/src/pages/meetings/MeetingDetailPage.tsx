@@ -188,7 +188,12 @@ export function MeetingDetailPage() {
                     size="sm"
                     className="h-7 text-xs gap-1 shrink-0"
                     onClick={() => {
-                      navigator.clipboard.writeText(meeting.meetingLink || '');
+                      const raw = (meeting.meetingLink || '').trim();
+                      const roomId = meeting.meetingRoomId || raw.split('/').pop() || meeting.id;
+                      const fullUrl = raw.startsWith('http://') || raw.startsWith('https://')
+                        ? raw
+                        : `${window.location.origin}/meeting/${roomId}`;
+                      navigator.clipboard.writeText(fullUrl);
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                       toast.success('Meeting link copied to clipboard');
