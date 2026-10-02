@@ -1,53 +1,33 @@
 import type { AttendanceRecord, UserStreakAndPoints } from '@/types';
-
-// ============================================================
-// Hyna Attendance Timing Constants (in minutes from midnight)
-// ============================================================
 export const PUNCH_IN_START_MIN = 9 * 60;          // 09:00 AM = 540
 export const PUNCH_IN_ONTIME_END_MIN = 10 * 60;    // 10:00 AM = 600
 export const PUNCH_IN_GRACE_END_MIN = 10 * 60 + 15;// 10:15 AM = 615
-
 export const PUNCH_OUT_START_MIN = 21 * 60;        // 09:00 PM = 1260
 export const PUNCH_OUT_END_MIN = 22 * 60;          // 10:00 PM = 1320
-
 export const POINTS_ON_TIME = 10;
 export const POINTS_GRACE = 5;
 export const POINTS_MISSED_PUNCHOUT_10 = 5; // 10 pts penalty -> 5 pts
 export const POINTS_MISSED_PUNCHOUT_5 = 2;  // 5 pts penalty -> 2 pts
-
-/**
- * Parses time string (e.g. "09:15 AM", "9:15", "10:15:30 AM", "21:30") to minutes from midnight
- */
 export function parseTimeToMinutes(timeStr?: string | null): number | null {
   if (!timeStr) return null;
   const cleaned = timeStr.trim();
   if (!cleaned || cleaned === '--:--' || cleaned === '-') return null;
-
   const isPM = /pm/i.test(cleaned);
   const isAM = /am/i.test(cleaned);
   const digitsOnly = cleaned.replace(/[^0-9:]/g, '');
   const parts = digitsOnly.split(':');
   if (parts.length < 2) return null;
-
   let hours = parseInt(parts[0], 10);
   const minutes = parseInt(parts[1], 10);
   if (isNaN(hours) || isNaN(minutes)) return null;
-
   if (isPM && hours < 12) hours += 12;
   if (isAM && hours === 12) hours = 0;
-
   return hours * 60 + minutes;
 }
-
-/**
- * Get minutes from midnight for a given Date
- */
 export function getMinutesFromDate(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();
 }
-
 export type PunchInPhase = 'before_9am' | 'on_time' | 'grace_period' | 'after_1015am';
-
 export interface PunchInStatus {
   canPunchIn: boolean;
   phase: PunchInPhase;
@@ -75,7 +55,6 @@ export function getPunchInStatus(currentTime: Date): PunchInStatus {
       tooltip: 'Punch-in is disabled before 9:00 AM. Window opens at 9:00 AM for +10 Points.',
     };
   }
-
   if (mins <= PUNCH_IN_ONTIME_END_MIN) {
     return {
       canPunchIn: true,
