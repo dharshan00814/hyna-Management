@@ -92,14 +92,37 @@ io.on('connection', (socket) => {
       return socket.emit('error', { message: 'Invalid room or user credentials' });
     }
 
-    console.log(`[Join] User ${user.name} (${user.userId}) joining room ${roomId}`);
-
     // Fetch database meeting to determine true host and validity
     let dbMeeting = await getDbMeeting(roomId);
-    let room = rooms.get(roomId);
 
+    // Fetch real authenticated profile from database if available
+    let memberProfile = null;
+    if (supabase && user.userId) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.userId)
+          .maybeSingle();
+        if (profile) {
+          memberProfile = profile;
+        }
+      } catch (e) {
+        console.warn('[Server] Error fetching user profile:', e.message);
+      }
+    }
+
+    const resolvedUserId = memberProfile?.id || user.userId;
+    const resolvedName = memberProfile?.name || user.name || 'Member';
+    const resolvedAvatar = memberProfile?.avatar || user.avatar || '';
+    const resolvedRole = memberProfile?.role || user.role || 'member';
+    const resolvedDesignation = memberProfile?.designation || user.designation || 'Software Engineer';
+
+    console.log(`[Join] User ${resolvedName} (${resolvedUserId}) joining room ${roomId}`);
+
+    let room = rooms.get(roomId);
     if (!room) {
-      const hostId = dbMeeting?.host_id || user.userId;
+      const hostId = dbMeeting?.host_id || dbMeeting?.created_by || resolvedUserId;
       room = {
         roomId,
         hostId,
@@ -110,9 +133,9 @@ io.on('connection', (socket) => {
     }
 
     // Determine host status: strictly verify if user is host
-    const isHost = (room.hostId === user.userId) || (dbMeeting && dbMeeting.host_id === user.userId);
+    const isHost = (room.hostId === resolvedUserId) || (dbMeeting && (dbMeeting.host_id === resolvedUserId || dbMeeting.created_by === resolvedUserId));
     if (isHost && !room.hostId) {
-      room.hostId = user.userId;
+      room.hostId = resolvedUserId;
     }
 
     // If meeting is not yet LIVE, mark it LIVE once someone joins
@@ -123,11 +146,11 @@ io.on('connection', (socket) => {
 
     const participantData = {
       socketId: socket.id,
-      userId: user.userId,
-      name: user.name || 'Member',
-      avatar: user.avatar || '',
-      role: user.role || 'member',
-      designation: user.designation || 'Software Engineer',
+      userId: resolvedUserId,
+      name: resolvedName,
+      avatar: resolvedAvatar,
+      role: resolvedRole,
+      designation: resolvedDesignation,
       micEnabled: Boolean(micEnabled),
       videoEnabled: Boolean(videoEnabled),
       isScreenSharing: false,
@@ -138,7 +161,7 @@ io.on('connection', (socket) => {
 
     socket.join(roomId);
     room.participants.set(socket.id, participantData);
-    socketToRoom.set(socket.id, { roomId, userId: user.userId });
+    socketToRoom.set(socket.id, { roomId, userId: resolvedUserId });
 
     // Send existing participants list and room info to the joining client
     const existingParticipants = Array.from(room.participants.values()).filter(p => p.socketId !== socket.id);

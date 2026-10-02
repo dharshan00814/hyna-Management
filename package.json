@@ -5,6 +5,7 @@
   "description": "Hyna Studio Enterprise Management System",
   "scripts": {
     "dev": "npm --prefix hyna-frontend run dev",
+    "server": "npm --prefix webrtc-server start",
     "build": "npm --prefix hyna-frontend run build",
     "preview": "npm --prefix hyna-frontend run preview"
   }

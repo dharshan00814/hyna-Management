@@ -32,7 +32,7 @@ export function VideoGrid({
   participants.forEach((p, peerId) => {
     allParticipants.push({
       participant: p,
-      stream: remoteStreams.get(peerId) || null,
+      stream: remoteStreams.get(peerId) || remoteStreams.get(p.memberId) || null,
       isLocal: false,
     });
   });

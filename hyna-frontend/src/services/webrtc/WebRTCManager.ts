@@ -9,12 +9,21 @@ export interface WebRTCEventCallbacks {
   onError: (error: Error, context: string) => void;
 }
 
+const turnUrls = import.meta.env.VITE_TURN_URL;
+const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+const turnCredential = import.meta.env.VITE_TURN_PASSWORD || import.meta.env.VITE_TURN_CREDENTIAL;
+
 export const DEFAULT_RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' }
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    ...(turnUrls ? [{
+      urls: turnUrls.split(','),
+      username: turnUsername,
+      credential: turnCredential,
+    }] : [])
   ],
   iceCandidatePoolSize: 10,
 };
@@ -26,8 +35,13 @@ export class WebRTCManager {
   private socket: Socket;
   
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private peerUserIdMap: Map<string, string> = new Map(); // socketId -> userId
   private remoteStreams: Map<string, MediaStream> = new Map();
   private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
+  
+  // Perfect Negotiation State Maps
+  private makingOfferMap: Map<string, boolean> = new Map();
+  private ignoreOfferMap: Map<string, boolean> = new Map();
   
   private callbacks: WebRTCEventCallbacks;
   private localUserId: string;
@@ -36,18 +50,24 @@ export class WebRTCManager {
     this.localUserId = localUserId;
     this.callbacks = callbacks;
     
-    // Dynamically fallback to the current hostname so LAN testing works on mobile
-    // If it's localhost or local IP, use port 5050. If it's production (Render), use HTTPS on default port 443.
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.');
+    // Resolve signaling server URL dynamically from environment or fallback
+    const hostname = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : 'localhost';
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.');
     const defaultServerUrl = isLocal 
-      ? `http://${window.location.hostname}:5050` 
-      : `https://${window.location.hostname}`;
+      ? `http://${hostname}:5050` 
+      : `https://${hostname}`;
       
-    const SERVER_URL = import.meta.env.VITE_SFU_SERVER_URL || defaultServerUrl;
+    const SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_SFU_SERVER_URL || defaultServerUrl;
     this.socket = io(SERVER_URL, { transports: ['websocket'] });
   }
 
-  // --- Initialization ---
+  // Determine deterministic negotiation role (Polite vs Impolite)
+  private isPolitePeer(peerSocketId: string, peerUserId?: string): boolean {
+    const remoteId = peerUserId || this.peerUserIdMap.get(peerSocketId) || peerSocketId;
+    return this.localUserId > remoteId;
+  }
+
+  // --- Initialization & Room Signaling ---
 
   public async connectMesh(roomId: string, user: any, micEnabled: boolean, videoEnabled: boolean) {
     return new Promise<void>((resolve, reject) => {
@@ -57,14 +77,17 @@ export class WebRTCManager {
           
           this.socket.emit('join-room', { roomId, user, micEnabled, videoEnabled });
           this.socket.once('room-joined', (data) => {
-            // Proactively initiate connections to all existing participants
+            // Newly joined participant creates offers to all existing room participants
             if (data.participants && Array.isArray(data.participants)) {
               data.participants.forEach((p: any) => {
-                this.createOffer(p.socketId).then(offer => {
-                  if (offer) {
-                    this.socket.emit('offer', { target: p.socketId, sdp: offer });
-                  }
-                }).catch(err => console.error('[WebRTC] Error creating proactive offer:', err));
+                if (p.socketId) {
+                  this.peerUserIdMap.set(p.socketId, p.userId);
+                  this.createOffer(p.socketId, p.userId).then(offer => {
+                    if (offer) {
+                      this.socket.emit('offer', { target: p.socketId, sdp: offer });
+                    }
+                  }).catch(err => console.error('[WebRTC] Error creating proactive offer:', err));
+                }
               });
             }
             resolve();
@@ -90,7 +113,7 @@ export class WebRTCManager {
         this.callbacks.onPeerConnectionStateChange('server', 'disconnected');
       });
 
-      // Handle incoming WebRTC signaling
+      // Handle incoming WebRTC signaling events
       this.socket.on('offer', async ({ callerSocketId, sdp }) => {
         try {
           const answer = await this.handleOffer(callerSocketId, sdp);
@@ -118,10 +141,12 @@ export class WebRTCManager {
         }
       });
 
-      // When a new participant joins, they will proactively send an offer.
-      // We just log it here or perform any non-offer setups if needed.
       this.socket.on('participant_joined', (participant) => {
-        console.log(`[WebRTC] Participant joined: ${participant.userId}. Waiting for their offer.`);
+        if (participant?.socketId) {
+          this.peerUserIdMap.set(participant.socketId, participant.userId);
+          // Register peer connection in advance so we're ready to receive their offer
+          this.getOrCreatePeerConnection(participant.socketId, participant.userId);
+        }
       });
 
       this.socket.on('participant_left', ({ socketId }) => {
@@ -130,9 +155,13 @@ export class WebRTCManager {
     });
   }
 
-  // --- WebRTC Mesh Logic ---
+  // --- WebRTC Peer Connection Core ---
 
-  public getOrCreatePeerConnection(peerSocketId: string): RTCPeerConnection {
+  public getOrCreatePeerConnection(peerSocketId: string, peerUserId?: string): RTCPeerConnection {
+    if (peerUserId) {
+      this.peerUserIdMap.set(peerSocketId, peerUserId);
+    }
+
     if (this.peerConnections.has(peerSocketId)) {
       return this.peerConnections.get(peerSocketId)!;
     }
@@ -149,14 +178,18 @@ export class WebRTCManager {
       }
     };
 
+    // Perfect negotiation handler for dynamic changes
     pc.onnegotiationneeded = async () => {
       try {
-        if (pc.signalingState !== 'stable') return;
+        this.makingOfferMap.set(peerSocketId, true);
         const offer = await pc.createOffer();
+        if (pc.signalingState !== 'stable') return;
         await pc.setLocalDescription(offer);
         this.socket.emit('offer', { target: peerSocketId, sdp: pc.localDescription });
       } catch (err) {
         console.error('[WebRTC] Error during negotiation for', peerSocketId, err);
+      } finally {
+        this.makingOfferMap.set(peerSocketId, false);
       }
     };
 
@@ -171,28 +204,26 @@ export class WebRTCManager {
       let stream = this.remoteStreams.get(peerSocketId);
 
       if (!stream) {
-        // If the browser groups them into event.streams[0], use it. Otherwise, create a new stream.
         stream = event.streams && event.streams.length > 0 ? event.streams[0] : new MediaStream();
         this.remoteStreams.set(peerSocketId, stream);
       }
 
-      // Explicitly guarantee the track is added to the stream
       if (!stream.getTracks().find(t => t.id === event.track.id)) {
         stream.addTrack(event.track);
       }
 
-      // Create a NEW MediaStream reference so React detects the state change 
-      // and re-assigns the srcObject on the <video> element. This prevents 
-      // dynamically added audio tracks from being ignored by the browser.
-      const newStreamReference = new MediaStream(stream.getTracks());
-      this.remoteStreams.set(peerSocketId, newStreamReference);
+      // Create a fresh MediaStream wrapper so React detects reference changes and triggers UI updates
+      const updatedStream = new MediaStream(stream.getTracks());
+      this.remoteStreams.set(peerSocketId, updatedStream);
 
-      // Always trigger onRemoteStreamUpdate
+      // Trigger both callbacks
+      this.callbacks.onRemoteStream(peerSocketId, updatedStream);
       if (this.callbacks.onRemoteStreamUpdate) {
-        this.callbacks.onRemoteStreamUpdate(peerSocketId, newStreamReference);
+        this.callbacks.onRemoteStreamUpdate(peerSocketId, updatedStream);
       }
     };
 
+    // Add local tracks to peer connection
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
         pc.addTrack(track, this.localStream!);
@@ -202,33 +233,44 @@ export class WebRTCManager {
     return pc;
   }
 
-  public async createOffer(peerSocketId: string): Promise<RTCSessionDescriptionInit | null> {
+  public async createOffer(peerSocketId: string, peerUserId?: string): Promise<RTCSessionDescriptionInit | null> {
     try {
-      const pc = this.getOrCreatePeerConnection(peerSocketId);
+      const pc = this.getOrCreatePeerConnection(peerSocketId, peerUserId);
+      this.makingOfferMap.set(peerSocketId, true);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       return offer;
     } catch (err) {
       this.callbacks.onError(err as Error, `createOffer to ${peerSocketId}`);
       return null;
+    } finally {
+      this.makingOfferMap.set(peerSocketId, false);
     }
   }
 
-  public async handleOffer(peerSocketId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit | null> {
+  public async handleOffer(peerSocketId: string, offer: RTCSessionDescriptionInit, peerUserId?: string): Promise<RTCSessionDescriptionInit | null> {
     try {
-      const pc = this.getOrCreatePeerConnection(peerSocketId);
+      const pc = this.getOrCreatePeerConnection(peerSocketId, peerUserId);
+      const isPolite = this.isPolitePeer(peerSocketId, peerUserId);
+      const isMakingOffer = this.makingOfferMap.get(peerSocketId) || false;
 
-      if (pc.signalingState !== 'stable') {
-        if (this.socket.id < peerSocketId) {
-          await Promise.all([
-            pc.setLocalDescription({ type: 'rollback' }),
-            pc.setRemoteDescription(new RTCSessionDescription(offer))
-          ]);
-        } else {
-          return null;
-        }
+      const offerCollision = (offer.type === 'offer') && (isMakingOffer || pc.signalingState !== 'stable');
+
+      this.ignoreOfferMap.set(peerSocketId, !isPolite && offerCollision);
+
+      if (this.ignoreOfferMap.get(peerSocketId)) {
+        console.log(`[WebRTC] Collision detected: Impolite peer ignoring offer from ${peerSocketId}`);
+        return null;
+      }
+
+      if (offerCollision && isPolite) {
+        console.log(`[WebRTC] Collision detected: Polite peer rolling back offer for ${peerSocketId}`);
+        await Promise.all([
+          pc.setLocalDescription({ type: 'rollback' }),
+          pc.setRemoteDescription(offer)
+        ]);
       } else {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        await pc.setRemoteDescription(offer);
       }
 
       await this.processPendingCandidates(peerSocketId);
@@ -245,8 +287,14 @@ export class WebRTCManager {
     try {
       const pc = this.peerConnections.get(peerSocketId);
       if (!pc) return;
+
+      if (this.ignoreOfferMap.get(peerSocketId)) {
+        this.ignoreOfferMap.set(peerSocketId, false);
+        return;
+      }
+
       if (pc.signalingState === 'have-local-offer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await pc.setRemoteDescription(answer);
         await this.processPendingCandidates(peerSocketId);
       }
     } catch (err) {
@@ -265,7 +313,9 @@ export class WebRTCManager {
         this.pendingCandidates.set(peerSocketId, queue);
       }
     } catch (err) {
-      console.warn(`[WebRTC] Failed to add ICE candidate for ${peerSocketId}`, err);
+      if (!this.ignoreOfferMap.get(peerSocketId)) {
+        console.warn(`[WebRTC] Failed to add ICE candidate for ${peerSocketId}`, err);
+      }
     }
   }
 
@@ -286,7 +336,7 @@ export class WebRTCManager {
     }
   }
 
-  // --- Original Interface Methods ---
+  // --- Local Stream & Media Control Methods ---
 
   public setLocalStream(stream: MediaStream | null) {
     this.localStream = stream;
@@ -315,8 +365,16 @@ export class WebRTCManager {
     
     this.peerConnections.forEach(pc => {
       const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (videoSender) videoSender.replaceTrack(track).catch(console.warn);
+      if (videoSender) {
+        videoSender.replaceTrack(track).catch(console.warn);
+      } else if (this.localStream) {
+        pc.addTrack(track, this.localStream);
+      }
     });
+
+    track.onended = () => {
+      this.stopScreenShare();
+    };
   }
 
   public async stopScreenShare(): Promise<void> {
@@ -370,6 +428,9 @@ export class WebRTCManager {
       pc.close();
       this.peerConnections.delete(peerId);
     }
+    this.peerUserIdMap.delete(peerId);
+    this.makingOfferMap.delete(peerId);
+    this.ignoreOfferMap.delete(peerId);
     this.pendingCandidates.delete(peerId);
     this.remoteStreams.delete(peerId);
     this.callbacks.onRemoteStreamRemoved(peerId);
@@ -391,6 +452,9 @@ export class WebRTCManager {
     
     this.peerConnections.forEach(pc => pc.close());
     this.peerConnections.clear();
+    this.peerUserIdMap.clear();
+    this.makingOfferMap.clear();
+    this.ignoreOfferMap.clear();
     this.pendingCandidates.clear();
     this.remoteStreams.clear();
     this.socket?.disconnect();

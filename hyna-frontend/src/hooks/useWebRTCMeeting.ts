@@ -36,10 +36,10 @@ export function useWebRTCMeeting({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const localUserId = currentUser?.id || 'guest_' + Math.random().toString(36).slice(2, 8);
-  const localUserName = currentUser?.name || 'Team Member';
+  const localUserId = currentUser?.id || '';
+  const localUserName = currentUser?.name || '';
   const localUserAvatar = currentUser?.avatar || '';
-  const localUserRole = currentUser?.designation || currentUser?.role || 'Member';
+  const localUserRole = currentUser?.designation || currentUser?.role || '';
 
   const setupSpeechDetection = useCallback((stream: MediaStream) => {
     try {
@@ -70,6 +70,11 @@ export function useWebRTCMeeting({
 
   const startMeetingSession = useCallback(async (initialVideo?: boolean, initialAudio?: boolean, preExistingStream?: MediaStream | null) => {
     if (!meeting) return;
+    if (!currentUser || !currentUser.id) {
+      toast.error('Authentication required. Please sign in to join meetings.');
+      setOverallConnectionState('disconnected');
+      return;
+    }
     const isAudioOnly = meeting.meetingType === 'audio';
     const activeVideo = typeof initialVideo === 'boolean' ? (!isAudioOnly && initialVideo) : (!isAudioOnly && videoEnabled);
     const activeAudio = typeof initialAudio === 'boolean' ? initialAudio : micEnabled;
@@ -95,7 +100,7 @@ export function useWebRTCMeeting({
       stream.getVideoTracks().forEach(t => t.enabled = activeVideo);
       setupSpeechDetection(stream);
 
-      const manager = new WebRTCManager(localUserId, {
+      const manager = new WebRTCManager(currentUser.id, {
         onRemoteStream: (peerId, remoteStream) => setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream)),
         onRemoteStreamUpdate: (peerId, remoteStream) => {
           // Force a new map reference so React re-renders with the updated stream tracks
@@ -116,7 +121,7 @@ export function useWebRTCMeeting({
       webrtcManagerRef.current = manager;
 
       const roomKey = meeting.meetingRoomId || meeting.id;
-      const userPayload = { userId: localUserId, name: localUserName, avatar: localUserAvatar, role: localUserRole, designation: currentUser?.designation };
+      const userPayload = { userId: currentUser.id, name: currentUser.name, avatar: currentUser.avatar, role: currentUser.role, designation: currentUser.designation };
       
       const socket = manager.getSocket();
 
