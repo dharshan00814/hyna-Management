@@ -10,6 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5050;
+const HOST = process.env.HOST || '0.0.0.0';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 
@@ -17,9 +18,18 @@ const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY) 
   : null;
 
-app.get('/health', (req, res) => {
+// Production Root Endpoint (Fixes "Cannot GET /" on Render)
+app.get('/', (req, res) => {
   res.json({
     status: 'ok',
+    service: 'Hyna WebRTC Signaling Server',
+  });
+});
+
+// Production Health Endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
     uptime: process.uptime(),
     activeRooms: rooms.size,
     timestamp: new Date().toISOString(),
@@ -28,10 +38,15 @@ app.get('/health', (req, res) => {
 
 const server = http.createServer(app);
 
+const clientOrigins = process.env.CLIENT_URL 
+  ? process.env.CLIENT_URL.split(',').map(url => url.trim()) 
+  : '*';
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: clientOrigins,
     methods: ['GET', 'POST'],
+    credentials: clientOrigins !== '*',
   },
   pingTimeout: 30000,
   pingInterval: 10000,
@@ -401,10 +416,10 @@ io.on('connection', (socket) => {
 });
 
 if (!process.env.VERCEL) {
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`=======================================================`);
-    console.log(`🚀 WebRTC & Meeting Signaling Server running on port ${PORT}`);
-    console.log(`📡 Health Check: http://localhost:${PORT}/health`);
+    console.log(`🚀 WebRTC & Meeting Signaling Server running on ${HOST}:${PORT}`);
+    console.log(`📡 Health Check: http://${HOST}:${PORT}/health`);
     console.log(`=======================================================`);
   });
 }
