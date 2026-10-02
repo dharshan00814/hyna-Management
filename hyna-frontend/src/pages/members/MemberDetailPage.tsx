@@ -3,9 +3,6 @@ import { ArrowLeft, Mail, Phone, Calendar, Edit3, Trash2, AlertTriangle, UserChe
 import { Button, Avatar, Badge, Tabs, ProgressBar, EmptyState, LoadingState, Modal, Input, Select } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
 import { useAuthStore, isCeoOrCto } from '@/stores';
-import { getUser, getUserTasks, getProjects, updateMember, deleteMember } from '@/services/api';
-
-import { useAuthStore } from '@/stores';
 import { getUser, getUserTasks, getProjects, updateMember, deleteMember, sendPasswordResetEmail } from '@/services/api';
 
 import { useState, useEffect } from 'react';
