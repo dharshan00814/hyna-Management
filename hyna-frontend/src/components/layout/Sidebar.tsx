@@ -6,7 +6,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
-import { useSidebarStore, useAuthStore } from '@/stores';
+import { useSidebarStore, useAuthStore, isExecutiveLeadership } from '@/stores';
 import { Avatar } from '@/components/ui';
 import type { UserRole } from '@/types';
 
@@ -35,36 +35,72 @@ const getLiveActivityPath = (role: string) => {
   return '/my-activity';
 };
 
-const getNavItems = (prefix: string, role: string): NavItem[] => [
-  { label: 'Dashboard', icon: LayoutDashboard, path: `${prefix}/dashboard`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Projects', icon: FolderKanban, path: `${prefix}/projects`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Tasks', icon: CheckSquare, path: `${prefix}/tasks`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Members', icon: Users, path: `${prefix}/members`, roles: ['admin', 'manager'] },
-  { label: 'Attendance', icon: CalendarClock, path: `${prefix}/attendance`, roles: ['admin', 'manager', 'member'] },
-  { label: getLiveActivityLabel(role), icon: Radio, path: getLiveActivityPath(role), roles: ['admin', 'manager', 'member'] },
-  { label: getActivityLabel(role), icon: Activity, path: `${prefix}/activity`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Leave', icon: CalendarOff, path: `${prefix}/leave`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Payroll', icon: CreditCard, path: `${prefix}/payroll`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Announcements', icon: Megaphone, path: `${prefix}/announcements`, roles: ['admin', 'manager'] },
-];
+const getNavItems = (prefix: string, role: string, isExec: boolean): NavItem[] => {
+  const items: NavItem[] = [
+    { label: 'Dashboard', icon: LayoutDashboard, path: `${prefix}/dashboard`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Projects', icon: FolderKanban, path: `${prefix}/projects`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Tasks', icon: CheckSquare, path: `${prefix}/tasks`, roles: ['admin', 'manager', 'member'] },
+  ];
 
-const bottomNavItems: NavItem[] = [
-  { label: 'IDE Integrations', icon: Laptop, path: '/settings/integrations', roles: ['admin', 'manager', 'member'] },
-  { label: 'Privacy & Tracking', icon: ShieldCheck, path: '/privacy/tracking', roles: ['admin', 'manager', 'member'] },
-  { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager', 'member'] },
-];
+  // 1. Members: STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: 'Members', icon: Users, path: `${prefix}/members`, roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push({ label: 'Attendance', icon: CalendarClock, path: `${prefix}/attendance`, roles: ['admin', 'manager', 'member'] });
+
+  // 2. Live Developers & 3. Activity Analytics: STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: getLiveActivityLabel(role), icon: Radio, path: getLiveActivityPath(role), roles: ['admin', 'manager', 'member'] });
+    items.push({ label: getActivityLabel(role), icon: Activity, path: `${prefix}/activity`, roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push(
+    { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
+  );
+
+  // 4. Files: STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push(
+    { label: 'Leave', icon: CalendarOff, path: `${prefix}/leave`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Payroll', icon: CreditCard, path: `${prefix}/payroll`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Announcements', icon: Megaphone, path: `${prefix}/announcements`, roles: ['admin', 'manager'] },
+  );
+
+  return items;
+};
+
+const getBottomNavItems = (isExec: boolean): NavItem[] => {
+  const items: NavItem[] = [
+    { label: 'IDE Integrations', icon: Laptop, path: '/settings/integrations', roles: ['admin', 'manager', 'member'] },
+  ];
+
+  // 5. Privacy & Tracking (Security): STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: 'Privacy & Tracking', icon: ShieldCheck, path: '/privacy/tracking', roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push(
+    { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager', 'member'] },
+  );
+
+  return items;
+};
 
 export function Sidebar() {
   const { isCollapsed, isMobileOpen, toggle, setMobileOpen } = useSidebarStore();
   const { currentUser, effectiveRole } = useAuthStore();
   const location = useLocation();
 
+  const isExec = isExecutiveLeadership(currentUser);
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
-  const navItems = getNavItems(prefix, effectiveRole).filter(item => item.roles.includes(effectiveRole));
+  const navItems = getNavItems(prefix, effectiveRole, isExec).filter(item => item.roles.includes(effectiveRole));
+  const bottomItems = getBottomNavItems(isExec).filter(item => item.roles.includes(effectiveRole));
 
   return (
     <>
@@ -151,7 +187,7 @@ export function Sidebar() {
 
         {/* Bottom section */}
         <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1">
-          {bottomNavItems.map((item) => {
+          {bottomItems.map((item) => {
             const itemPath = `${prefix}${item.path}`;
             const isActive = location.pathname === itemPath;
             return (

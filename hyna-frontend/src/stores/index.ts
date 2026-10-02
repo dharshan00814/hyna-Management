@@ -76,6 +76,40 @@ export function isCeoOrCto(user: { role?: string; designation?: string; name?: s
   return isCeo || isCto;
 }
 
+// Helper: Determine if user is CEO, CTO, or COO (Top Executive Authority)
+// Only CEO, CTO, and COO can view: Members, Live Developers, Activity Analytics, Files, Privacy & Tracking
+export function isExecutiveLeadership(user: { role?: string; designation?: string; name?: string; email?: string; employeeId?: string } | null | undefined): boolean {
+  if (!user) return false;
+  const designationUpper = (user.designation || '').trim().toUpperCase();
+  const nameLower = (user.name || '').trim().toLowerCase();
+  const emailLower = (user.email || '').trim().toLowerCase();
+  const empIdUpper = (((user as any).employeeId || (user as any).employee_id || '') as string).trim().toUpperCase();
+
+  // CEO: Vignesh (EMP-001) or explicit CEO designation
+  const isCeo =
+    designationUpper.includes('CEO') ||
+    designationUpper.includes('CHIEF EXECUTIVE') ||
+    empIdUpper === 'EMP-001' ||
+    nameLower.includes('vignesh') ||
+    emailLower.includes('vignesh');
+
+  // CTO: Explicit CTO / Chief Technology / Chief Technical Officer designation
+  const isCto =
+    designationUpper.includes('CTO') ||
+    designationUpper.includes('CHIEF TECHNOLOGY') ||
+    designationUpper.includes('CHIEF TECHNICAL');
+
+  // COO: Jashwin (EMP-002) or explicit COO designation
+  const isCoo =
+    designationUpper.includes('COO') ||
+    designationUpper.includes('CHIEF OPERATING') ||
+    empIdUpper === 'EMP-002' ||
+    nameLower.includes('jashwin') ||
+    emailLower.includes('jashwin');
+
+  return isCeo || isCto || isCoo;
+}
+
 export function getOrgMemberDetails(rawId: string, email?: string) {
   const idUpper = rawId.trim().toUpperCase();
   const idLower = rawId.trim().toLowerCase();

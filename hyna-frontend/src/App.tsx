@@ -117,21 +117,48 @@ function App() {
         {/* Protected App Routes Layout */}
         <Route element={<AppLayout />}>
           {/* ... */}
+          {/* Executive Leadership Only Routes (CEO, CTO, COO) */}
+          <Route element={<ProtectedRoute requireExecutiveLeadership={true} />}>
+            {/* Members */}
+            <Route path="/admin/members" element={<MembersPage />} />
+            <Route path="/admin/members/:id" element={<MemberDetailPage />} />
+            <Route path="/manager/members" element={<MembersPage />} />
+            <Route path="/manager/members/:id" element={<MemberDetailPage />} />
+
+            {/* Live Developer Activity */}
+            <Route path="/admin/developer-activity" element={<LiveDeveloperActivityPage />} />
+            <Route path="/manager/developer-activity" element={<LiveDeveloperActivityPage />} />
+            <Route path="/member/my-activity" element={<MyDeveloperActivityPage />} />
+            <Route path="/my-activity" element={<MyDeveloperActivityPage />} />
+            <Route path="/developer-activity" element={<LiveDeveloperActivityPage />} />
+
+            {/* Activity Analytics */}
+            <Route path="/admin/activity" element={<AdminActivityPage />} />
+            <Route path="/manager/activity" element={<ManagerActivityPage />} />
+            <Route path="/member/activity" element={<MemberActivityPage />} />
+
+            {/* Files */}
+            <Route path="/admin/files" element={<FilesPage />} />
+            <Route path="/manager/files" element={<FilesPage />} />
+            <Route path="/member/files" element={<FilesPage />} />
+
+            {/* Privacy & Security Tracking */}
+            <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
+            <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
+            <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />
+            <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
+          </Route>
+
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/projects" element={<ProjectsPage />} />
             <Route path="/admin/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/admin/tasks" element={<TasksPage />} />
-            <Route path="/admin/members" element={<MembersPage />} />
-            <Route path="/admin/members/:id" element={<MemberDetailPage />} />
             <Route path="/admin/attendance" element={<AttendancePage />} />
-            <Route path="/admin/activity" element={<AdminActivityPage />} />
-            <Route path="/admin/developer-activity" element={<LiveDeveloperActivityPage />} />
             <Route path="/admin/meetings" element={<MeetingsPage />} />
             <Route path="/admin/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/admin/reports" element={<ReportsPage />} />
             <Route path="/admin/messages" element={<MessagesPage />} />
-            <Route path="/admin/files" element={<FilesPage />} />
             <Route path="/admin/leave" element={<LeavePage />} />
             <Route path="/admin/payroll" element={<PayrollPage />} />
             <Route path="/admin/announcements" element={<AnnouncementsPage />} />
@@ -144,16 +171,11 @@ function App() {
             <Route path="/manager/projects" element={<ProjectsPage />} />
             <Route path="/manager/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/manager/tasks" element={<TasksPage />} />
-            <Route path="/manager/members" element={<MembersPage />} />
-            <Route path="/manager/members/:id" element={<MemberDetailPage />} />
             <Route path="/manager/attendance" element={<AttendancePage />} />
-            <Route path="/manager/activity" element={<ManagerActivityPage />} />
-            <Route path="/manager/developer-activity" element={<LiveDeveloperActivityPage />} />
             <Route path="/manager/meetings" element={<MeetingsPage />} />
             <Route path="/manager/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/manager/reports" element={<ReportsPage />} />
             <Route path="/manager/messages" element={<MessagesPage />} />
-            <Route path="/manager/files" element={<FilesPage />} />
             <Route path="/manager/leave" element={<LeavePage />} />
             <Route path="/manager/payroll" element={<PayrollPage />} />
             <Route path="/manager/announcements" element={<AnnouncementsPage />} />
@@ -167,13 +189,10 @@ function App() {
             <Route path="/member/projects" element={<ProjectsPage />} />
             <Route path="/member/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/member/attendance" element={<AttendancePage />} />
-            <Route path="/member/activity" element={<MemberActivityPage />} />
-            <Route path="/member/my-activity" element={<MyDeveloperActivityPage />} />
             <Route path="/member/meetings" element={<MeetingsPage />} />
             <Route path="/member/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/member/reports" element={<ReportsPage />} />
             <Route path="/member/messages" element={<MessagesPage />} />
-            <Route path="/member/files" element={<FilesPage />} />
             <Route path="/member/leave" element={<LeavePage />} />
             <Route path="/member/payroll" element={<PayrollPage />} />
             <Route path="/member/settings" element={<SettingsPage />} />
@@ -184,15 +203,8 @@ function App() {
           <Route path="/attendance" element={<AttendancePage />} />
           <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/meetings/:id" element={<MeetingDetailPage />} />
-          <Route path="/my-activity" element={<MyDeveloperActivityPage />} />
-          <Route path="/developer-activity" element={<LiveDeveloperActivityPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
-
-          <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
-          <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
-          <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />
-          <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
         </Route>
 
         {/* Meeting Room - Without AppLayout (Full screen, direct link joinable) */}
