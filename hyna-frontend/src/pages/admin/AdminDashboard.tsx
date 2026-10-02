@@ -101,6 +101,12 @@ export function AdminDashboard() {
         <p className="page-description">Here's what's happening at Hyna Studio today.</p>
       </div>
 
+      {/* Top Punch Clock Bar for User-Friendly Attendance Check-In / Check-Out */}
+      <DashboardPunchClock
+        attendanceRecords={attendance}
+        onAttendanceChanged={loadDashboardData}
+      />
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total Members" value={users.filter(u => u.status === 'active').length} change={8} icon={Users} iconColor="text-blue-500" />

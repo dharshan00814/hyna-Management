@@ -37,6 +37,7 @@ import {
   getAttendance,
 } from '@/services/api';
 import { StreakAndPointsCard } from '@/components/dashboard/StreakAndPointsCard';
+import { DashboardPunchClock } from '@/components/dashboard/DashboardPunchClock';
 import { cn, formatDate, formatTime, getStatusColor, getPriorityColor } from '@/lib/utils';
 import type { Project, Task, User, Meeting, AttendanceRecord } from '@/types';
 
@@ -150,6 +151,12 @@ export function ManagerDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Top Punch Clock Bar for User-Friendly Attendance Check-In / Check-Out */}
+      <DashboardPunchClock
+        attendanceRecords={managerAttendance}
+        onAttendanceChanged={loadData}
+      />
 
       {/* KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
