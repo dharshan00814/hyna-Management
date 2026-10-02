@@ -1,7 +1,7 @@
 // ============================================================
 // Hyna Studio Management - WebRTC Group Call Manager
 // Dedicated PeerConnectionManager for Mesh Video & Audio Calls
-// Standard W3C WebRTC with STUN fallback
+// Standard W3C WebRTC with STUN + Free OpenRelay TURN Fallback
 // ============================================================
 
 export interface WebRTCEventCallbacks {
@@ -22,6 +22,22 @@ export const DEFAULT_RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:openrelay.metered.ca:80' },
+    // Public OpenRelay TURN fallback for users behind symmetric NATs / strict firewalls
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
   iceCandidatePoolSize: 10,
 };
@@ -72,7 +88,12 @@ export class WebRTCManager {
     return this.localStream;
   }
 
-  // Create an RTCPeerConnection for a remote peer
+  public hasPeerConnection(peerId: string): boolean {
+    const pc = this.peerConnections.get(peerId);
+    return Boolean(pc && pc.signalingState !== 'closed');
+  }
+
+  // Create or retrieve an RTCPeerConnection for a remote peer
   public getOrCreatePeerConnection(peerId: string): RTCPeerConnection {
     let pc = this.peerConnections.get(peerId);
     if (pc && pc.signalingState !== 'closed') {
@@ -104,6 +125,7 @@ export class WebRTCManager {
     // Monitor Connection State
     pc.onconnectionstatechange = () => {
       const state = pc?.connectionState || 'disconnected';
+      console.log(`[WebRTC] Peer ${peerId} connectionState changed to:`, state);
       this.callbacks.onPeerConnectionStateChange(peerId, state);
 
       if (state === 'failed') {
@@ -116,19 +138,35 @@ export class WebRTCManager {
       }
     };
 
-    // Handle incoming Remote Media Tracks
+    // Handle incoming Remote Media Tracks (Video & Audio)
     pc.ontrack = (event) => {
+      console.log(`[WebRTC] Incoming track from ${peerId}: kind=${event.track.kind}, id=${event.track.id}`);
+
       let remoteStream = this.remoteStreams.get(peerId);
       if (!remoteStream) {
-        remoteStream = event.streams && event.streams.length > 0 ? event.streams[0] : new MediaStream();
+        remoteStream = new MediaStream();
         this.remoteStreams.set(peerId, remoteStream);
       }
 
-      event.streams[0]?.getTracks().forEach(track => {
-        if (!remoteStream?.getTracks().some(t => t.id === track.id)) {
-          remoteStream?.addTrack(track);
+      // Add the track directly to remoteStream if not already present
+      if (event.track) {
+        const existingTrack = remoteStream.getTracks().find(t => t.kind === event.track.kind);
+        if (existingTrack && existingTrack.id !== event.track.id) {
+          remoteStream.removeTrack(existingTrack);
         }
-      });
+        if (!remoteStream.getTracks().some(t => t.id === event.track.id)) {
+          remoteStream.addTrack(event.track);
+        }
+      }
+
+      // Also incorporate any other tracks in event.streams if available
+      if (event.streams && event.streams[0]) {
+        event.streams[0].getTracks().forEach(track => {
+          if (!remoteStream!.getTracks().some(t => t.id === track.id)) {
+            remoteStream!.addTrack(track);
+          }
+        });
+      }
 
       // Create a fresh MediaStream wrapper so React detects reference changes and triggers UI updates
       const updatedStream = new MediaStream(remoteStream.getTracks());
@@ -139,6 +177,14 @@ export class WebRTCManager {
       if (this.callbacks.onRemoteStreamUpdate) {
         this.callbacks.onRemoteStreamUpdate(peerId, updatedStream);
       }
+
+      // Listen for unmute/mute events on remote track to trigger React re-renders
+      event.track.onunmute = () => {
+        if (this.callbacks.onRemoteStreamUpdate) {
+          const fresh = new MediaStream(remoteStream!.getTracks());
+          this.callbacks.onRemoteStreamUpdate(peerId, fresh);
+        }
+      };
 
       // Track ended handler
       event.track.onended = () => {
@@ -164,20 +210,25 @@ export class WebRTCManager {
   }
 
   // Handle an OFFER received from a remote peer and create an ANSWER
-  public async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
+  public async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit | null> {
     const pc = this.getOrCreatePeerConnection(peerId);
 
-    // If there is an offer collision in have-local-offer state
+    // Offer collision resolution (Polite vs. Impolite pattern)
     if (pc.signalingState !== 'stable') {
-      if (this.localUserId < peerId) {
-        // We are polite: rollback local offer to accept remote offer
-        await Promise.all([
-          pc.setLocalDescription({ type: 'rollback' } as any).catch(() => {}),
-          pc.setRemoteDescription(new RTCSessionDescription(offer)),
-        ]);
+      const isPolite = this.localUserId < peerId;
+      if (isPolite) {
+        console.log(`[WebRTC] Collision detected. Polite peer rolling back local offer for ${peerId}`);
+        try {
+          await pc.setLocalDescription({ type: 'rollback' } as any);
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        } catch (e) {
+          console.warn(`[WebRTC] Rollback error for ${peerId}:`, e);
+          return null;
+        }
       } else {
-        // We are impolite: ignore remote offer
-        return pc.localDescription!;
+        // Impolite peer ignores the remote offer; the polite peer will answer our local offer
+        console.log(`[WebRTC] Collision detected. Impolite peer ignoring remote offer from ${peerId}`);
+        return null;
       }
     } else {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -199,14 +250,17 @@ export class WebRTCManager {
       return;
     }
 
-    if (pc.signalingState === 'have-local-offer') {
+    if (pc.signalingState === 'have-local-offer' && answer.type === 'answer') {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       await this.processPendingCandidates(peerId);
+    } else {
+      console.warn(`[WebRTC] Ignored answer from ${peerId} (signalingState: ${pc.signalingState}, answerType: ${answer.type})`);
     }
   }
 
   // Add an ICE candidate received from a remote peer
   public async addIceCandidate(peerId: string, candidateInit: RTCIceCandidateInit): Promise<void> {
+    if (!candidateInit || !candidateInit.candidate) return;
     const pc = this.peerConnections.get(peerId);
 
     // If peer connection exists and remote description is already set, add directly

@@ -16,25 +16,30 @@ export interface SignalingCallbacks {
   onMeetingEnded: () => void;
 }
 
+export interface SignalingUserProfile {
+  id: string; // The user's account ID (or guest ID)
+  name: string;
+  avatar: string;
+  role?: string;
+  designation?: string;
+}
+
 export class SupabaseSignalingService {
   private channel: RealtimeChannel | null = null;
   private roomKey: string;
-  private localUser: {
-    id: string;
-    name: string;
-    avatar: string;
-    role?: string;
-    designation?: string;
-  };
+  private localPeerId: string; // Unique peer/session ID per browser tab
+  private localUser: SignalingUserProfile;
   private callbacks: SignalingCallbacks;
   private isSubscribed = false;
 
   constructor(
     roomKey: string,
-    localUser: { id: string; name: string; avatar: string; role?: string; designation?: string },
+    localPeerId: string,
+    localUser: SignalingUserProfile,
     callbacks: SignalingCallbacks
   ) {
     this.roomKey = roomKey;
+    this.localPeerId = localPeerId;
     this.localUser = localUser;
     this.callbacks = callbacks;
   }
@@ -56,7 +61,7 @@ export class SupabaseSignalingService {
     this.channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false },
-        presence: { key: this.localUser.id },
+        presence: { key: this.localPeerId },
       },
     });
 
@@ -64,8 +69,13 @@ export class SupabaseSignalingService {
     this.channel.on('broadcast', { event: 'signal' }, ({ payload }) => {
       const msg = payload as SignalingMessage;
       
+      // Ignore self-broadcasts
+      if (msg.senderId === this.localPeerId) {
+        return;
+      }
+
       // If message is targeted to a specific peer, only handle if we are the target
-      if (msg.targetId && msg.targetId !== this.localUser.id) {
+      if (msg.targetId && msg.targetId !== this.localPeerId) {
         return;
       }
 
@@ -85,11 +95,15 @@ export class SupabaseSignalingService {
     });
 
     this.channel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
-      this.callbacks.onPresenceJoin(key, newPresences);
+      if (key !== this.localPeerId) {
+        this.callbacks.onPresenceJoin(key, newPresences);
+      }
     });
 
     this.channel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-      this.callbacks.onPresenceLeave(key, leftPresences);
+      if (key !== this.localPeerId) {
+        this.callbacks.onPresenceLeave(key, leftPresences);
+      }
     });
 
     // 3. Subscribe and track initial presence state
@@ -102,6 +116,7 @@ export class SupabaseSignalingService {
 
           // Track local user presence state in room
           await this.channel?.track({
+            peerId: this.localPeerId,
             memberId: this.localUser.id,
             name: this.localUser.name,
             avatar: this.localUser.avatar,
@@ -116,10 +131,10 @@ export class SupabaseSignalingService {
             status: 'connected',
           });
 
-          // Broadcast JOIN signal to inform other peers to initiate WebRTC offers
+          // Broadcast JOIN signal so existing peers in the room initiate WebRTC offers
           await this.sendSignal({
             type: 'JOIN',
-            senderId: this.localUser.id,
+            senderId: this.localPeerId,
             senderName: this.localUser.name,
             senderAvatar: this.localUser.avatar,
             senderRole: this.localUser.designation || this.localUser.role,
@@ -148,7 +163,7 @@ export class SupabaseSignalingService {
         event: 'signal',
         payload: {
           ...message,
-          senderId: this.localUser.id,
+          senderId: this.localPeerId,
           senderName: this.localUser.name,
           senderAvatar: this.localUser.avatar,
           senderRole: this.localUser.designation || this.localUser.role,
@@ -166,6 +181,7 @@ export class SupabaseSignalingService {
 
     try {
       await this.channel.track({
+        peerId: this.localPeerId,
         memberId: this.localUser.id,
         name: this.localUser.name,
         avatar: this.localUser.avatar,
@@ -184,7 +200,7 @@ export class SupabaseSignalingService {
 
     await this.sendSignal({
       type: 'MEETING_ENDED',
-      senderId: this.localUser.id,
+      senderId: this.localPeerId,
       senderName: this.localUser.name,
     });
   }
@@ -197,7 +213,7 @@ export class SupabaseSignalingService {
       // Send LEAVE signal so peers can immediately cleanup RTCPeerConnections
       await this.sendSignal({
         type: 'LEAVE',
-        senderId: this.localUser.id,
+        senderId: this.localPeerId,
         senderName: this.localUser.name,
       });
 
