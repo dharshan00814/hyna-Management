@@ -112,7 +112,6 @@ function App() {
                     <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Restoring your session...</p>
                   </div>
                 </div>
-              </div>
             ) : isAuthenticated ? (
               <Navigate to={`${rolePrefix}/dashboard`} replace />
             ) : (
