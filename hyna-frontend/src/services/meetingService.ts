@@ -14,6 +14,7 @@ import type {
   MeetingType 
 } from '@/types';
 import { notifyMeetingScheduled } from './notificationWorkflow';
+import { isPurgedMeeting } from './api';
 
 // Helper: Generate secure random room ID
 export function generateMeetingRoomId(): string {
@@ -79,7 +80,7 @@ export async function fetchAllMeetings(userId?: string): Promise<Meeting[]> {
       return [];
     }
 
-    const meetings = (data || []).map(mapDbMeeting);
+    const meetings = (data || []).map(mapDbMeeting).filter(m => !isPurgedMeeting(m));
 
     if (userId) {
       const uIdUpper = userId.toUpperCase();
