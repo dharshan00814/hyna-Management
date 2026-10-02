@@ -54,6 +54,38 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('recharts')) {
+              return 'vendor-charts';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (id.includes('@supabase')) {
+              return 'vendor-supabase';
+            }
+            if (id.includes('socket.io-client') || id.includes('engine.io-client')) {
+              return 'vendor-webrtc';
+            }
+            if (id.includes('@radix-ui')) {
+              return 'vendor-radix';
+            }
+            if (id.includes('emoji-picker-react')) {
+              return 'vendor-emoji';
+            }
+            if (id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'vendor-react-core';
+            }
+          }
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -62,11 +94,11 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: ['hyna-management.onrender.com'], // ✅ exact host only
+    allowedHosts: ['hyna-management.onrender.com'],
   },
   preview: {
     port: 5173,
     host: true,
-    allowedHosts: ['hyna-management.onrender.com'], // ✅ same here
+    allowedHosts: ['hyna-management.onrender.com'],
   },
 });
