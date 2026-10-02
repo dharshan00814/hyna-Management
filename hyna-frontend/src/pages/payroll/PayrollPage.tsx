@@ -707,17 +707,17 @@ export function PayrollPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="page-container space-y-6 pb-32 md:pb-16">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-foreground)] flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-              <CreditCard className="w-6 h-6" />
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-foreground)] flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 shrink-0">
+              <CreditCard className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            {isCEO ? 'Executive Payroll & Compensation Management' : 'My Compensation & Payslip'}
+            <span>{isCEO ? 'Executive Payroll & Compensation Management' : 'My Compensation & Payslip'}</span>
           </h1>
-          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
+          <p className="text-xs sm:text-sm text-[var(--color-muted-foreground)] mt-1.5 leading-relaxed">
             {isCEO
               ? 'Full executive overview for CEO Vignesh: Real organization roster, live salary adjustments, and automatic Net Pay calculation.'
               : 'Secure, confidential view of your monthly gross earnings, performance bonuses, deductions, and take-home net pay.'}
@@ -726,7 +726,7 @@ export function PayrollPage() {
 
         {/* CEO Vignesh Exclusive Header Actions */}
         {isCEO ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button
               variant="outline"
               size="sm"
@@ -763,11 +763,11 @@ export function PayrollPage() {
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <Button
               size="sm"
               onClick={() => myRecord && handleDownloadPayslip(myRecord)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm w-full sm:w-auto justify-center font-medium"
             >
               <Download className="w-4 h-4 mr-1.5" />
               Print / Download My Payslip
@@ -778,14 +778,14 @@ export function PayrollPage() {
 
       {/* Role / Access Notice Banner */}
       {!isCEO && (
-        <div className="p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 text-xs text-indigo-400 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 shrink-0 text-indigo-500" />
-            <span>
-              <strong>Confidential Access Policy:</strong> You are viewing your personal payroll statement only. Company-wide payroll administration is restricted exclusively to CEO Vignesh.
+        <div className="p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 text-xs text-indigo-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <Lock className="w-4 h-4 shrink-0 text-indigo-500 mt-0.5 sm:mt-0" />
+            <span className="leading-relaxed">
+              <strong className="font-semibold text-indigo-300">Confidential Access Policy:</strong> You are viewing your personal payroll statement only. Company-wide payroll administration is restricted exclusively to CEO Vignesh.
             </span>
           </div>
-          <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 font-mono text-[10px]">
+          <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 font-mono text-[10px] shrink-0 self-start sm:self-auto px-2 py-0.5">
             {currentUser?.employeeId || 'AUTHENTICATED'}
           </Badge>
         </div>
@@ -795,12 +795,12 @@ export function PayrollPage() {
       {isCEO ? (
         // CEO Metrics: Company-wide totals
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>Total Monthly Payroll</span>
-              <IndianRupee className="w-4 h-4 text-indigo-500" />
+              <IndianRupee className="w-4 h-4 text-indigo-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-[var(--color-foreground)]">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-[var(--color-foreground)]">
               ₹{totalPayroll.toLocaleString('en-IN')}
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-500 font-medium">
@@ -809,12 +809,12 @@ export function PayrollPage() {
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>Disbursed (Settled)</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-emerald-500">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-500">
               ₹{disbursedAmount.toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
@@ -822,12 +822,12 @@ export function PayrollPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>Pending Approvals</span>
-              <Clock className="w-4 h-4 text-amber-500" />
+              <Clock className="w-4 h-4 text-amber-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-amber-500">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-amber-500">
               ₹{pendingAmount.toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
@@ -835,12 +835,12 @@ export function PayrollPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>CEO Vignesh Authority</span>
-              <ShieldCheck className="w-4 h-4 text-indigo-500" />
+              <ShieldCheck className="w-4 h-4 text-indigo-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-[var(--color-foreground)]">Master Access</div>
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-[var(--color-foreground)]">Master Access</div>
             <p className="text-xs text-emerald-500 font-medium mt-2 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />
               Salary Edit & Auto Net Pay enabled
@@ -850,25 +850,26 @@ export function PayrollPage() {
       ) : (
         // Non-CEO Metrics: Personal individual numbers
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">
               <span>My Take-Home Pay (Net)</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-emerald-500">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-500">
               ₹{(myRecord?.netSalary || 0).toLocaleString('en-IN')}
             </div>
-            <p className="text-xs text-[var(--color-muted-foreground)] mt-2 font-mono">
-              Account: {myRecord?.bankAccount || '•••• 4892'}
+            <p className="text-xs text-[var(--color-muted-foreground)] mt-2 font-mono flex items-center gap-1.5">
+              <span>Account:</span>
+              <span className="text-[var(--color-foreground)] font-semibold">{myRecord?.bankAccount || '•••• 4892'}</span>
             </p>
           </div>
 
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>My Base Salary</span>
-              <IndianRupee className="w-4 h-4 text-indigo-500" />
+              <IndianRupee className="w-4 h-4 text-indigo-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-[var(--color-foreground)]">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-[var(--color-foreground)]">
               ₹{(myRecord?.baseSalary || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
@@ -876,12 +877,12 @@ export function PayrollPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>Performance Bonus</span>
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-emerald-500">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-500">
               +₹{(myRecord?.bonus || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-[var(--color-muted-foreground)] mt-2">
@@ -889,12 +890,12 @@ export function PayrollPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
+          <div className="p-4 sm:p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+            <div className="flex items-center justify-between text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
               <span>Standard Deductions & Taxes</span>
-              <ShieldCheck className="w-4 h-4 text-red-400" />
+              <ShieldCheck className="w-4 h-4 text-red-400 shrink-0" />
             </div>
-            <div className="text-2xl font-bold text-red-400">
+            <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-red-400">
               -₹{(myRecord?.deductions || 0).toLocaleString('en-IN')}
             </div>
             <p className="text-xs text-emerald-500 font-medium mt-2 flex items-center gap-1">
@@ -950,8 +951,8 @@ export function PayrollPage() {
 
       {/* Payroll Table */}
       <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full text-left text-xs min-w-[760px]">
             <thead className="border-b border-[var(--color-border)] bg-[var(--color-muted)]/50 text-[var(--color-muted-foreground)] uppercase font-semibold tracking-wider">
               <tr>
                 <th className="py-3.5 px-4">Member</th>
