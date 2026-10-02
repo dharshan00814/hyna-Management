@@ -357,6 +357,14 @@ export async function updateNotificationPreferences(
     const payload = {
       member_id: memberId,
       ...prefs,
+      push_enabled: true,
+      tasks_enabled: true,
+      projects_enabled: true,
+      modules_enabled: true,
+      meetings_enabled: true,
+      attendance_enabled: true,
+      announcements_enabled: true,
+      events_enabled: true,
       updated_at: new Date().toISOString(),
     };
 

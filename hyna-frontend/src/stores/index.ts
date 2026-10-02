@@ -252,74 +252,8 @@ export const useAuthStore = create<AuthState>()(
             password,
           });
 
-          // If sign-in failed with invalid credentials, the Supabase Auth account may not exist yet.
-          // Auto-provision it on first login using the profile data (from DB or roster map).
-          if (signInError && (signInError.message.toLowerCase().includes('invalid') || signInError.message.toLowerCase().includes('credentials'))) {
-            // Try to get full profile details from DB first, then fall back to roster
-            const { data: fullProfile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('email', emailToUse)
-              .maybeSingle();
-
-            const rosterInfo = getOrgMemberDetails(rawId, emailToUse);
-
-            const { data: signUpData, error: autoSignUpError } = await supabase.auth.signUp({
-              email: emailToUse,
-              password,
-              options: {
-                data: {
-                  name: fullProfile?.name || rosterInfo.name,
-                  department: fullProfile?.department || rosterInfo.department,
-                  designation: fullProfile?.designation || rosterInfo.designation,
-                  role: fullProfile?.role || rosterInfo.role,
-                  employee_id: fullProfile?.employee_id || rosterInfo.employeeId,
-                },
-              },
-            });
-
-            if (signUpData?.user) {
-              const identities = signUpData.user.identities;
-              // Empty identities = email already registered in Supabase Auth with a DIFFERENT password
-              // This is the key cross-user protection: wrong password is rejected
-              if (identities && identities.length === 0) {
-                set({ isLoading: false });
-                return {
-                  success: false,
-                  error: 'Incorrect password for this account. Please check your password and try again.',
-                };
-              }
-
-              // Fresh Supabase Auth account created — sign in with the newly set password:
-              const retrySignIn = await supabase.auth.signInWithPassword({
-                email: emailToUse,
-                password,
-              });
-
-              if (retrySignIn.data?.user) {
-                authData = retrySignIn.data;
-                signInError = null;
-              } else if (signUpData.session) {
-                authData = { user: signUpData.user, session: signUpData.session };
-                signInError = null;
-              } else if (retrySignIn.error) {
-                signInError = retrySignIn.error;
-              }
-            } else if (autoSignUpError) {
-              const lowerSignErr = autoSignUpError.message.toLowerCase();
-              if (lowerSignErr.includes('already registered')) {
-                set({ isLoading: false });
-                return {
-                  success: false,
-                  error: 'Incorrect password for this account. Please check your password and try again.',
-                };
-              }
-            }
-          }
-
-
           if (signInError || !authData?.user) {
-            // Check if identifier matches a registered internal team member
+            // Check if identifier matches a registered internal team member for fallback demo access
             const rosterMember = getOrgMemberDetails(rawId, emailToUse);
             if (rosterMember.employeeId) {
               const fallbackUser: User = {
@@ -356,7 +290,7 @@ export const useAuthStore = create<AuthState>()(
             if (lowerMsg.includes('email not confirmed')) {
               msg = 'Email address has not been confirmed yet. Please check your inbox or disable "Confirm email" in Supabase Dashboard (Authentication -> Providers -> Email).';
             } else if (lowerMsg.includes('invalid login credentials') || lowerMsg.includes('invalid credentials')) {
-              msg = 'Invalid email or password. If you have not created an account yet, please switch to "Register Member" above to create your profile.';
+              msg = 'Incorrect email/employee ID or password. Please check your credentials and try again.';
             }
             return { success: false, error: msg };
           }
@@ -691,32 +625,32 @@ export const useSidebarStore = create<SidebarState>()((set) => ({
   setMobileOpen: (open) => set({ isMobileOpen: open }),
 }));
 
-// ---- Theme State (Strict Obsidian Dark Theme) ----
-export type ThemeMode = 'dark';
+// ---- Theme State ----
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ThemeState {
   mode: ThemeMode;
-  resolvedTheme: 'dark';
-  setMode: (mode?: string) => void;
+  resolvedTheme: 'light' | 'dark';
+  setMode: (mode: ThemeMode) => void;
 }
+
+const getSystemTheme = (): 'light' | 'dark' => {
+  if (typeof window === 'undefined') return 'dark';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
       mode: 'dark',
       resolvedTheme: 'dark',
-      setMode: () => set({
-        mode: 'dark',
-        resolvedTheme: 'dark',
+      setMode: (mode) => set({
+        mode,
+        resolvedTheme: mode === 'system' ? getSystemTheme() : mode,
       }),
     }),
     {
       name: 'hyna-theme',
-      // Always migrate any stale localStorage cache to dark
-      migrate: () => ({
-        mode: 'dark' as const,
-        resolvedTheme: 'dark' as const,
-      }),
     }
   )
 );

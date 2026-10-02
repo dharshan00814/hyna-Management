@@ -89,7 +89,10 @@ export function Header() {
         actionUrl: raw.link || raw.action_url,
         icon: raw.icon,
       };
-      setNotifications(prev => [notif, ...prev]);
+      setNotifications(prev => {
+        if (prev.some(n => n.id === notif.id)) return prev;
+        return [notif, ...prev];
+      });
     };
     window.addEventListener('realtime-notification', handleRealtime as EventListener);
     return () => window.removeEventListener('realtime-notification', handleRealtime as EventListener);

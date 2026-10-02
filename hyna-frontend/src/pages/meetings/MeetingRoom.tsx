@@ -133,6 +133,7 @@ export function MeetingRoom() {
 
   // 3. WebRTC Meeting Core Hook
   const {
+    localStream: meetingLocalStream,
     localParticipantState,
     participants,
     remoteStreams,
@@ -166,7 +167,7 @@ export function MeetingRoom() {
   const { finalizeAttendance } = useMeetingAttendance(
     meeting?.id,
     currentUser?.id,
-    meetingStage === 'in-meeting'
+    meetingStage === 'in-meeting' && overallConnectionState === 'connected'
   );
 
   // 5. In-Meeting Chat Hook
@@ -189,10 +190,8 @@ export function MeetingRoom() {
   // Join Action from Pre-Join Screen
   const handleJoin = async () => {
     try {
-      // 1. Physically STOP PreJoin preview stream so it never runs in the background
-      stopLocalStream();
       setMeetingStage('in-meeting');
-      await startMeetingSession(prejoinVideoEnabled, prejoinAudioEnabled);
+      await startMeetingSession(prejoinVideoEnabled, prejoinAudioEnabled, localStream);
       toast.success('Joined meeting session');
     } catch (err) {
       console.error('[MeetingRoom] handleJoin error:', err);
@@ -379,7 +378,7 @@ export function MeetingRoom() {
         <div className="flex-1 h-full overflow-hidden">
           <VideoGrid
             localParticipant={localParticipantState}
-            localStream={localStream}
+            localStream={meetingLocalStream}
             participants={participants}
             remoteStreams={remoteStreams}
             pinnedParticipantId={pinnedParticipantId}

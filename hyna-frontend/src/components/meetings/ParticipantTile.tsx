@@ -25,23 +25,23 @@ export function ParticipantTile({
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Attach stream to video tag
+  const hasVideoStream = Boolean(
+    stream && 
+    stream.getVideoTracks().length > 0 && 
+    (participant.videoEnabled || participant.isScreenSharing)
+  );
+
+  // Attach stream to video tag to guarantee audio playback
   useEffect(() => {
     if (videoRef.current) {
       if (stream) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.warn('[ParticipantTile] Autoplay prevented:', e));
       } else {
         videoRef.current.srcObject = null;
       }
     }
-  }, [stream, participant.videoEnabled, participant.isScreenSharing]);
-
-  const hasVideoStream = Boolean(
-    stream && 
-    stream.getVideoTracks().length > 0 && 
-    stream.getVideoTracks().some(t => t.readyState === 'live') &&
-    (participant.videoEnabled || participant.isScreenSharing)
-  );
+  }, [stream]);
 
   return (
     <div
@@ -51,16 +51,16 @@ export function ParticipantTile({
           : 'border-white/10 hover:border-white/20'
       }`}
     >
-      {/* Video Stream Element */}
-      {hasVideoStream ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal} // Always mute local video element to avoid audio feedback
-          className={`w-full h-full object-cover ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
-        />
-      ) : (
+      {/* Video / Audio Stream Element */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal} // Always mute local video element to avoid audio feedback
+        className={`w-full h-full object-cover ${!hasVideoStream ? 'opacity-0 absolute inset-0 -z-10' : 'relative z-0'} ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
+      />
+      
+      {!hasVideoStream && (
         /* Avatar Placeholder when camera is disabled or audio meeting */
         <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b from-[#181820] to-[#101014]">
           <div className="relative">

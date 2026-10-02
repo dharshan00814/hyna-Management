@@ -67,9 +67,9 @@ export function ParticipantPanel({
 
       {/* Participants List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {filtered.map(({ participant, isLocal }) => (
+        {filtered.map(({ participant, isLocal }, index) => (
           <div
-            key={participant.memberId}
+            key={`${participant.memberId || 'peer'}-${index}`}
             className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition-colors"
           >
             <div className="flex items-center gap-3 min-w-0 mr-2">

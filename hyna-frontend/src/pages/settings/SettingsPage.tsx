@@ -721,17 +721,16 @@ export function SettingsPage() {
                       <Send className="w-3.5 h-3.5 text-[var(--color-primary)]" />
                       Send Test Push
                     </Button>
-
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={disablePush}
                       disabled={isPushLoading}
-                      className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer text-xs"
+                      className="gap-1.5 cursor-pointer text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10"
                     >
                       <BellOff className="w-3.5 h-3.5" />
-                      Unsubscribe This Device
+                      Unsubscribe Device
                     </Button>
                   </>
                 )}
@@ -759,9 +758,10 @@ export function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={preferences.push_enabled}
+                  disabled={isLoadingPrefs}
                   onChange={(e) => handleTogglePreference('push_enabled', e.target.checked)}
                   className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
-                  title="Toggle all push notifications"
+                  title="Enable or disable all push notifications"
                 />
               </div>
             </div>
@@ -821,9 +821,10 @@ export function SettingsPage() {
                   </div>
                   <input
                     type="checkbox"
-                    checked={item.checked}
-                    onChange={(e) => handleTogglePreference(item.key as any, e.target.checked)}
-                    className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-pointer"
+                    checked={true}
+                    disabled={true}
+                    className="w-4 h-4 rounded text-[var(--color-primary)] focus:ring-[var(--color-primary)] cursor-not-allowed opacity-60"
+                    title="Mandatory for all members"
                   />
                 </div>
               ))}

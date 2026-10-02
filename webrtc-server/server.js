@@ -5,11 +5,29 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
+const rawClientUrl = process.env.CLIENT_URL || '*';
+const clientOrigins = rawClientUrl === '*'
+  ? '*'
+  : rawClientUrl.split(',').map(url => url.trim().replace(/\/+$/, ''));
+
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || clientOrigins === '*') return callback(null, true);
+    const normalized = origin.replace(/\/+$/, '');
+    if (Array.isArray(clientOrigins) && clientOrigins.includes(normalized)) {
+      return callback(null, true);
+    }
+    console.warn(`[Express CORS Blocked] Origin: ${origin}. Allowed:`, clientOrigins);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+}));
 app.use(express.json());
 
 const PORT = process.env.PORT || 5050;
+const HOST = process.env.HOST || '0.0.0.0';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 
@@ -17,9 +35,18 @@ const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY) 
   : null;
 
-app.get('/health', (req, res) => {
+// Production Root Endpoint (Fixes "Cannot GET /" on Render)
+app.get('/', (req, res) => {
   res.json({
     status: 'ok',
+    service: 'Hyna WebRTC Signaling Server',
+  });
+});
+
+// Production Health Endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
     uptime: process.uptime(),
     activeRooms: rooms.size,
     timestamp: new Date().toISOString(),
@@ -29,10 +56,13 @@ app.get('/health', (req, res) => {
 const server = http.createServer(app);
 
 const io = new Server(server, {
+  path: '/socket.io/',
   cors: {
-    origin: '*',
+    origin: clientOrigins,
     methods: ['GET', 'POST'],
+    credentials: clientOrigins !== '*',
   },
+  transports: ['polling', 'websocket'],
   pingTimeout: 30000,
   pingInterval: 10000,
 });
@@ -83,8 +113,14 @@ async function updateDbMeetingStatus(roomId, status) {
   }
 }
 
+console.log('[Socket.IO] initialized with origins:', clientOrigins);
+
 io.on('connection', (socket) => {
-  console.log(`[Connect] Socket ${socket.id} connected`);
+  console.log('[Socket.IO] CONNECTED', {
+    socketId: socket.id,
+    transport: socket.conn?.transport?.name,
+    origin: socket.handshake?.headers?.origin,
+  });
 
   // 1. Join Room
   socket.on('join-room', async ({ roomId, user, micEnabled = true, videoEnabled = true }) => {
@@ -92,14 +128,37 @@ io.on('connection', (socket) => {
       return socket.emit('error', { message: 'Invalid room or user credentials' });
     }
 
-    console.log(`[Join] User ${user.name} (${user.userId}) joining room ${roomId}`);
-
     // Fetch database meeting to determine true host and validity
     let dbMeeting = await getDbMeeting(roomId);
-    let room = rooms.get(roomId);
 
+    // Fetch real authenticated profile from database if available
+    let memberProfile = null;
+    if (supabase && user.userId) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.userId)
+          .maybeSingle();
+        if (profile) {
+          memberProfile = profile;
+        }
+      } catch (e) {
+        console.warn('[Server] Error fetching user profile:', e.message);
+      }
+    }
+
+    const resolvedUserId = memberProfile?.id || user.userId;
+    const resolvedName = memberProfile?.name || user.name || 'Member';
+    const resolvedAvatar = memberProfile?.avatar || user.avatar || '';
+    const resolvedRole = memberProfile?.role || user.role || 'member';
+    const resolvedDesignation = memberProfile?.designation || user.designation || 'Software Engineer';
+
+    console.log(`[Join] User ${resolvedName} (${resolvedUserId}) joining room ${roomId}`);
+
+    let room = rooms.get(roomId);
     if (!room) {
-      const hostId = dbMeeting?.host_id || user.userId;
+      const hostId = dbMeeting?.host_id || dbMeeting?.created_by || resolvedUserId;
       room = {
         roomId,
         hostId,
@@ -107,12 +166,21 @@ io.on('connection', (socket) => {
         participants: new Map(),
       };
       rooms.set(roomId, room);
+    } else {
+      // If user is reconnecting under a new socket ID, replace previous socket entry cleanly
+      for (const [existingSocketId, existingParticipant] of room.participants.entries()) {
+        if (existingParticipant.userId === resolvedUserId && existingSocketId !== socket.id) {
+          console.log(`[Rejoin] User ${resolvedName} reconnecting. Replacing old socket ${existingSocketId} with ${socket.id}`);
+          room.participants.delete(existingSocketId);
+          socketToRoom.delete(existingSocketId);
+        }
+      }
     }
 
     // Determine host status: strictly verify if user is host
-    const isHost = (room.hostId === user.userId) || (dbMeeting && dbMeeting.host_id === user.userId);
+    const isHost = (room.hostId === resolvedUserId) || (dbMeeting && (dbMeeting.host_id === resolvedUserId || dbMeeting.created_by === resolvedUserId));
     if (isHost && !room.hostId) {
-      room.hostId = user.userId;
+      room.hostId = resolvedUserId;
     }
 
     // If meeting is not yet LIVE, mark it LIVE once someone joins
@@ -123,11 +191,11 @@ io.on('connection', (socket) => {
 
     const participantData = {
       socketId: socket.id,
-      userId: user.userId,
-      name: user.name || 'Member',
-      avatar: user.avatar || '',
-      role: user.role || 'member',
-      designation: user.designation || 'Software Engineer',
+      userId: resolvedUserId,
+      name: resolvedName,
+      avatar: resolvedAvatar,
+      role: resolvedRole,
+      designation: resolvedDesignation,
       micEnabled: Boolean(micEnabled),
       videoEnabled: Boolean(videoEnabled),
       isScreenSharing: false,
@@ -138,7 +206,7 @@ io.on('connection', (socket) => {
 
     socket.join(roomId);
     room.participants.set(socket.id, participantData);
-    socketToRoom.set(socket.id, { roomId, userId: user.userId });
+    socketToRoom.set(socket.id, { roomId, userId: resolvedUserId });
 
     // Send existing participants list and room info to the joining client
     const existingParticipants = Array.from(room.participants.values()).filter(p => p.socketId !== socket.id);
@@ -377,9 +445,13 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 WebRTC & Meeting Signaling Server running on port ${PORT}`);
-  console.log(`📡 Health Check: http://localhost:${PORT}/health`);
-  console.log(`=======================================================`);
-});
+if (!process.env.VERCEL) {
+  server.listen(PORT, HOST, () => {
+    console.log(`=======================================================`);
+    console.log(`🚀 WebRTC & Meeting Signaling Server running on ${HOST}:${PORT}`);
+    console.log(`📡 Health Check: http://${HOST}:${PORT}/health`);
+    console.log(`=======================================================`);
+  });
+}
+
+module.exports = app;

@@ -668,7 +668,8 @@ export async function addMember(input: AddMemberInput): Promise<User> {
     .maybeSingle();
 
   if (profileError) {
-    console.warn('Profile upsert warning:', profileError);
+    // Only log genuine errors, not expected duplicate-key conflicts (auth trigger may have already created the row)
+    if (profileError.code !== '23505') console.warn('Profile upsert error:', profileError);
   }
 
   const newUser: User = savedProfile ? mapUser(savedProfile) : {
@@ -1736,7 +1737,7 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
       checkInTime: timeNow,
     }).catch(console.error);
 
-    return mapAttendance(data);
+    return mapAttendance(res.data);
   } catch (err) {
     console.warn('Check-in network error (using local session fallback):', err);
     return fallbackRecord;
@@ -2518,3 +2519,8 @@ export async function getManagerDashboardData(managerId: string) {
   }
 }
 
+
+export async function sendPasswordResetEmail(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' });
+  if (error) throw error;
+}

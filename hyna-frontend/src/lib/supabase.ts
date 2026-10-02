@@ -30,12 +30,18 @@ export const supabase = createClient(safeUrl, safeKey, {
   },
 });
 
+let _ephemeralClient: ReturnType<typeof createClient> | null = null;
+
 export const createEphemeralClient = () => {
-  return createClient(safeUrl, safeKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
+  if (!_ephemeralClient) {
+    _ephemeralClient = createClient(safeUrl, safeKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        storageKey: 'sb-ephemeral-auth-token',
+      },
+    });
+  }
+  return _ephemeralClient;
 };
 
