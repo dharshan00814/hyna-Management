@@ -2,8 +2,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mail, Phone, Calendar, Edit3, Trash2, AlertTriangle, UserCheck, Landmark, Copy, Check, Key } from 'lucide-react';
 import { Button, Avatar, Badge, Tabs, ProgressBar, EmptyState, LoadingState, Modal, Input, Select } from '@/components/ui';
 import { cn, getStatusColor, getPriorityColor, formatDate } from '@/lib/utils';
+import { useAuthStore, isCeoOrCto } from '@/stores';
+import { getUser, getUserTasks, getProjects, updateMember, deleteMember } from '@/services/api';
+
 import { useAuthStore } from '@/stores';
 import { getUser, getUserTasks, getProjects, updateMember, deleteMember, sendPasswordResetEmail } from '@/services/api';
+
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { User, Task, Project, UserRole } from '@/types';
@@ -14,6 +18,7 @@ export function MemberDetailPage() {
   const { currentRole, effectiveRole, currentUser } = useAuthStore();
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
   const canManageMembers = effectiveRole === 'admin' || effectiveRole === 'manager' || currentRole !== 'member';
+  const canEditMembers = isCeoOrCto(currentUser);
 
   const [activeTab, setActiveTab] = useState('profile');
   const [member, setMember] = useState<User | null>(null);
@@ -92,6 +97,10 @@ export function MemberDetailPage() {
   }, [id]);
 
   const handleOpenEditModal = () => {
+    if (!canEditMembers) {
+      toast.error('Unauthorized: Only CEO and CTO are permitted to edit member details.');
+      return;
+    }
     if (!member) return;
     setEditFormData({
       name: member.name || '',
@@ -109,6 +118,10 @@ export function MemberDetailPage() {
 
   const handleUpdateMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditMembers) {
+      toast.error('Unauthorized: Only CEO and CTO are permitted to edit member details.');
+      return;
+    }
     if (!member) return;
     if (!editFormData.name.trim()) {
       toast.error('Please enter the member\'s full name');
@@ -141,6 +154,10 @@ export function MemberDetailPage() {
   };
 
   const handleDeleteMember = async () => {
+    if (!canEditMembers) {
+      toast.error('Unauthorized: Only CEO and CTO are permitted to remove members.');
+      return;
+    }
     if (!member) return;
     setIsDeleting(true);
     try {
@@ -219,7 +236,7 @@ export function MemberDetailPage() {
             </div>
           </div>
 
-          {canManageMembers && (
+          {canEditMembers && (
             <div className="flex items-center gap-2 self-start shrink-0">
               <Button variant="outline" size="sm" onClick={handleOpenEditModal} className="gap-1.5 text-xs">
                 <Edit3 className="w-3.5 h-3.5 text-[var(--color-primary)]" />
@@ -279,7 +296,7 @@ export function MemberDetailPage() {
                   </p>
                 </div>
               </div>
-              {canManageMembers && (
+              {canEditMembers && (
                 <Button variant="outline" size="sm" onClick={handleOpenEditModal} className="text-xs gap-1.5 self-start sm:self-auto cursor-pointer">
                   <Edit3 className="w-3.5 h-3.5" /> Edit Bank Details
                 </Button>

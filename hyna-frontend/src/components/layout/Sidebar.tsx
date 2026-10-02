@@ -2,13 +2,11 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Users, CalendarClock,
   Video, BarChart3, MessageCircle, FolderOpen, Settings, ChevronLeft,
-  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop, Download,
+  CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop,
   CreditCard
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
-import { useSidebarStore, useAuthStore } from '@/stores';
-import { usePWA } from '@/hooks/usePWA';
-import { InstallAppModal } from '@/components/common/InstallAppModal';
+import { useSidebarStore, useAuthStore, isExecutiveLeadership } from '@/stores';
 import { Avatar } from '@/components/ui';
 import type { UserRole } from '@/types';
 
@@ -37,58 +35,83 @@ const getLiveActivityPath = (role: string) => {
   return '/my-activity';
 };
 
-const getNavItems = (prefix: string, role: string): NavItem[] => [
-  { label: 'Dashboard', icon: LayoutDashboard, path: `${prefix}/dashboard`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Projects', icon: FolderKanban, path: `${prefix}/projects`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Tasks', icon: CheckSquare, path: `${prefix}/tasks`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Members', icon: Users, path: `${prefix}/members`, roles: ['admin', 'manager'] },
-  { label: 'Attendance', icon: CalendarClock, path: `${prefix}/attendance`, roles: ['admin', 'manager', 'member'] },
-  { label: getLiveActivityLabel(role), icon: Radio, path: getLiveActivityPath(role), roles: ['admin', 'manager', 'member'] },
-  { label: getActivityLabel(role), icon: Activity, path: `${prefix}/activity`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Leave', icon: CalendarOff, path: `${prefix}/leave`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Payroll', icon: CreditCard, path: `${prefix}/payroll`, roles: ['admin', 'manager', 'member'] },
-  { label: 'Announcements', icon: Megaphone, path: `${prefix}/announcements`, roles: ['admin', 'manager'] },
-];
+const getNavItems = (prefix: string, role: string, isExec: boolean): NavItem[] => {
+  const items: NavItem[] = [
+    { label: 'Dashboard', icon: LayoutDashboard, path: `${prefix}/dashboard`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Projects', icon: FolderKanban, path: `${prefix}/projects`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Tasks', icon: CheckSquare, path: `${prefix}/tasks`, roles: ['admin', 'manager', 'member'] },
+  ];
 
-const bottomNavItems: NavItem[] = [
-  { label: 'IDE Integrations', icon: Laptop, path: '/settings/integrations', roles: ['admin', 'manager', 'member'] },
-  { label: 'Privacy & Tracking', icon: ShieldCheck, path: '/privacy/tracking', roles: ['admin', 'manager', 'member'] },
-  { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager', 'member'] },
-];
+  // 1. Members: STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: 'Members', icon: Users, path: `${prefix}/members`, roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push({ label: 'Attendance', icon: CalendarClock, path: `${prefix}/attendance`, roles: ['admin', 'manager', 'member'] });
+
+  // 2. Live Developers & 3. Activity Analytics: STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: getLiveActivityLabel(role), icon: Radio, path: getLiveActivityPath(role), roles: ['admin', 'manager', 'member'] });
+    items.push({ label: getActivityLabel(role), icon: Activity, path: `${prefix}/activity`, roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push(
+    { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
+  );
+
+  // 4. Files: STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push(
+    { label: 'Leave', icon: CalendarOff, path: `${prefix}/leave`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Payroll', icon: CreditCard, path: `${prefix}/payroll`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Announcements', icon: Megaphone, path: `${prefix}/announcements`, roles: ['admin', 'manager'] },
+  );
+
+  return items;
+};
+
+const getBottomNavItems = (isExec: boolean): NavItem[] => {
+  const items: NavItem[] = [
+    { label: 'IDE Integrations', icon: Laptop, path: '/settings/integrations', roles: ['admin', 'manager', 'member'] },
+  ];
+
+  // 5. Privacy & Tracking (Security): STRICTLY for CEO, CTO, COO
+  if (isExec) {
+    items.push({ label: 'Privacy & Tracking', icon: ShieldCheck, path: '/privacy/tracking', roles: ['admin', 'manager', 'member'] });
+  }
+
+  items.push(
+    { label: 'Settings', icon: Settings, path: '/settings', roles: ['admin', 'manager', 'member'] },
+  );
+
+  return items;
+};
 
 export function Sidebar() {
   const { isCollapsed, isMobileOpen, toggle, setMobileOpen } = useSidebarStore();
   const { currentUser, effectiveRole } = useAuthStore();
-  const { isInstallable, isInstalled, showModal, setShowModal, promptInstall } = usePWA();
   const location = useLocation();
 
+  const isExec = isExecutiveLeadership(currentUser);
   const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
-  const navItems = getNavItems(prefix, effectiveRole).filter(item => item.roles.includes(effectiveRole));
+  const navItems = getNavItems(prefix, effectiveRole, isExec).filter(item => item.roles.includes(effectiveRole));
+  const bottomItems = getBottomNavItems(isExec).filter(item => item.roles.includes(effectiveRole));
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden animate-fade-in"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
+      {/* Sidebar - Desktop only */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full flex flex-col border-r transition-all duration-200',
+          'fixed top-0 left-0 z-30 h-full flex flex-col border-r transition-all duration-200',
           'bg-[var(--color-sidebar-bg)] border-[var(--color-sidebar-border)]',
           // Desktop
           'hidden md:flex',
           isCollapsed ? 'w-[68px]' : 'w-[260px]',
-          // Mobile
-          isMobileOpen && '!flex w-[280px] md:hidden',
         )}
       >
         {/* Logo area */}
@@ -118,13 +141,6 @@ export function Sidebar() {
           >
             <ChevronLeft className={cn('w-4 h-4 transition-transform', isCollapsed && 'rotate-180')} />
           </button>
-          {/* Close - mobile */}
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="flex md:hidden items-center justify-center w-6 h-6 rounded-md ml-auto text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Navigation */}
@@ -153,8 +169,8 @@ export function Sidebar() {
         </nav>
 
         {/* Bottom section */}
-        <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1">
-          {bottomNavItems.map((item) => {
+        <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1 shrink-0 pb-16 md:pb-3">
+          {bottomItems.map((item) => {
             const itemPath = `${prefix}${item.path}`;
             const isActive = location.pathname === itemPath;
             return (
@@ -177,29 +193,6 @@ export function Sidebar() {
             );
           })}
 
-          {/* Download / Install App */}
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            title={isCollapsed ? (isInstalled ? 'App Installed' : 'Download App') : undefined}
-            className={cn(
-              'flex items-center gap-3 rounded-lg text-sm font-medium transition-all w-full text-left',
-              isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2',
-              'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20'
-            )}
-          >
-            <Download className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
-            {!isCollapsed && (
-              <div className="flex items-center justify-between w-full">
-                <span>{isInstalled ? 'App Installed' : 'Download App'}</span>
-                {!isInstalled && (
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-500 text-white">
-                    PWA
-                  </span>
-                )}
-              </div>
-            )}
-          </button>
 
           {/* User profile */}
           {currentUser && (
@@ -221,14 +214,6 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* PWA Install Modal */}
-      <InstallAppModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onInstallPrompt={promptInstall}
-        isInstallable={isInstallable}
-        isInstalled={isInstalled}
-      />
     </>
   );
 }

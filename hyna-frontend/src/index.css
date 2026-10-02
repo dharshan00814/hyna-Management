@@ -9,77 +9,77 @@
 
 /* ---- CSS Custom Properties ---- */
 :root {
-  /* Semantic colors (Permanent Obsidian Dark Theme) */
-  --color-background: #111111;
+  /* Semantic colors (Permanent Claymorphic Obsidian Dark Theme) */
+  --color-background: #0d0f15;
   --color-foreground: #FFFFFF;
-  --color-card: #030518;
+  --color-card: #141620;
   --color-card-foreground: #FFFFFF;
-  --color-popover: #030518;
+  --color-popover: #141620;
   --color-popover-foreground: #FFFFFF;
   --color-primary: #2041F0;
   --color-primary-foreground: #FFFFFF;
-  --color-secondary: #050B35;
+  --color-secondary: #0c102a;
   --color-secondary-foreground: #FFFFFF;
-  --color-muted: #1B1B1B;
-  --color-muted-foreground: #ABABAB;
-  --color-accent-bg: #1B1B1B;
+  --color-muted: #181b26;
+  --color-muted-foreground: #9da3b4;
+  --color-accent-bg: #181b26;
   --color-accent-fg: #FFFFFF;
   --color-destructive: #FF0000;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #1B1B1B;
-  --color-input: #1B1B1B;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: #10121a;
   --color-ring: #7B8DF8;
-  --color-sidebar-bg: #111111;
-  --color-sidebar-border: #1B1B1B;
+  --color-sidebar-bg: #0c0e14;
+  --color-sidebar-border: rgba(255, 255, 255, 0.07);
   
-  /* Radii */
-  --radius: 0.5rem;
-  --radius-sm: 0.375rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  /* Radii (Claymorphic smooth rounded curves) */
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
   
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+  --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.4);
+  --shadow: 0 4px 8px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 8px 16px -2px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 16px 32px -4px rgb(0 0 0 / 0.7);
 }
 
 .dark {
   /* Semantic colors (New Design System) - Dark */
-  --color-background: #111111;
+  --color-background: #0d0f15;
   --color-foreground: #FFFFFF;
-  --color-card: #030518;
+  --color-card: #141620;
   --color-card-foreground: #FFFFFF;
-  --color-popover: #030518;
+  --color-popover: #141620;
   --color-popover-foreground: #FFFFFF;
   --color-primary: #2041F0;
   --color-primary-foreground: #FFFFFF;
-  --color-secondary: #050B35;
+  --color-secondary: #0c102a;
   --color-secondary-foreground: #FFFFFF;
-  --color-muted: #1B1B1B;
-  --color-muted-foreground: #ABABAB;
-  --color-accent-bg: #1B1B1B;
+  --color-muted: #181b26;
+  --color-muted-foreground: #9da3b4;
+  --color-accent-bg: #181b26;
   --color-accent-fg: #FFFFFF;
   --color-destructive: #FF0000;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #1B1B1B;
-  --color-input: #1B1B1B;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: #10121a;
   --color-ring: #7B8DF8;
-  --color-sidebar-bg: #111111;
-  --color-sidebar-border: #1B1B1B;
+  --color-sidebar-bg: #0c0e14;
+  --color-sidebar-border: rgba(255, 255, 255, 0.07);
   
   /* Radii */
-  --radius: 0.5rem;
-  --radius-sm: 0.375rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
   
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+  --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.4);
+  --shadow: 0 4px 8px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 8px 16px -2px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 16px 32px -4px rgb(0 0 0 / 0.7);
 }
 
 /* ---- Base styles ---- */
@@ -192,21 +192,72 @@ body {
   @apply text-sm sm:text-base text-[var(--color-muted-foreground)] mt-1;
 }
 
-/* ---- Card utility ---- */
-.card {
-  background-color: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+/* ---- Full Claymorphism Card & Surface System ---- */
+.card, [class*="bg-[var(--color-card)]"], .clay-card {
+  background: #141620;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 
+    inset 2.5px 2.5px 6px rgba(255, 255, 255, 0.08),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.12),
+    inset -5px -5px 12px rgba(0, 0, 0, 0.75),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.9),
+    0 16px 36px -8px rgba(0, 0, 0, 0.75),
+    0 4px 12px rgba(0, 0, 0, 0.45);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.card-hover {
-  transition: all 0.15s ease;
+.card:hover, .card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 
+    inset 2.5px 2.5px 7px rgba(255, 255, 255, 0.1),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.15),
+    inset -5px -5px 12px rgba(0, 0, 0, 0.75),
+    0 22px 45px -8px rgba(0, 0, 0, 0.85),
+    0 6px 16px rgba(0, 0, 0, 0.5);
 }
 
-.card-hover:hover {
-  box-shadow: var(--shadow-md);
-  border-color: #7B8DF8;
+/* Clay Tiles & Sub-boxes */
+.clay-tile {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 
+    inset 2px 2px 4px rgba(255, 255, 255, 0.08),
+    inset -3px -3px 6px rgba(0, 0, 0, 0.65),
+    0 6px 14px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease;
+}
+
+/* Clay Inset / Sunken Slots */
+.clay-sunken {
+  background: #0d0f15;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.75),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.04);
+}
+
+/* Clay 3D Buttons & Pills */
+.clay-btn {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    inset 2px 2px 4px rgba(255, 255, 255, 0.2),
+    inset -3px -3px 6px rgba(0, 0, 0, 0.6),
+    0 8px 18px -4px rgba(0, 0, 0, 0.45);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.clay-btn:hover {
+  transform: translateY(-1.5px);
+  filter: brightness(1.05);
+}
+.clay-btn:active {
+  transform: translateY(1px);
+  box-shadow: 
+    inset 3px 3px 6px rgba(0, 0, 0, 0.5),
+    inset -1px -1px 2px rgba(255, 255, 255, 0.15);
 }
 
 /* ---- Badge variants ---- */

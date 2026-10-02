@@ -112,6 +112,45 @@ function App() {
                     <p className="text-sm font-medium text-[var(--color-muted-foreground)]">Restoring your session...</p>
                   </div>
                 </div>
+              </div>
+            ) : isAuthenticated ? (
+              <Navigate to={`${rolePrefix}/dashboard`} replace />
+            ) : (
+              <LoginPage />
+            )
+          }
+        />
+
+        {/* Protected App Routes Layout */}
+        <Route element={<AppLayout />}>
+          {/* ... */}
+          {/* Executive Leadership Only Routes (CEO, CTO, COO) */}
+          <Route element={<ProtectedRoute requireExecutiveLeadership={true} />}>
+            {/* Members */}
+            <Route path="/admin/members" element={<MembersPage />} />
+            <Route path="/admin/members/:id" element={<MemberDetailPage />} />
+            <Route path="/manager/members" element={<MembersPage />} />
+            <Route path="/manager/members/:id" element={<MemberDetailPage />} />
+
+            {/* Live Developer Activity */}
+            <Route path="/admin/developer-activity" element={<LiveDeveloperActivityPage />} />
+            <Route path="/manager/developer-activity" element={<LiveDeveloperActivityPage />} />
+            <Route path="/member/my-activity" element={<MyDeveloperActivityPage />} />
+            <Route path="/my-activity" element={<MyDeveloperActivityPage />} />
+            <Route path="/developer-activity" element={<LiveDeveloperActivityPage />} />
+
+            {/* Activity Analytics */}
+            <Route path="/admin/activity" element={<AdminActivityPage />} />
+            <Route path="/manager/activity" element={<ManagerActivityPage />} />
+            <Route path="/member/activity" element={<MemberActivityPage />} />
+
+            {/* Files */}
+            <Route path="/admin/files" element={<FilesPage />} />
+            <Route path="/manager/files" element={<FilesPage />} />
+            <Route path="/member/files" element={<FilesPage />} />
+
+            {/* Privacy & Security Tracking */}
+=======
               ) : isAuthenticated ? (
                 <Navigate to={`${rolePrefix}/dashboard`} replace />
               ) : (
@@ -198,6 +237,75 @@ function App() {
             <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
             <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />
             <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
+
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/projects" element={<ProjectsPage />} />
+            <Route path="/admin/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/admin/tasks" element={<TasksPage />} />
+            <Route path="/admin/attendance" element={<AttendancePage />} />
+            <Route path="/admin/meetings" element={<MeetingsPage />} />
+            <Route path="/admin/meetings/:id" element={<MeetingDetailPage />} />
+            <Route path="/admin/reports" element={<ReportsPage />} />
+            <Route path="/admin/messages" element={<MessagesPage />} />
+            <Route path="/admin/leave" element={<LeavePage />} />
+            <Route path="/admin/payroll" element={<PayrollPage />} />
+            <Route path="/admin/announcements" element={<AnnouncementsPage />} />
+            <Route path="/admin/settings" element={<SettingsPage />} />
+            <Route path="/admin/settings/integrations" element={<ConnectIntegrationsPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={['manager', 'admin']} />}>
+            <Route path="/manager/dashboard" element={<ManagerDashboard />} />
+            <Route path="/manager/projects" element={<ProjectsPage />} />
+            <Route path="/manager/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/manager/tasks" element={<TasksPage />} />
+            <Route path="/manager/attendance" element={<AttendancePage />} />
+            <Route path="/manager/meetings" element={<MeetingsPage />} />
+            <Route path="/manager/meetings/:id" element={<MeetingDetailPage />} />
+            <Route path="/manager/reports" element={<ReportsPage />} />
+            <Route path="/manager/messages" element={<MessagesPage />} />
+            <Route path="/manager/leave" element={<LeavePage />} />
+            <Route path="/manager/payroll" element={<PayrollPage />} />
+            <Route path="/manager/announcements" element={<AnnouncementsPage />} />
+            <Route path="/manager/settings" element={<SettingsPage />} />
+            <Route path="/manager/settings/integrations" element={<ConnectIntegrationsPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={['member', 'manager', 'admin']} />}>
+            <Route path="/member/dashboard" element={<MemberDashboard />} />
+            <Route path="/member/tasks" element={<TasksPage />} />
+            <Route path="/member/projects" element={<ProjectsPage />} />
+            <Route path="/member/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/member/attendance" element={<AttendancePage />} />
+            <Route path="/member/meetings" element={<MeetingsPage />} />
+            <Route path="/member/meetings/:id" element={<MeetingDetailPage />} />
+            <Route path="/member/reports" element={<ReportsPage />} />
+            <Route path="/member/messages" element={<MessagesPage />} />
+            <Route path="/member/leave" element={<LeavePage />} />
+            <Route path="/member/payroll" element={<PayrollPage />} />
+            <Route path="/member/settings" element={<SettingsPage />} />
+            <Route path="/member/settings/integrations" element={<ConnectIntegrationsPage />} />
+          </Route>
+
+          {/* Direct Accessible Shared Routes */}
+          <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="/meetings" element={<MeetingsPage />} />
+          <Route path="/meetings/:id" element={<MeetingDetailPage />} />
+          <Route path="/payroll" element={<PayrollPage />} />
+          <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
+        </Route>
+
+        {/* Meeting Room - Without AppLayout (Full screen, direct link joinable) */}
+        <Route path="/meeting/:id" element={<MeetingRoom />} />
+
+
+        {/* Dynamic Fallback / Root Redirect */}
+        <Route path="/" element={<Navigate to={`${rolePrefix}/dashboard`} replace />} />
+        <Route path="*" element={<Navigate to={`${rolePrefix}/dashboard`} replace />} />
+      </Routes>
           </Route>
 
           {/* Meeting Room - Without AppLayout (Full screen, direct link joinable) */}
