@@ -3,8 +3,8 @@
 // Video Stream Rendering, Avatar Fallback, Speaking & Audio Badges
 // ============================================================
 
-import React, { useRef, useEffect } from 'react';
-import { Mic, MicOff, Video, VideoOff, Pin, PinOff, Radio, MonitorUp } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Mic, MicOff, VideoOff, Pin, PinOff, MonitorUp } from 'lucide-react';
 import { Avatar } from '@/components/ui';
 import type { ParticipantState } from '@/types/meeting';
 
@@ -25,6 +25,7 @@ export function ParticipantTile({
 }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [remoteSpeaking, setRemoteSpeaking] = useState<boolean>(false);
 
   const hasVideoStream = Boolean(
     stream && 
@@ -45,24 +46,84 @@ export function ParticipantTile({
   }, [stream]);
 
   // Dedicated Audio Element for Remote Participants:
-  // Guarantees voice playback regardless of video element visibility, camera state, or background tab
+  // Guarantees voice playback regardless of video visibility, camera state, or background tab
   useEffect(() => {
-    if (audioRef.current && !isLocal) {
-      if (stream && stream.getAudioTracks().length > 0) {
-        audioRef.current.srcObject = stream;
-        audioRef.current.play().catch(e => {
-          console.warn('[ParticipantTile] Remote audio play prevented:', e);
-        });
+    const audioEl = audioRef.current;
+    if (audioEl && !isLocal) {
+      const audioTracks = stream ? stream.getAudioTracks() : [];
+      if (audioTracks.length > 0) {
+        const audioStream = new MediaStream(audioTracks);
+        audioEl.srcObject = audioStream;
+        const playPromise = audioEl.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.warn('[ParticipantTile] Remote audio play prevented by autoplay policy:', e);
+            const unlockAudio = () => {
+              audioEl.play().catch(() => {});
+              window.removeEventListener('click', unlockAudio);
+              window.removeEventListener('keydown', unlockAudio);
+              window.removeEventListener('touchstart', unlockAudio);
+            };
+            window.addEventListener('click', unlockAudio, { once: true });
+            window.addEventListener('keydown', unlockAudio, { once: true });
+            window.addEventListener('touchstart', unlockAudio, { once: true });
+          });
+        }
       } else {
-        audioRef.current.srcObject = null;
+        audioEl.srcObject = null;
       }
     }
   }, [stream, isLocal]);
 
+  // Real-time audio analyser on remote stream to detect speaking
+  useEffect(() => {
+    if (isLocal || !stream) {
+      setRemoteSpeaking(false);
+      return;
+    }
+
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack || !participant.micEnabled) {
+      setRemoteSpeaking(false);
+      return;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = ctx.createMediaStreamSource(new MediaStream([audioTrack]));
+      source.connect(analyser);
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      let animId: number;
+
+      const checkVolume = () => {
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        setRemoteSpeaking((sum / data.length) > 16);
+        animId = requestAnimationFrame(checkVolume);
+      };
+      checkVolume();
+
+      return () => {
+        cancelAnimationFrame(animId);
+        ctx.close().catch(() => {});
+      };
+    } catch {
+      // fallback
+    }
+  }, [stream, isLocal, participant.micEnabled]);
+
+  const isActuallySpeaking = isLocal ? participant.isSpeaking : (participant.isSpeaking || remoteSpeaking);
+
   return (
     <div
       className={`relative w-full h-full min-h-[180px] bg-[#121217] rounded-2xl overflow-hidden border transition-all duration-200 select-none shadow-lg group ${
-        participant.isSpeaking
+        isActuallySpeaking
           ? 'border-emerald-500 ring-2 ring-emerald-500/40'
           : 'border-white/10 hover:border-white/20'
       }`}
@@ -93,12 +154,12 @@ export function ParticipantTile({
               name={participant.name}
               src={participant.avatar}
               className={`w-20 h-20 text-2xl font-bold border-2 transition-all ${
-                participant.isSpeaking
+                isActuallySpeaking
                   ? 'border-emerald-400 scale-105 shadow-xl shadow-emerald-500/20'
                   : 'border-white/10'
               }`}
             />
-            {participant.isSpeaking && (
+            {isActuallySpeaking && (
               <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-[#121217]" />
@@ -177,7 +238,7 @@ export function ParticipantTile({
           <div
             className={`p-1 rounded-full ${
               participant.micEnabled
-                ? participant.isSpeaking 
+                ? isActuallySpeaking 
                   ? 'bg-emerald-500/80 text-white' 
                   : 'bg-black/50 text-white/70'
                 : 'bg-red-500/80 text-white'

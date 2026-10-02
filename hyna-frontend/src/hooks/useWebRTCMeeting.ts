@@ -60,8 +60,20 @@ export function useWebRTCMeeting({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const localUserId = currentUser?.id || 'guest_' + Math.random().toString(36).slice(2, 8);
-  const localUserName = currentUser?.name || 'Team Member';
+  // Stable Unique Peer/Session ID per browser tab (Prevents same-account/guest collisions)
+  const roomKey = meeting?.meetingRoomId || meeting?.id || 'default_room';
+  const localPeerId = useMemo(() => {
+    const storageKey = `hyna_rtc_peer_${roomKey}`;
+    let stored = sessionStorage.getItem(storageKey);
+    if (!stored) {
+      stored = `${currentUser?.id || 'guest'}_${Math.random().toString(36).slice(2, 9)}`;
+      sessionStorage.setItem(storageKey, stored);
+    }
+    return stored;
+  }, [roomKey, currentUser?.id]);
+
+  const localUserId = currentUser?.id || localPeerId;
+  const localUserName = currentUser?.name || 'Guest Member';
   const localUserAvatar = currentUser?.avatar || '';
   const localUserRole = currentUser?.designation || currentUser?.role || 'Member';
 
@@ -113,17 +125,36 @@ export function useWebRTCMeeting({
     if (!manager) return;
 
     const senderId = msg.senderId;
-    if (!senderId || senderId === localUserId) return;
+    if (!senderId || senderId === localPeerId) return;
 
     switch (msg.type) {
       case 'JOIN': {
-        // Peer joined: create and send offer to them
+        // Peer joined: register participant and send WebRTC offer
+        setParticipants(prev => {
+          const next = new Map(prev);
+          next.set(senderId, {
+            memberId: msg.senderId,
+            name: msg.senderName || 'Team Member',
+            avatar: msg.senderAvatar || '',
+            role: msg.senderRole || 'member',
+            designation: msg.senderRole || 'Software Engineer',
+            micEnabled: msg.micEnabled ?? true,
+            videoEnabled: msg.videoEnabled ?? true,
+            isScreenSharing: false,
+            isSpeaking: false,
+            isHost: false,
+            joinedAt: new Date().toISOString(),
+            connectionState: 'connecting',
+          });
+          return next;
+        });
+
         try {
           console.log(`[WebRTC] Peer ${senderId} joined. Creating offer...`);
           const offer = await manager.createOffer(senderId);
           await signalingServiceRef.current?.sendSignal({
             type: 'OFFER',
-            senderId: localUserId,
+            senderId: localPeerId,
             targetId: senderId,
             senderName: localUserName,
             offer,
@@ -139,13 +170,15 @@ export function useWebRTCMeeting({
         try {
           console.log(`[WebRTC] Received offer from ${senderId}. Creating answer...`);
           const answer = await manager.handleOffer(senderId, msg.offer);
-          await signalingServiceRef.current?.sendSignal({
-            type: 'ANSWER',
-            senderId: localUserId,
-            targetId: senderId,
-            senderName: localUserName,
-            answer,
-          });
+          if (answer && answer.type === 'answer') {
+            await signalingServiceRef.current?.sendSignal({
+              type: 'ANSWER',
+              senderId: localPeerId,
+              targetId: senderId,
+              senderName: localUserName,
+              answer,
+            });
+          }
         } catch (err) {
           console.error(`[WebRTC] Failed to handle offer from ${senderId}:`, err);
         }
@@ -239,34 +272,63 @@ export function useWebRTCMeeting({
       default:
         break;
     }
-  }, [localUserId, localUserName]);
+  }, [localPeerId, localUserName]);
 
   // 3. Handle presence sync
   const handlePresenceSync = useCallback((presences: Record<string, any[]>) => {
-    const updatedMap = new Map<string, ParticipantState>();
+    const manager = webrtcManagerRef.current;
 
-    Object.entries(presences).forEach(([key, presenceList]) => {
-      if (key !== localUserId && presenceList && presenceList.length > 0) {
-        const latest = presenceList[presenceList.length - 1];
-        updatedMap.set(key, {
-          memberId: key,
-          name: latest.name || 'Team Member',
-          avatar: latest.avatar || '',
-          role: latest.role || 'member',
-          designation: latest.designation || 'Software Engineer',
-          micEnabled: latest.micEnabled ?? true,
-          videoEnabled: latest.videoEnabled ?? true,
-          isScreenSharing: latest.isScreenSharing ?? false,
-          isSpeaking: latest.isSpeaking ?? false,
-          isHost: latest.isHost ?? false,
-          joinedAt: latest.joinedAt || new Date().toISOString(),
-          connectionState: 'connected',
-        });
+    setParticipants(prev => {
+      const next = new Map(prev);
+
+      Object.entries(presences).forEach(([key, presenceList]) => {
+        if (key !== localPeerId && presenceList && presenceList.length > 0) {
+          const latest = presenceList[presenceList.length - 1];
+          const existing = next.get(key);
+
+          next.set(key, {
+            memberId: latest.memberId || key,
+            name: latest.name || 'Team Member',
+            avatar: latest.avatar || '',
+            role: latest.role || 'member',
+            designation: latest.designation || 'Software Engineer',
+            micEnabled: latest.micEnabled ?? true,
+            videoEnabled: latest.videoEnabled ?? true,
+            isScreenSharing: latest.isScreenSharing ?? false,
+            isSpeaking: existing?.isSpeaking ?? false,
+            isHost: latest.isHost ?? false,
+            joinedAt: latest.joinedAt || new Date().toISOString(),
+            connectionState: existing?.connectionState || 'connecting',
+          });
+
+          // Tie-breaker: If no peer connection exists yet and localPeerId > remotePeerId,
+          // initiate an offer to ensure connection succeeds even if JOIN broadcast was missed
+          if (manager && !manager.hasPeerConnection(key) && localPeerId > key) {
+            console.log(`[WebRTC] Deterministic offer initiation to ${key} from presence sync.`);
+            manager.createOffer(key).then(offer => {
+              signalingServiceRef.current?.sendSignal({
+                type: 'OFFER',
+                senderId: localPeerId,
+                targetId: key,
+                senderName: localUserName,
+                offer,
+              });
+            }).catch(e => console.warn('[WebRTC] Presence offer initiation error:', e));
+          }
+        }
+      });
+
+      // Cleanup departed peers
+      for (const peerId of next.keys()) {
+        if (!presences[peerId]) {
+          manager?.cleanupPeer(peerId);
+          next.delete(peerId);
+        }
       }
-    });
 
-    setParticipants(updatedMap);
-  }, [localUserId]);
+      return next;
+    });
+  }, [localPeerId, localUserName]);
 
   // 4. Initialize Media Stream and WebRTC Manager
   const startMeetingSession = useCallback(async (initialVideo?: boolean, initialAudio?: boolean, preExistingStream?: MediaStream | null) => {
@@ -327,7 +389,7 @@ export function useWebRTCMeeting({
         webrtcManagerRef.current = null;
       }
 
-      const manager = new WebRTCManager(localUserId, {
+      const manager = new WebRTCManager(localPeerId, {
         onRemoteStream: (peerId, remoteStream) => {
           console.log(`[WebRTC Hook] Received remote stream from peer ${peerId}`, {
             audioTracks: remoteStream.getAudioTracks().length,
@@ -364,7 +426,7 @@ export function useWebRTCMeeting({
         onIceCandidate: (targetPeerId, candidate) => {
           signalingServiceRef.current?.sendSignal({
             type: 'ICE_CANDIDATE',
-            senderId: localUserId,
+            senderId: localPeerId,
             targetId: targetPeerId,
             senderName: localUserName,
             candidate: candidate.toJSON(),
@@ -379,9 +441,10 @@ export function useWebRTCMeeting({
       webrtcManagerRef.current = manager;
 
       // Initialize Supabase Signaling Service
-      const roomKey = meeting.meetingRoomId || meeting.id;
+      const currentRoomKey = meeting.meetingRoomId || meeting.id;
       const signaling = new SupabaseSignalingService(
-        roomKey,
+        currentRoomKey,
+        localPeerId,
         {
           id: localUserId,
           name: localUserName,
@@ -397,14 +460,13 @@ export function useWebRTCMeeting({
             handlePresenceSync(presences);
           },
           onPresenceJoin: (key, newPresences) => {
-            // New participant joined
-            if (key !== localUserId) {
+            if (key !== localPeerId) {
               const latest = newPresences?.[0];
               if (latest) {
                 setParticipants(prev => {
                   const next = new Map(prev);
                   next.set(key, {
-                    memberId: key,
+                    memberId: latest.memberId || key,
                     name: latest.name || 'Team Member',
                     avatar: latest.avatar || '',
                     role: latest.role || 'member',
@@ -420,21 +482,10 @@ export function useWebRTCMeeting({
                   return next;
                 });
               }
-
-              // Initiate WebRTC offer to the newly joined peer
-              webrtcManagerRef.current?.createOffer(key).then(offer => {
-                signalingServiceRef.current?.sendSignal({
-                  type: 'OFFER',
-                  senderId: localUserId,
-                  targetId: key,
-                  senderName: localUserName,
-                  offer,
-                });
-              }).catch(err => console.error('Error creating offer for new joiner:', err));
             }
           },
           onPresenceLeave: (key) => {
-            if (key !== localUserId) {
+            if (key !== localPeerId) {
               webrtcManagerRef.current?.cleanupPeer(key);
               setParticipants(prev => {
                 const next = new Map(prev);
@@ -485,6 +536,7 @@ export function useWebRTCMeeting({
     }
   }, [
     meeting,
+    localPeerId,
     localUserId,
     localUserName,
     localUserAvatar,
@@ -512,7 +564,7 @@ export function useWebRTCMeeting({
 
     signalingServiceRef.current?.sendSignal({
       type: 'MUTE_CHANGED',
-      senderId: localUserId,
+      senderId: localPeerId,
       senderName: localUserName,
       micEnabled: nextState,
     });
@@ -520,7 +572,7 @@ export function useWebRTCMeeting({
     signalingServiceRef.current?.updatePresence({
       micEnabled: nextState,
     });
-  }, [micEnabled, localUserId, localUserName]);
+  }, [micEnabled, localPeerId, localUserName]);
 
   // 6. Toggle camera
   const toggleCamera = useCallback(async () => {
@@ -538,7 +590,7 @@ export function useWebRTCMeeting({
 
     signalingServiceRef.current?.sendSignal({
       type: 'CAMERA_CHANGED',
-      senderId: localUserId,
+      senderId: localPeerId,
       senderName: localUserName,
       videoEnabled: nextState,
     });
@@ -546,7 +598,7 @@ export function useWebRTCMeeting({
     signalingServiceRef.current?.updatePresence({
       videoEnabled: nextState,
     });
-  }, [videoEnabled, meeting?.meetingType, localUserId, localUserName]);
+  }, [videoEnabled, meeting?.meetingType, localPeerId, localUserName]);
 
   // 7. Toggle Screen Share
   const toggleScreenShare = useCallback(async () => {
@@ -560,7 +612,7 @@ export function useWebRTCMeeting({
 
       signalingServiceRef.current?.sendSignal({
         type: 'SCREEN_SHARE_STOPPED',
-        senderId: localUserId,
+        senderId: localPeerId,
         senderName: localUserName,
       });
 
@@ -586,7 +638,7 @@ export function useWebRTCMeeting({
 
         signalingServiceRef.current?.sendSignal({
           type: 'SCREEN_SHARE_STARTED',
-          senderId: localUserId,
+          senderId: localPeerId,
           senderName: localUserName,
         });
 
@@ -600,7 +652,7 @@ export function useWebRTCMeeting({
         }
       }
     }
-  }, [isScreenSharing, localUserId, localUserName]);
+  }, [isScreenSharing, localPeerId, localUserName]);
 
   // 8. Leave Meeting
   const leaveMeeting = useCallback(async () => {

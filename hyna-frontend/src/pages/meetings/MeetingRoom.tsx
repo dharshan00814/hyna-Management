@@ -127,13 +127,39 @@ export function MeetingRoom() {
     };
   }, [stopLocalStream]);
 
+  // Guest user handling for direct link joiners
+  const [guestName, setGuestName] = useState<string>(() => {
+    return sessionStorage.getItem('hyna_meeting_guest_name') || '';
+  });
+
+  const handleGuestNameChange = (name: string) => {
+    setGuestName(name);
+    sessionStorage.setItem('hyna_meeting_guest_name', name);
+  };
+
+  const effectiveUser = useMemo(() => {
+    if (currentUser) return currentUser;
+    const name = guestName.trim() || 'Guest Member';
+    return {
+      id: `guest_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+      name,
+      email: 'guest@hyna.io',
+      avatar: '',
+      role: 'member' as const,
+      designation: 'Guest Participant',
+    };
+  }, [currentUser, guestName]);
+
   const isHost = useMemo(() => {
-    if (!meeting || !currentUser) return false;
-    return (
-      meeting.hostId === currentUser.id ||
-      meeting.createdBy === currentUser.id ||
-      effectiveRole === 'admin'
-    );
+    if (!meeting) return false;
+    if (currentUser) {
+      return (
+        meeting.hostId === currentUser.id ||
+        meeting.createdBy === currentUser.id ||
+        effectiveRole === 'admin'
+      );
+    }
+    return false;
   }, [meeting, currentUser, effectiveRole]);
 
   // 3. WebRTC Meeting Core Hook
@@ -156,7 +182,7 @@ export function MeetingRoom() {
     endMeetingForEveryone,
   } = useWebRTCMeeting({
     meeting,
-    currentUser,
+    currentUser: effectiveUser,
     isHost,
     initialMicEnabled: prejoinAudioEnabled,
     initialVideoEnabled: !isAudioOnly && prejoinVideoEnabled,
@@ -171,7 +197,7 @@ export function MeetingRoom() {
   // 4. Automatic Attendance Hook (Only activates in 'in-meeting' stage)
   const { finalizeAttendance } = useMeetingAttendance(
     meeting?.id,
-    currentUser?.id,
+    effectiveUser?.id,
     meetingStage === 'in-meeting' && overallConnectionState === 'connected'
   );
 
@@ -181,7 +207,7 @@ export function MeetingRoom() {
     unreadCount: unreadChatCount,
     setChatOpen,
     sendMessage: sendChatMessage,
-  } = useMeetingChat(meeting?.id, currentUser);
+  } = useMeetingChat(meeting?.id, effectiveUser);
 
   // Handle panel toggling
   const handleTogglePanel = (panel: 'chat' | 'participants') => {
@@ -288,6 +314,8 @@ export function MeetingRoom() {
       <PreJoinScreen
         meeting={meeting}
         currentUser={currentUser}
+        guestName={guestName}
+        onGuestNameChange={handleGuestNameChange}
         cameras={cameras}
         microphones={microphones}
         speakers={speakers}
