@@ -285,6 +285,10 @@ io.on('connection', (socket) => {
 
     const participant = room.participants.get(socket.id);
     if (participant) {
+      if (isScreenSharing && !participant.isHost && room.allowScreenShare === false) {
+        return socket.emit('error', { message: 'Screen sharing has been disabled by the meeting host.' });
+      }
+
       if (micEnabled !== undefined) participant.micEnabled = micEnabled;
       if (videoEnabled !== undefined) participant.videoEnabled = videoEnabled;
       if (isScreenSharing !== undefined) participant.isScreenSharing = isScreenSharing;
@@ -363,6 +367,56 @@ io.on('connection', (socket) => {
         console.log(`[Host Control] Host ${caller.name} muted ${targetParticipant.name}`);
       }
     }
+  });
+
+  // 8b. Host Control: Mute All Participants
+  socket.on('host-mute-all', () => {
+    const info = socketToRoom.get(socket.id);
+    if (!info) return;
+
+    const room = rooms.get(info.roomId);
+    if (!room) return;
+
+    const caller = room.participants.get(socket.id);
+    if (!caller || !caller.isHost) {
+      return socket.emit('error', { message: 'Only the meeting host can mute all participants.' });
+    }
+
+    for (const [pSocketId, p] of room.participants.entries()) {
+      if (!p.isHost && p.micEnabled) {
+        p.micEnabled = false;
+        io.to(pSocketId).emit('forced-mute', { by: caller.name });
+        io.to(info.roomId).emit('participant-media-changed', {
+          socketId: pSocketId,
+          userId: p.userId,
+          micEnabled: false,
+          videoEnabled: p.videoEnabled,
+          isScreenSharing: p.isScreenSharing,
+        });
+      }
+    }
+    console.log(`[Host Control] Host ${caller.name} muted all participants in ${info.roomId}`);
+  });
+
+  // 8c. Host Control: Toggle Screen Sharing Permission
+  socket.on('host-toggle-screenshare-permission', ({ allowed }) => {
+    const info = socketToRoom.get(socket.id);
+    if (!info) return;
+
+    const room = rooms.get(info.roomId);
+    if (!room) return;
+
+    const caller = room.participants.get(socket.id);
+    if (!caller || !caller.isHost) {
+      return socket.emit('error', { message: 'Only the meeting host can configure screen sharing permissions.' });
+    }
+
+    room.allowScreenShare = Boolean(allowed);
+    io.to(info.roomId).emit('screenshare-permission-changed', {
+      allowScreenShare: room.allowScreenShare,
+      by: caller.name,
+    });
+    console.log(`[Host Control] Host ${caller.name} set allowScreenShare to ${room.allowScreenShare} in ${info.roomId}`);
   });
 
   // 9. Host Control: Remove Participant

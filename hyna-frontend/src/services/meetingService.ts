@@ -16,15 +16,30 @@ import type {
 import { notifyMeetingScheduled } from './notificationWorkflow';
 import { isPurgedMeeting } from './api';
 
-// Helper: Generate secure random room ID
-export function generateMeetingRoomId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = 'room-';
-  for (let i = 0; i < 12; i++) {
-    if (i === 4 || i === 8) result += '-';
+// Helper: Generate secure 6-character clean meeting code (e.g. 8K4X92)
+export function generateMeetingCode(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+export function generateMeetingRoomId(): string {
+  return generateMeetingCode();
+}
+
+// Clean and extract meeting code from raw input (URLs, paths, or code)
+export function cleanMeetingCode(input: string): string {
+  if (!input) return '';
+  let cleaned = input.trim();
+  if (cleaned.includes('/meeting/')) {
+    cleaned = cleaned.substring(cleaned.lastIndexOf('/meeting/') + 9);
+  } else if (cleaned.includes('/')) {
+    cleaned = cleaned.substring(cleaned.lastIndexOf('/') + 1);
+  }
+  return cleaned.replace(/[^a-zA-Z0-9_-]/g, '').trim();
 }
 
 // Transform database meeting row to typed Meeting object
@@ -46,6 +61,7 @@ export function mapDbMeeting(row: any): Meeting {
     type: (row.type as MeetingType) || 'team',
     meetingType: (row.meeting_type as MeetingMediaType) || 'video',
     meetingRoomId: roomId,
+    meetingCode: roomId,
     isRecurring: Boolean(row.is_recurring),
     meetingLink: rawLink || internalLink,
     notes: row.notes || '',
@@ -101,37 +117,50 @@ export async function fetchAllMeetings(userId?: string): Promise<Meeting[]> {
   }
 }
 
-export async function fetchMeetingByIdOrRoomId(identifier: string): Promise<Meeting | null> {
-  if (!identifier || !isSupabaseConfigured()) return null;
+export async function fetchMeetingByIdOrRoomId(rawIdentifier: string): Promise<Meeting | null> {
+  const identifier = cleanMeetingCode(rawIdentifier);
+  if (!identifier) return null;
 
-  try {
-    // 1. Search by meeting_room_id
-    const { data: byRoom, error: roomErr } = await supabase
-      .from('meetings')
-      .select('*')
-      .eq('meeting_room_id', identifier)
-      .maybeSingle();
+  if (isSupabaseConfigured()) {
+    try {
+      // 1. Search by meeting_room_id (case insensitive)
+      const { data: byRoom, error: roomErr } = await supabase
+        .from('meetings')
+        .select('*')
+        .ilike('meeting_room_id', identifier)
+        .maybeSingle();
 
-    if (!roomErr && byRoom) {
-      return mapDbMeeting(byRoom);
+      if (!roomErr && byRoom) {
+        return mapDbMeeting(byRoom);
+      }
+
+      // 2. Search by meeting_link
+      const { data: byLink, error: linkErr } = await supabase
+        .from('meetings')
+        .select('*')
+        .ilike('meeting_link', `%${identifier}%`)
+        .maybeSingle();
+
+      if (!linkErr && byLink) {
+        return mapDbMeeting(byLink);
+      }
+
+      // 3. Search by primary key ID
+      const { data: byId, error: idErr } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('id', identifier)
+        .maybeSingle();
+
+      if (!idErr && byId) {
+        return mapDbMeeting(byId);
+      }
+    } catch (err) {
+      console.error('[MeetingService] fetchMeetingByIdOrRoomId error:', err);
     }
-
-    // 2. Search by primary key ID
-    const { data: byId, error: idErr } = await supabase
-      .from('meetings')
-      .select('*')
-      .eq('id', identifier)
-      .maybeSingle();
-
-    if (!idErr && byId) {
-      return mapDbMeeting(byId);
-    }
-
-    return null;
-  } catch (err) {
-    console.error('[MeetingService] fetchMeetingByIdOrRoomId error:', err);
-    return null;
   }
+
+  return null;
 }
 
 export interface CreateMeetingInput {
@@ -142,6 +171,8 @@ export interface CreateMeetingInput {
   endTime?: string;
   type?: MeetingType;
   meetingType?: MeetingMediaType;
+  meetingRoomId?: string;
+  status?: MeetingStatus;
   participantIds: string[];
   hostId: string;
   notes?: string;
@@ -149,9 +180,10 @@ export interface CreateMeetingInput {
 }
 
 export async function createNewMeeting(input: CreateMeetingInput): Promise<Meeting> {
-  const roomId = generateMeetingRoomId();
+  const roomId = input.meetingRoomId || generateMeetingCode();
   const newId = 'mt_' + Math.random().toString(36).slice(2, 10);
   const meetingLink = `/meeting/${roomId}`;
+  const now = new Date().toISOString();
 
   const payload: Record<string, any> = {
     id: newId,
@@ -169,10 +201,14 @@ export async function createNewMeeting(input: CreateMeetingInput): Promise<Meeti
     meeting_link: meetingLink,
     notes: (input.notes || '').trim(),
     is_recurring: Boolean(input.isRecurring),
-    status: 'scheduled',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    status: input.status || 'scheduled',
+    created_at: now,
+    updated_at: now,
   };
+
+  if (input.status === 'live' || input.status === 'in-progress') {
+    payload.started_at = now;
+  }
 
   if (isSupabaseConfigured()) {
     try {
@@ -228,6 +264,34 @@ export async function createNewMeeting(input: CreateMeetingInput): Promise<Meeti
 
   // Fallback return
   return mapDbMeeting(payload);
+}
+
+// Quick Helper: Start an Instant Meeting right now
+export async function createInstantMeeting(hostUser: { id: string; name: string }): Promise<Meeting> {
+  const code = generateMeetingCode();
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const hh = now.getHours().toString().padStart(2, '0');
+  const mm = now.getMinutes().toString().padStart(2, '0');
+  const startTime = `${hh}:${mm}`;
+
+  const endH = (now.getHours() + 1) % 24;
+  const endTime = `${endH.toString().padStart(2, '0')}:${mm}`;
+
+  return await createNewMeeting({
+    title: `${hostUser.name || 'Team'}'s Meeting`,
+    description: 'Instant real-time H-Meet video session',
+    date: dateStr,
+    startTime,
+    endTime,
+    type: 'team',
+    meetingType: 'video',
+    meetingRoomId: code,
+    status: 'live',
+    participantIds: [hostUser.id],
+    hostId: hostUser.id,
+    notes: 'Started as instant meeting',
+  });
 }
 
 export async function updateMeetingStatus(meetingId: string, status: MeetingStatus): Promise<boolean> {
