@@ -181,6 +181,7 @@ io.on('connection', (socket) => {
         roomId,
         hostId,
         status: 'WAITING',
+        allowScreenShare: true,
         participants: new Map(),
       };
       rooms.set(roomId, room);
@@ -233,6 +234,7 @@ io.on('connection', (socket) => {
       isHost,
       hostId: room.hostId,
       status: room.status,
+      allowScreenShare: room.allowScreenShare !== false,
       participants: existingParticipants,
       yourParticipantInfo: participantData,
     });
