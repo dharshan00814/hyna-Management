@@ -75,41 +75,59 @@ const socketToRoom = new Map();
 
 // Helper: Query Database Meeting Details
 async function getDbMeeting(roomId) {
-  if (!supabase) return null;
+  if (!supabase || !roomId) return null;
+  const cleanId = String(roomId).trim();
   try {
+    // 1. Search by meeting_room_id
+    const { data: byRoomId } = await supabase
+      .from('meetings')
+      .select('*')
+      .ilike('meeting_room_id', cleanId)
+      .maybeSingle();
+
+    if (byRoomId) return byRoomId;
+
+    // 2. Search by meeting_link
     const { data: byLink } = await supabase
       .from('meetings')
       .select('*')
-      .ilike('meeting_link', `%${roomId}%`)
+      .ilike('meeting_link', `%${cleanId}%`)
       .maybeSingle();
 
     if (byLink) return byLink;
 
+    // 3. Search by id
     const { data: byId } = await supabase
       .from('meetings')
       .select('*')
-      .eq('id', roomId)
+      .eq('id', cleanId)
       .maybeSingle();
 
     return byId || null;
   } catch (err) {
-    console.error(`[DB Error] getDbMeeting for ${roomId}:`, err.message);
+    console.error(`[DB Error] getDbMeeting for ${cleanId}:`, err.message);
     return null;
   }
 }
 
 // Helper: Update Meeting Status in Database
 async function updateDbMeetingStatus(roomId, status) {
-  if (!supabase) return;
+  if (!supabase || !roomId) return;
+  const cleanId = String(roomId).trim();
   try {
     const dbStatus = status === 'LIVE' ? 'ongoing' : status === 'ENDED' ? 'completed' : 'scheduled';
+    const now = new Date().toISOString();
+    const updates = { status: dbStatus, updated_at: now };
+    if (status === 'LIVE') updates.started_at = now;
+    if (status === 'ENDED') updates.ended_at = now;
+
     await supabase
       .from('meetings')
-      .update({ status: dbStatus, updated_at: new Date().toISOString() })
-      .or(`id.eq.${roomId},meeting_link.ilike.%${roomId}%`);
-    console.log(`[DB] Updated meeting ${roomId} status to: ${dbStatus}`);
+      .update(updates)
+      .or(`id.eq.${cleanId},meeting_room_id.ilike.${cleanId},meeting_link.ilike.%${cleanId}%`);
+    console.log(`[DB] Updated meeting ${cleanId} status to: ${dbStatus}`);
   } catch (err) {
-    console.error(`[DB Error] updateDbMeetingStatus for ${roomId}:`, err.message);
+    console.error(`[DB Error] updateDbMeetingStatus for ${cleanId}:`, err.message);
   }
 }
 
