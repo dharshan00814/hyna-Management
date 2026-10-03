@@ -474,23 +474,21 @@ export function useWebRTCMeeting({
             return next;
           });
 
-          // IMPORTANT: overallConnectionState must be driven by WebRTC state ONLY.
-          // Do NOT set this based on Socket.IO events.
           if (state === 'connected') {
             connectedPeersRef.current.add(peerId);
             setOverallConnectionState('connected');
             console.log(`[H-MEET] WebRTC connected with peer ${peerId}`);
           } else if (state === 'disconnected' || state === 'failed') {
-            // Only show reconnecting if this peer was previously connected
+            // Only show 'reconnecting' if this peer WAS connected (unexpected drop).
+            // If they were still negotiating (never reached 'connected'), don't alarm the user.
             if (connectedPeersRef.current.has(peerId)) {
               setOverallConnectionState('reconnecting');
             }
           } else if (state === 'closed') {
             connectedPeersRef.current.delete(peerId);
-            // If no more connected peers, go back to connecting
-            if (connectedPeersRef.current.size === 0) {
-              setOverallConnectionState('connecting');
-            }
+            // Peer left cleanly — stay 'connected' to the meeting (signaling still up).
+            // Only go to 'reconnecting' if we still expected this peer to be connected.
+            // (reconnecting is already set above on 'disconnected'/'failed', so no change needed)
           }
         },
         onIceConnectionStateChange: (peerId, iceState) => {
@@ -540,9 +538,10 @@ export function useWebRTCMeeting({
         const socketService = new SocketIOSignalingService({
           onRoomJoined: async (data) => {
             console.log('[H-MEET] Socket.IO room joined. Existing participants:', data.participants?.length || 0);
-            // Do NOT set overallConnectionState to 'connected' here —
-            // this is signaling connected, not WebRTC media connected.
-            // overallConnectionState stays 'connecting' until WebRTC peer connects.
+            // Set connected as soon as we're in the room — you are connected to the meeting.
+            // WebRTC peer connections happen on top of this; 'reconnecting' only shows when
+            // a previously-established WebRTC peer drops unexpectedly.
+            setOverallConnectionState('connected');
             if (data.allowScreenShare !== undefined) {
               setAllowScreenShare(data.allowScreenShare);
             }
@@ -859,6 +858,9 @@ export function useWebRTCMeeting({
           joinedAt: new Date().toISOString(),
           connectionState: 'connected',
         });
+
+        // Supabase signaling connected — we're in the meeting
+        setOverallConnectionState('connected');
 
         // Periodic announcement heartbeat for discovery
         if (announceTimerRef.current) clearInterval(announceTimerRef.current);
