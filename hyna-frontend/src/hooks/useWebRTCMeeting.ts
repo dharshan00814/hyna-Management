@@ -53,7 +53,18 @@ export function useWebRTCMeeting({
   // Connection and remote participants state
   const [participants, setParticipants] = useState<Map<string, ParticipantState>>(new Map());
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+
+  // overallConnectionState MUST only reflect actual WebRTC peer connection state.
+  // Do NOT set this based on Socket.IO socket connection events.
+  // Mapping:
+  //   WebRTC 'connected'     → 'connected'
+  //   WebRTC 'connecting'    → 'connecting'
+  //   WebRTC 'disconnected'  → 'reconnecting'
+  //   WebRTC 'failed'        → 'reconnecting' (ICE restart in progress)
+  //   WebRTC 'closed'        → 'disconnected'
+  //   No peers yet           → 'connecting' (signaling established)
   const [overallConnectionState, setOverallConnectionState] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
+
   const [pinnedParticipantId, setPinnedParticipantId] = useState<string | null>(null);
 
   // References
@@ -66,6 +77,9 @@ export function useWebRTCMeeting({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const announceTimerRef = useRef<any>(null);
+
+  // Track which peers we've connected to, to know when FIRST connection happens
+  const connectedPeersRef = useRef<Set<string>>(new Set());
 
   // Truly unique Peer ID per browser tab (Prevents same-account/guest collisions across tabs)
   const localPeerIdRef = useRef<string>(
@@ -125,7 +139,7 @@ export function useWebRTCMeeting({
 
       checkAudioLevel();
     } catch (e) {
-      console.warn('[useWebRTCMeeting] Audio analyser setup failed:', e);
+      console.warn('[H-MEET] Audio analyser setup failed:', e);
     }
   }, []);
 
@@ -187,7 +201,7 @@ export function useWebRTCMeeting({
             offer,
           });
         } catch (err) {
-          console.error(`[WebRTC] Failed to send offer to ${senderId}:`, err);
+          console.error(`[H-MEET] Failed to send offer to ${senderId}:`, err);
         }
         break;
       }
@@ -205,7 +219,7 @@ export function useWebRTCMeeting({
               offer,
             });
           } catch (err) {
-            console.warn(`[WebRTC] Offer error on ACK/ANNOUNCE for ${senderId}:`, err);
+            console.warn(`[H-MEET] Offer error on ACK/ANNOUNCE for ${senderId}:`, err);
           }
         }
         break;
@@ -225,7 +239,7 @@ export function useWebRTCMeeting({
             });
           }
         } catch (err) {
-          console.error(`[WebRTC] Failed to handle offer from ${senderId}:`, err);
+          console.error(`[H-MEET] Failed to handle offer from ${senderId}:`, err);
         }
         break;
       }
@@ -235,7 +249,7 @@ export function useWebRTCMeeting({
         try {
           await manager.handleAnswer(senderId, msg.answer);
         } catch (err) {
-          console.error(`[WebRTC] Failed to handle answer from ${senderId}:`, err);
+          console.error(`[H-MEET] Failed to handle answer from ${senderId}:`, err);
         }
         break;
       }
@@ -245,7 +259,7 @@ export function useWebRTCMeeting({
         try {
           await manager.addIceCandidate(senderId, msg.candidate);
         } catch (err) {
-          console.error(`[WebRTC] Failed to add ICE candidate from ${senderId}:`, err);
+          console.error(`[H-MEET] Failed to add ICE candidate from ${senderId}:`, err);
         }
         break;
       }
@@ -355,7 +369,7 @@ export function useWebRTCMeeting({
                 senderName: localUserName,
                 offer,
               });
-            }).catch(e => console.warn('[WebRTC] Presence offer initiation error:', e));
+            }).catch(e => console.warn('[H-MEET] Presence offer initiation error:', e));
           }
         }
       });
@@ -383,6 +397,7 @@ export function useWebRTCMeeting({
     try {
       let stream = preExistingStream;
       if (stream) {
+        // Clone the stream so we own the tracks
         stream = new MediaStream(stream.getTracks());
       } else {
         const constraints: MediaStreamConstraints = {
@@ -405,6 +420,10 @@ export function useWebRTCMeeting({
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       }
 
+      console.log(`[H-MEET] Local stream acquired. Audio tracks: ${stream.getAudioTracks().length}, Video tracks: ${stream.getVideoTracks().length}`);
+      stream.getAudioTracks().forEach(t => console.log(`[H-MEET] Local audio track: id=${t.id}, enabled=${t.enabled}, readyState=${t.readyState}`));
+      stream.getVideoTracks().forEach(t => console.log(`[H-MEET] Local video track: id=${t.id}, enabled=${t.enabled}, readyState=${t.readyState}`));
+
       setLocalStream(stream);
 
       // Apply initial track enabled state
@@ -423,9 +442,12 @@ export function useWebRTCMeeting({
         webrtcManagerRef.current = null;
       }
 
+      connectedPeersRef.current.clear();
+
       const manager = new WebRTCManager(localPeerId, {
         onRemoteStream: (peerId, remoteStream) => {
-          console.log(`[WebRTC Hook] Received remote stream from peer ${peerId}`);
+          console.log(`[H-MEET] Remote stream received from ${peerId}. Tracks: audio=${remoteStream.getAudioTracks().length}, video=${remoteStream.getVideoTracks().length}`);
+          remoteStream.getAudioTracks().forEach(t => console.log(`[H-MEET] Remote audio track from ${peerId}: id=${t.id}, enabled=${t.enabled}, muted=${t.muted}, readyState=${t.readyState}`));
           setRemoteStreams(prev => new Map(prev).set(peerId, remoteStream));
           ensureParticipant(peerId);
         },
@@ -441,6 +463,8 @@ export function useWebRTCMeeting({
           });
         },
         onPeerConnectionStateChange: (peerId, state) => {
+          console.log(`[H-MEET] WebRTC state for ${peerId}: ${state}`);
+
           setParticipants(prev => {
             const next = new Map(prev);
             const p = next.get(peerId);
@@ -450,11 +474,27 @@ export function useWebRTCMeeting({
             return next;
           });
 
+          // IMPORTANT: overallConnectionState must be driven by WebRTC state ONLY.
+          // Do NOT set this based on Socket.IO events.
           if (state === 'connected') {
+            connectedPeersRef.current.add(peerId);
             setOverallConnectionState('connected');
+            console.log(`[H-MEET] WebRTC connected with peer ${peerId}`);
           } else if (state === 'disconnected' || state === 'failed') {
-            setOverallConnectionState('reconnecting');
+            // Only show reconnecting if this peer was previously connected
+            if (connectedPeersRef.current.has(peerId)) {
+              setOverallConnectionState('reconnecting');
+            }
+          } else if (state === 'closed') {
+            connectedPeersRef.current.delete(peerId);
+            // If no more connected peers, go back to connecting
+            if (connectedPeersRef.current.size === 0) {
+              setOverallConnectionState('connecting');
+            }
           }
+        },
+        onIceConnectionStateChange: (peerId, iceState) => {
+          console.log(`[H-MEET] ICE state for ${peerId}: ${iceState}`);
         },
         onIceCandidate: (targetPeerId, candidate) => {
           if (signalingModeRef.current === 'socketio' && socketIOSignalingRef.current?.isConnected()) {
@@ -469,8 +509,23 @@ export function useWebRTCMeeting({
             });
           }
         },
+        // Called when ICE restart produces a new offer that must be sent via signaling
+        onNeedRenegotiation: (targetPeerId, offer) => {
+          console.log(`[H-MEET] Sending ICE restart offer to ${targetPeerId} via signaling`);
+          if (signalingModeRef.current === 'socketio' && socketIOSignalingRef.current?.isConnected()) {
+            socketIOSignalingRef.current.sendOffer(targetPeerId, offer);
+          } else {
+            supabaseSignalingRef.current?.sendSignal({
+              type: 'OFFER',
+              senderId: localPeerId,
+              targetId: targetPeerId,
+              senderName: localUserName,
+              offer,
+            });
+          }
+        },
         onError: (error, ctx) => {
-          console.error(`[WebRTC Error in ${ctx}]:`, error);
+          console.error(`[H-MEET] WebRTC Error in ${ctx}:`, error);
         },
       });
 
@@ -484,8 +539,10 @@ export function useWebRTCMeeting({
       try {
         const socketService = new SocketIOSignalingService({
           onRoomJoined: async (data) => {
-            console.log('[useWebRTCMeeting] Socket.IO room joined:', data);
-            setOverallConnectionState('connected');
+            console.log('[H-MEET] Socket.IO room joined. Existing participants:', data.participants?.length || 0);
+            // Do NOT set overallConnectionState to 'connected' here —
+            // this is signaling connected, not WebRTC media connected.
+            // overallConnectionState stays 'connecting' until WebRTC peer connects.
             if (data.allowScreenShare !== undefined) {
               setAllowScreenShare(data.allowScreenShare);
             }
@@ -495,6 +552,8 @@ export function useWebRTCMeeting({
               for (const p of data.participants) {
                 const pSocketId = p.socketId;
                 if (!pSocketId) continue;
+
+                console.log(`[H-MEET] Sending offer to existing participant: ${p.name} (${pSocketId})`);
 
                 ensureParticipant(pSocketId, {
                   memberId: p.userId || pSocketId,
@@ -513,15 +572,17 @@ export function useWebRTCMeeting({
                   const offer = await manager.createOffer(pSocketId);
                   socketService.sendOffer(pSocketId, offer);
                 } catch (e) {
-                  console.warn(`[WebRTC] Failed to send offer to existing peer ${pSocketId}:`, e);
+                  console.warn(`[H-MEET] Failed to send offer to existing peer ${pSocketId}:`, e);
                 }
               }
             }
           },
 
-          onParticipantJoined: (p) => {
+          onParticipantJoined: async (p) => {
             const pSocketId = p.socketId;
             if (!pSocketId) return;
+
+            console.log(`[H-MEET] New participant joined: ${p.name} (${pSocketId}). Creating offer...`);
 
             ensureParticipant(pSocketId, {
               memberId: p.userId || pSocketId,
@@ -535,12 +596,24 @@ export function useWebRTCMeeting({
               isScreenSharing: p.isScreenSharing,
               isHost: p.isHost,
             });
+
+            // BUG FIX: When a new participant joins, we MUST create an offer to them.
+            // Without this, no WebRTC connection is ever established with new joiners.
+            try {
+              const offer = await manager.createOffer(pSocketId);
+              socketService.sendOffer(pSocketId, offer);
+              console.log(`[H-MEET] Offer sent to new participant ${pSocketId}`);
+            } catch (e) {
+              console.warn(`[H-MEET] Failed to send offer to new participant ${pSocketId}:`, e);
+            }
           },
 
           onParticipantLeft: (data) => {
             const pSocketId = data.socketId;
             if (pSocketId) {
+              console.log(`[H-MEET] Participant left: ${data.name} (${pSocketId})`);
               manager.cleanupPeer(pSocketId);
+              connectedPeersRef.current.delete(pSocketId);
               setParticipants(prev => {
                 const next = new Map(prev);
                 next.delete(pSocketId);
@@ -551,17 +624,23 @@ export function useWebRTCMeeting({
                 next.delete(pSocketId);
                 return next;
               });
+              // If no more connected peers, revert to connecting state
+              if (connectedPeersRef.current.size === 0) {
+                setOverallConnectionState('connecting');
+              }
             }
           },
 
           onOffer: async (callerSocketId, sdp) => {
             try {
+              console.log(`[H-MEET] Processing incoming offer from ${callerSocketId}`);
               const answer = await manager.handleOffer(callerSocketId, sdp);
               if (answer && answer.type === 'answer') {
                 socketService.sendAnswer(callerSocketId, answer);
+                console.log(`[H-MEET] Answer sent to ${callerSocketId}`);
               }
             } catch (err) {
-              console.error(`[WebRTC] Handle offer from ${callerSocketId} error:`, err);
+              console.error(`[H-MEET] Handle offer from ${callerSocketId} error:`, err);
             }
           },
 
@@ -569,7 +648,7 @@ export function useWebRTCMeeting({
             try {
               await manager.handleAnswer(responderSocketId, sdp);
             } catch (err) {
-              console.error(`[WebRTC] Handle answer from ${responderSocketId} error:`, err);
+              console.error(`[H-MEET] Handle answer from ${responderSocketId} error:`, err);
             }
           },
 
@@ -577,7 +656,7 @@ export function useWebRTCMeeting({
             try {
               await manager.addIceCandidate(senderSocketId, candidate);
             } catch (err) {
-              console.error(`[WebRTC] Add ICE candidate from ${senderSocketId} error:`, err);
+              console.error(`[H-MEET] Add ICE candidate from ${senderSocketId} error:`, err);
             }
           },
 
@@ -652,11 +731,16 @@ export function useWebRTCMeeting({
           },
 
           onError: (err) => {
-            console.warn('[SocketIOSignaling] Error:', err);
+            console.warn('[H-MEET] Signaling error:', err);
           },
 
-          onConnectionStateChange: (state) => {
-            setOverallConnectionState(state);
+          // This callback is for Socket.IO socket-level state only.
+          // Do NOT use this to drive the UI meeting connection label.
+          // The UI connection label must only reflect WebRTC peer connection state.
+          onSignalingConnectionStateChange: (state) => {
+            console.log(`[H-MEET] Signaling socket state changed to: ${state} (NOT driving UI connection label)`);
+            // Intentionally not calling setOverallConnectionState here.
+            // The meeting connection indicator must only reflect WebRTC media state.
           },
         });
 
@@ -677,10 +761,12 @@ export function useWebRTCMeeting({
 
         signalingModeRef.current = 'socketio';
         socketIoConnected = true;
-        setOverallConnectionState('connected');
-        console.log('[useWebRTCMeeting] Successfully connected via Socket.IO signaling');
+        // Note: do NOT set overallConnectionState = 'connected' here.
+        // It will be set to 'connected' by WebRTC's onPeerConnectionStateChange when a peer connects.
+        // If there are no peers yet (first in room), we stay in 'connecting'.
+        console.log('[H-MEET] Signaling server connected via Socket.IO');
       } catch (socketErr) {
-        console.warn('[useWebRTCMeeting] Socket.IO signaling failed, activating Supabase fallback:', socketErr);
+        console.warn('[H-MEET] Socket.IO signaling failed, activating Supabase fallback:', socketErr);
       }
 
       // 6. Supabase Realtime Fallback if Socket.IO unavailable
@@ -730,13 +816,14 @@ export function useWebRTCMeeting({
                       senderName: localUserName,
                       offer,
                     });
-                  }).catch(e => console.warn(`[WebRTC] onPresenceJoin offer creation failed:`, e));
+                  }).catch(e => console.warn(`[H-MEET] onPresenceJoin offer creation failed:`, e));
                 }
               }
             },
             onPresenceLeave: (key) => {
               if (key !== localPeerId) {
                 webrtcManagerRef.current?.cleanupPeer(key);
+                connectedPeersRef.current.delete(key);
                 setParticipants(prev => {
                   const next = new Map(prev);
                   next.delete(key);
@@ -782,8 +869,6 @@ export function useWebRTCMeeting({
             senderName: localUserName,
           }).catch(() => {});
         }, 3500);
-
-        setOverallConnectionState('connected');
       }
 
       // Update meeting status in DB to 'live' if scheduled
@@ -791,7 +876,7 @@ export function useWebRTCMeeting({
         updateMeetingStatus(meeting.id, 'live').catch(() => {});
       }
     } catch (err: any) {
-      console.error('[useWebRTCMeeting] Failed to start meeting session:', err);
+      console.error('[H-MEET] Failed to start meeting session:', err);
       setOverallConnectionState('disconnected');
     }
   }, [
@@ -815,21 +900,25 @@ export function useWebRTCMeeting({
     onRemovedByHost,
   ]);
 
-  // 5. Toggle microphone
+  // 5. Toggle microphone — MUST control the actual MediaStreamTrack.enabled
   const toggleMute = useCallback(() => {
     const nextState = !micEnabled;
     setMicEnabled(nextState);
 
+    // Control the actual hardware microphone track
     if (localStream) {
       localStream.getAudioTracks().forEach(t => {
         t.enabled = nextState;
+        console.log(`[H-MEET] Local audio track ${t.id} enabled=${nextState} (mute toggle)`);
       });
     }
 
+    // Also call the WebRTCManager to ensure it controls the track (belt and suspenders)
     if (webrtcManagerRef.current) {
       webrtcManagerRef.current.setAudioEnabled(nextState);
     }
 
+    // Broadcast mic status change to other participants (for their UI)
     if (signalingModeRef.current === 'socketio' && socketIOSignalingRef.current?.isConnected()) {
       socketIOSignalingRef.current.sendMediaToggle({ micEnabled: nextState });
     } else {
@@ -843,7 +932,7 @@ export function useWebRTCMeeting({
     }
   }, [micEnabled, localStream, localPeerId, localUserName]);
 
-  // 6. Toggle camera
+  // 6. Toggle camera — MUST control the actual MediaStreamTrack.enabled
   const toggleCamera = useCallback(async () => {
     if (meeting?.meetingType === 'audio') {
       toast.info('This is an audio-only meeting.');
@@ -853,9 +942,11 @@ export function useWebRTCMeeting({
     const nextState = !videoEnabled;
     setVideoEnabled(nextState);
 
+    // Control the actual camera video track
     if (localStream) {
       localStream.getVideoTracks().forEach(t => {
         t.enabled = nextState;
+        console.log(`[H-MEET] Local video track ${t.id} enabled=${nextState} (camera toggle)`);
       });
     }
 
@@ -863,6 +954,7 @@ export function useWebRTCMeeting({
       webrtcManagerRef.current.setVideoEnabled(nextState);
     }
 
+    // Broadcast camera status change to other participants (for their UI)
     if (signalingModeRef.current === 'socketio' && socketIOSignalingRef.current?.isConnected()) {
       socketIOSignalingRef.current.sendMediaToggle({ videoEnabled: nextState });
     } else {
@@ -930,7 +1022,7 @@ export function useWebRTCMeeting({
         }
       } catch (err: any) {
         if (err.name !== 'NotAllowedError') {
-          console.error('[WebRTC] Screen share failed:', err);
+          console.error('[H-MEET] Screen share failed:', err);
           toast.error('Failed to start screen share.');
         }
       }
@@ -961,6 +1053,7 @@ export function useWebRTCMeeting({
       announceTimerRef.current = null;
     }
 
+    connectedPeersRef.current.clear();
     webrtcManagerRef.current?.cleanupAll();
     socketIOSignalingRef.current?.disconnect();
     await supabaseSignalingRef.current?.disconnect();
@@ -1046,6 +1139,7 @@ export function useWebRTCMeeting({
 
     // Cleanup local connection to removed peer
     webrtcManagerRef.current?.cleanupPeer(targetSocketId);
+    connectedPeersRef.current.delete(targetSocketId);
     setParticipants(prev => {
       const next = new Map(prev);
       next.delete(targetSocketId);
@@ -1089,7 +1183,7 @@ export function useWebRTCMeeting({
       await updateMeetingStatus(meeting.id, 'completed');
       await leaveMeeting();
     } catch (err) {
-      console.error('[WebRTC] Error ending meeting:', err);
+      console.error('[H-MEET] Error ending meeting:', err);
     }
   }, [isHost, meeting, leaveMeeting]);
 

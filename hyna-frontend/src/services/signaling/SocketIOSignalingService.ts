@@ -42,7 +42,9 @@ export interface SocketIOSignalingCallbacks {
   onMeetingEnded: (data: { by: string; message: string }) => void;
   onScreenSharePermissionChanged: (data: { allowScreenShare: boolean; by?: string }) => void;
   onError: (err: any) => void;
-  onConnectionStateChange: (state: 'connecting' | 'connected' | 'reconnecting' | 'disconnected') => void;
+  // NOTE: This callback ONLY reflects signaling/socket connectivity, NOT WebRTC media state.
+  // The hook must NOT use this to drive the overall "Connected/Reconnecting" UI label.
+  onSignalingConnectionStateChange: (state: 'connecting' | 'connected' | 'reconnecting' | 'disconnected') => void;
 }
 
 export class SocketIOSignalingService {
@@ -84,18 +86,22 @@ export class SocketIOSignalingService {
       this.disconnect();
     }
 
-    this.callbacks.onConnectionStateChange('connecting');
+    this.callbacks.onSignalingConnectionStateChange('connecting');
 
     return new Promise((resolve, reject) => {
       let isSettled = false;
 
+      // Only reject if we truly cannot establish the initial connection within timeout.
+      // connect_error alone does NOT reject — Socket.IO retries automatically.
+      // We only reject on timeout.
       const connectionTimeout = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
-          this.callbacks.onConnectionStateChange('disconnected');
+          console.warn(`[H-MEET] Signaling server connection timed out after 10s: ${this.serverUrl}`);
+          this.callbacks.onSignalingConnectionStateChange('disconnected');
           reject(new Error(`Connection to signaling server at ${this.serverUrl} timed out.`));
         }
-      }, 7000);
+      }, 10000);
 
       try {
         const socket = io(this.serverUrl, {
@@ -111,10 +117,10 @@ export class SocketIOSignalingService {
         this.socket = socket;
 
         socket.on('connect', () => {
-          console.log('[SocketIOSignaling] Connected to signaling server with socket ID:', socket.id);
-          this.callbacks.onConnectionStateChange('connected');
+          console.log('[H-MEET] Signaling server connected. Socket ID:', socket.id);
+          this.callbacks.onSignalingConnectionStateChange('connected');
 
-          // Join the room
+          // Join the room upon every (re)connect
           socket.emit('join-room', {
             roomId,
             user,
@@ -124,7 +130,7 @@ export class SocketIOSignalingService {
         });
 
         socket.on('room-joined', (data) => {
-          console.log('[SocketIOSignaling] room-joined received:', data);
+          console.log('[H-MEET] room-joined received:', data);
           if (!isSettled) {
             isSettled = true;
             clearTimeout(connectionTimeout);
@@ -134,20 +140,22 @@ export class SocketIOSignalingService {
         });
 
         socket.on('participant_joined', (participant) => {
-          console.log('[SocketIOSignaling] participant_joined:', participant);
+          console.log('[H-MEET] participant_joined:', participant?.name, participant?.socketId);
           this.callbacks.onParticipantJoined(participant);
         });
 
         socket.on('participant_left', (data) => {
-          console.log('[SocketIOSignaling] participant_left:', data);
+          console.log('[H-MEET] participant_left:', data?.name, data?.socketId);
           this.callbacks.onParticipantLeft(data);
         });
 
         socket.on('offer', ({ callerSocketId, sdp }) => {
+          console.log('[H-MEET] Offer received from signaling, caller:', callerSocketId);
           this.callbacks.onOffer(callerSocketId, sdp);
         });
 
         socket.on('answer', ({ responderSocketId, sdp }) => {
+          console.log('[H-MEET] Answer received from signaling, responder:', responderSocketId);
           this.callbacks.onAnswer(responderSocketId, sdp);
         });
 
@@ -184,22 +192,34 @@ export class SocketIOSignalingService {
         });
 
         socket.on('connect_error', (err) => {
-          console.warn('[SocketIOSignaling] connect_error:', err.message);
-          this.callbacks.onConnectionStateChange('reconnecting');
-          if (!isSettled) {
-            isSettled = true;
-            clearTimeout(connectionTimeout);
-            reject(err);
-          }
+          // Do NOT reject here — Socket.IO will retry automatically.
+          // Do NOT change overallConnectionState here — that must only be driven by WebRTC state.
+          console.warn('[H-MEET] Signaling connect_error (will retry):', err.message);
+          this.callbacks.onSignalingConnectionStateChange('reconnecting');
+          // If we've never successfully joined a room yet, this counts as a fatal initial failure
+          // only after the outer timeout fires.
         });
 
         socket.on('disconnect', (reason) => {
-          console.log('[SocketIOSignaling] Disconnected:', reason);
-          this.callbacks.onConnectionStateChange('disconnected');
+          console.log('[H-MEET] Signaling disconnected:', reason);
+          // Do NOT propagate 'disconnected' to the overall meeting connection state —
+          // that state must only reflect WebRTC peer connection state.
+          this.callbacks.onSignalingConnectionStateChange('disconnected');
+        });
+
+        socket.on('reconnect', (attempt) => {
+          console.log('[H-MEET] Signaling reconnected on attempt', attempt);
+          // Re-join the room so we appear to others again
+          socket.emit('join-room', {
+            roomId,
+            user,
+            micEnabled,
+            videoEnabled,
+          });
         });
 
         socket.on('error', (err) => {
-          console.error('[SocketIOSignaling] server error:', err);
+          console.error('[H-MEET] Signaling server error:', err);
           this.callbacks.onError(err);
         });
 
@@ -215,13 +235,19 @@ export class SocketIOSignalingService {
 
   public sendOffer(targetSocketId: string, sdp: RTCSessionDescriptionInit): void {
     if (this.socket?.connected) {
+      console.log('[H-MEET] Sending offer to', targetSocketId);
       this.socket.emit('offer', { target: targetSocketId, sdp });
+    } else {
+      console.warn('[H-MEET] Cannot send offer — socket not connected');
     }
   }
 
   public sendAnswer(targetSocketId: string, sdp: RTCSessionDescriptionInit): void {
     if (this.socket?.connected) {
+      console.log('[H-MEET] Sending answer to', targetSocketId);
       this.socket.emit('answer', { target: targetSocketId, sdp });
+    } else {
+      console.warn('[H-MEET] Cannot send answer — socket not connected');
     }
   }
 
@@ -309,6 +335,6 @@ export class SocketIOSignalingService {
       this.socket.disconnect();
       this.socket = null;
     }
-    this.callbacks.onConnectionStateChange('disconnected');
+    this.callbacks.onSignalingConnectionStateChange('disconnected');
   }
 }
