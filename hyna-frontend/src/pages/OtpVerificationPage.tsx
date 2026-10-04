@@ -9,8 +9,8 @@ export function OtpVerificationPage() {
   const { effectiveRole } = useAuthStore();
   const [busy, setBusy] = useState(false);
   const [stateClass, setStateClass] = useState('zone');
-  const [title, setTitle] = useState("Let's verify your number");
-  const [sub, setSub] = useState("We've sent a 6-digit code to your phone. It'll auto-verify once entered.");
+  const [title, setTitle] = useState("Let's verify your email");
+  const [sub, setSub] = useState("We've sent a 6-digit code to your email. It'll auto-verify once entered.");
   const [fade, setFade] = useState(false);
   const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
   const [errorMsg, setErrorMsg] = useState('');
@@ -121,12 +121,12 @@ export function OtpVerificationPage() {
     setStateClass("zone state-loading");
     inputRefs.current.forEach(i => i?.blur());
     
-    const phone = sessionStorage.getItem('phone_entered') || '';
+    const emailAddress = sessionStorage.getItem('email_entered') || '';
 
     const { data, error } = await supabase.auth.verifyOtp({
-      phone: phone,
+      email: emailAddress,
       token: otp,
-      type: "sms"
+      type: "email"
     });
 
     if (error) {
@@ -143,7 +143,7 @@ export function OtpVerificationPage() {
 
     setTimeout(() => {
       setStateClass("zone state-done");
-      swap("Verified successfully", "Your phone number has been verified.");
+      swap("Verified successfully", "Your email address has been verified.");
       setTimeout(() => {
         // Proceed to dashboard
         sessionStorage.setItem('otp_verified', 'true');
@@ -208,7 +208,7 @@ export function OtpVerificationPage() {
     setErrorMsg('');
     setStateClass("zone");
     setOtpValues(['', '', '', '', '', '']);
-    swap("Let's verify your number", "We've sent a 6-digit code to your phone. It'll auto-verify once entered.");
+    swap("Let's verify your email", "We've sent a 6-digit code to your email. It'll auto-verify once entered.");
     setTimeout(() => {
       inputRefs.current[0]?.focus();
     }, 400);

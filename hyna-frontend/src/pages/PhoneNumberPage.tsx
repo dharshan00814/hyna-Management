@@ -5,7 +5,7 @@ import './OtpVerificationPage.css';
 
 export function PhoneNumberPage() {
   const navigate = useNavigate();
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [emailAddress, setEmailAddress] = useState('');
   const [fade, setFade] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -101,13 +101,13 @@ export function PhoneNumberPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneNumber.length < 5 || busy) return;
+    if (emailAddress.length < 5 || busy) return;
     
     setBusy(true);
     setErrorMsg('');
 
     const { data, error } = await supabase.auth.signInWithOtp({
-      phone: phoneNumber
+      email: emailAddress
     });
 
     if (error) {
@@ -120,7 +120,7 @@ export function PhoneNumberPage() {
     setFade(true);
     
     setTimeout(() => {
-      sessionStorage.setItem('phone_entered', phoneNumber);
+      sessionStorage.setItem('email_entered', emailAddress);
       navigate('/otp');
     }, 400);
   };
@@ -135,7 +135,7 @@ export function PhoneNumberPage() {
           <div className="glass"><div className="tint"></div><div className="shine"></div></div>
           <div className="grab"></div>
           <div className="content">
-            <h1 id="title" className={fade ? 'fade' : ''}>Enter phone number</h1>
+            <h1 id="title" className={fade ? 'fade' : ''}>Enter email address</h1>
             <p className={`sub ${fade ? 'fade' : ''}`} id="sub">We will send a 6-digit code to verify your identity.</p>
             
             <div className={`zone ${fade ? 'fade' : ''}`} style={{ marginTop: '20px' }}>
@@ -143,16 +143,16 @@ export function PhoneNumberPage() {
                 <div className="phone-input-wrapper">
                   <input
                     ref={inputRef}
-                    type="tel"
+                    type="email"
                     className="phone-input"
-                    placeholder="+919876543210"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    autoComplete="tel"
+                    placeholder="name@example.com"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    autoComplete="email"
                   />
                 </div>
                 {errorMsg && <p style={{ color: 'var(--red)', fontSize: '13px', marginBottom: '10px' }}>{errorMsg}</p>}
-                <button type="submit" className="action-btn" disabled={phoneNumber.length < 5 || busy}>
+                <button type="submit" className="action-btn" disabled={emailAddress.length < 5 || busy}>
                   {busy ? 'Sending...' : 'Send OTP'}
                 </button>
               </form>
@@ -160,7 +160,7 @@ export function PhoneNumberPage() {
           </div>
         </section>
       </main>
-      <div className="hint">Enter a valid phone number with country code</div>
+      <div className="hint">Enter a valid email address to continue</div>
     </div>
   );
 }
