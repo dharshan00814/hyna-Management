@@ -32,13 +32,6 @@ export function ProtectedRoute({ allowedRoles, requireExecutiveLeadership, child
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!sessionStorage.getItem('email_entered')) {
-    return <Navigate to="/enter-phone" state={{ from: location }} replace />;
-  }
-
-  if (!sessionStorage.getItem('otp_verified')) {
-    return <Navigate to="/otp" state={{ from: location }} replace />;
-  }
 
   const redirectPath =
     effectiveRole === 'admin'

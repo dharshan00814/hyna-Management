@@ -6,8 +6,6 @@ import { useThemeStore, useAuthStore } from './stores';
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
-import { OtpVerificationPage } from './pages/OtpVerificationPage';
-import { PhoneNumberPage } from './pages/PhoneNumberPage';
 import { SplashScreen } from './components/common/SplashScreen';
 
 // Synchronous core dashboards
@@ -115,45 +113,9 @@ function App() {
                   </div>
                 </div>
               ) : isAuthenticated ? (
-                sessionStorage.getItem('otp_verified') === 'true' ? (
-                  <Navigate to={`${rolePrefix}/dashboard`} replace />
-                ) : sessionStorage.getItem('email_entered') ? (
-                  <Navigate to="/otp" replace />
-                ) : (
-                  <Navigate to="/enter-phone" replace />
-                )
+                <Navigate to={`${rolePrefix}/dashboard`} replace />
               ) : (
                 <LoginPage />
-              )
-            }
-          />
-
-          <Route
-            path="/enter-phone"
-            element={
-              !isAuthenticated ? (
-                <Navigate to="/login" replace />
-              ) : sessionStorage.getItem('otp_verified') === 'true' ? (
-                <Navigate to={`${rolePrefix}/dashboard`} replace />
-              ) : sessionStorage.getItem('email_entered') ? (
-                <Navigate to="/otp" replace />
-              ) : (
-                <PhoneNumberPage />
-              )
-            }
-          />
-
-          <Route
-            path="/otp"
-            element={
-              !isAuthenticated ? (
-                <Navigate to="/login" replace />
-              ) : sessionStorage.getItem('otp_verified') === 'true' ? (
-                <Navigate to={`${rolePrefix}/dashboard`} replace />
-              ) : !sessionStorage.getItem('email_entered') ? (
-                <Navigate to="/enter-phone" replace />
-              ) : (
-                <OtpVerificationPage />
               )
             }
           />
