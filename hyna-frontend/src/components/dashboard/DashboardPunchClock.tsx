@@ -445,7 +445,7 @@ export function DashboardPunchClock({
             <>
               {punchInStatus.canPunchIn ? (
                 <Button
-                  size="default"
+                  size="md"
                   onClick={() => handlePunchIn()}
                   disabled={isSubmitting}
                   className="w-full xl:w-auto bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-5 py-2.5 rounded-xl shadow-md shadow-emerald-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer h-10"
@@ -460,7 +460,7 @@ export function DashboardPunchClock({
                 </Button>
               ) : (
                 <Button
-                  size="default"
+                  size="md"
                   disabled={isSubmitting}
                   onClick={() => {
                     toast.info(punchInStatus.tooltip);
@@ -481,7 +481,7 @@ export function DashboardPunchClock({
             <>
               {punchOutStatus.canPunchOut ? (
                 <Button
-                  size="default"
+                  size="md"
                   variant="destructive"
                   onClick={() => handlePunchOut()}
                   disabled={isSubmitting}
@@ -493,7 +493,7 @@ export function DashboardPunchClock({
                 </Button>
               ) : (
                 <Button
-                  size="default"
+                  size="md"
                   disabled={isSubmitting}
                   onClick={() => {
                     toast.info(punchOutStatus.tooltip);
@@ -512,7 +512,7 @@ export function DashboardPunchClock({
 
           {isClockedOut && (
             <Button
-              size="default"
+              size="md"
               variant="outline"
               onClick={() => navigate(`${rolePrefix}/attendance`)}
               className="w-full xl:w-auto font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 bg-background/60 hover:bg-background h-10"
