@@ -136,13 +136,13 @@
 
 .otp-container .otp {
   display: flex;
-  gap: 14px;
+  gap: 8px;
   transform-style: preserve-3d;
 }
 
 .otp-container .otp input {
-  width: 56px;
-  height: 60px;
+  width: 44px;
+  height: 56px;
   border-radius: 14px;
   border: 1.5px solid rgba(255, 255, 255, 0.12);
   background: #0b0b0d;

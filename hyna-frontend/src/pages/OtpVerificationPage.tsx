@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores';
+import { supabase } from '@/lib/supabase';
 import './OtpVerificationPage.css';
 
 export function OtpVerificationPage() {
@@ -9,9 +10,10 @@ export function OtpVerificationPage() {
   const [busy, setBusy] = useState(false);
   const [stateClass, setStateClass] = useState('zone');
   const [title, setTitle] = useState("Let's verify your number");
-  const [sub, setSub] = useState("We've sent a 4-digit code to your phone. It'll auto-verify once entered.");
+  const [sub, setSub] = useState("We've sent a 6-digit code to your phone. It'll auto-verify once entered.");
   const [fade, setFade] = useState(false);
-  const [otpValues, setOtpValues] = useState(['', '', '', '']);
+  const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
+  const [errorMsg, setErrorMsg] = useState('');
   const [resendText, setResendText] = useState('Resend');
   const [resendDisabled, setResendDisabled] = useState(false);
   
@@ -113,10 +115,32 @@ export function OtpVerificationPage() {
     }, 300);
   };
 
-  const handleComplete = () => {
+  const handleComplete = async (otp: string) => {
     setBusy(true);
+    setErrorMsg('');
     setStateClass("zone state-loading");
     inputRefs.current.forEach(i => i?.blur());
+    
+    const phone = sessionStorage.getItem('phone_entered') || '';
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: phone,
+      token: otp,
+      type: "sms"
+    });
+
+    if (error) {
+      console.error(error.message);
+      setErrorMsg(error.message);
+      setStateClass("zone");
+      setBusy(false);
+      setOtpValues(['', '', '', '', '', '']); 
+      setTimeout(() => {
+        inputRefs.current[0]?.focus();
+      }, 400);
+      return;
+    }
+
     setTimeout(() => {
       setStateClass("zone state-done");
       swap("Verified successfully", "Your phone number has been verified.");
@@ -141,13 +165,13 @@ export function OtpVerificationPage() {
     newOtp[i] = val;
     setOtpValues(newOtp);
 
-    if (val && i < 3) {
+    if (val && i < 5) {
       inputRefs.current[i + 1]?.focus();
     }
     
     // Check if complete
     if (newOtp.every(v => v !== '')) {
-      handleComplete();
+      handleComplete(newOtp.join(''));
     }
   };
 
@@ -160,12 +184,12 @@ export function OtpVerificationPage() {
       inputRefs.current[i - 1]?.focus();
     }
     if (e.key === "ArrowLeft" && i > 0) inputRefs.current[i - 1]?.focus();
-    if (e.key === "ArrowRight" && i < 3) inputRefs.current[i + 1]?.focus();
+    if (e.key === "ArrowRight" && i < 5) inputRefs.current[i + 1]?.focus();
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     if (busy) return;
-    const d = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
+    const d = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (!d) return;
     e.preventDefault();
     const newOtp = [...otpValues];
@@ -173,17 +197,18 @@ export function OtpVerificationPage() {
       newOtp[k] = ch;
     });
     setOtpValues(newOtp);
-    inputRefs.current[Math.min(d.length, 3)]?.focus();
+    inputRefs.current[Math.min(d.length, 5)]?.focus();
     if (newOtp.slice(0, d.length).every(v => v !== '')) {
-      if (d.length === 4) handleComplete();
+      if (d.length === 6) handleComplete(newOtp.join(''));
     }
   };
 
   const reset = () => {
     setBusy(false);
+    setErrorMsg('');
     setStateClass("zone");
-    setOtpValues(['', '', '', '']);
-    swap("Let's verify your number", "We've sent a 4-digit code to your phone. It'll auto-verify once entered.");
+    setOtpValues(['', '', '', '', '', '']);
+    swap("Let's verify your number", "We've sent a 6-digit code to your phone. It'll auto-verify once entered.");
     setTimeout(() => {
       inputRefs.current[0]?.focus();
     }, 400);
@@ -219,9 +244,10 @@ export function OtpVerificationPage() {
           <div className="content">
             <h1 id="title" className={fade ? 'fade' : ''}>{title}</h1>
             <p className={`sub ${fade ? 'fade' : ''}`} id="sub">{sub}</p>
+            {errorMsg && <p style={{ color: 'var(--red)', fontSize: '13px', marginTop: '10px' }}>{errorMsg}</p>}
             <div className={stateClass} id="zone">
-              <div className="otp" id="otp" role="group" aria-label="4-digit code">
-                {[0, 1, 2, 3].map((i) => (
+              <div className="otp" id="otp" role="group" aria-label="6-digit code">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
                   <input
                     key={i}
                     ref={el => inputRefs.current[i] = el}
