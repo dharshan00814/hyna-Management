@@ -72,9 +72,7 @@ const getNavItems = (prefix: string, role: string, isExec: boolean): NavItem[] =
 };
 
 const getBottomNavItems = (isExec: boolean): NavItem[] => {
-  const items: NavItem[] = [
-    { label: 'IDE Integrations', icon: Laptop, path: '/settings/integrations', roles: ['admin', 'manager', 'member'] },
-  ];
+  const items: NavItem[] = [];
 
   // 5. Privacy & Tracking (Security): STRICTLY for CEO, CTO, COO
   if (isExec) {
