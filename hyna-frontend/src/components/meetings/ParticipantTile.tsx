@@ -26,53 +26,112 @@ export function ParticipantTile({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [remoteSpeaking, setRemoteSpeaking] = useState<boolean>(false);
+  // Track if we've already tried to play this stream, to handle autoplay unlock
+  const hasAttemptedPlayRef = useRef<boolean>(false);
 
   const hasVideoStream = Boolean(
     stream && 
     stream.getVideoTracks().length > 0 && 
+    stream.getVideoTracks().some(t => t.readyState === 'live') &&
     (participant.videoEnabled || participant.isScreenSharing)
   );
 
-  // Attach stream to video tag
+  // Attach stream to video element
+  // The video element handles both local (muted) and remote video.
+  // We use the same stable MediaStream reference from the parent — do NOT create new wrappers here.
   useEffect(() => {
-    if (videoRef.current) {
-      if (stream) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(e => console.warn('[ParticipantTile] Video play error:', e));
-      } else {
-        videoRef.current.srcObject = null;
-      }
-    }
-  }, [stream]);
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
 
-  // Dedicated Audio Element for Remote Participants:
-  // Guarantees voice playback regardless of video visibility, camera state, or background tab
+    if (stream) {
+      if (videoEl.srcObject !== stream) {
+        videoEl.srcObject = stream;
+        console.log(`[H-MEET] Video srcObject assigned for ${participant.name} (${isLocal ? 'local' : 'remote'})`);
+      }
+      videoEl.play().catch(e => {
+        // Autoplay blocked for video is ok — browser will play on user interaction
+        if (e.name !== 'AbortError') {
+          console.warn(`[H-MEET] Video play error for ${participant.name}:`, e.name);
+        }
+      });
+    } else {
+      videoEl.srcObject = null;
+    }
+  }, [stream, participant.name, isLocal]);
+
+  // Dedicated audio element for remote participants ONLY.
+  // CRITICAL: We attach the full stream (not a re-wrapped copy) directly to srcObject.
+  // The audio element handles audio playback independently of the video element visibility.
+  // The video element is always muted — audio only flows through the dedicated <audio> element.
   useEffect(() => {
     const audioEl = audioRef.current;
-    if (audioEl && !isLocal) {
-      const audioTracks = stream ? stream.getAudioTracks() : [];
-      if (audioTracks.length > 0) {
-        const audioStream = new MediaStream(audioTracks);
-        audioEl.srcObject = audioStream;
+    if (!audioEl || isLocal) return;
+
+    if (stream) {
+      // Attach the full remote stream directly. The browser will play all audio tracks.
+      // Do NOT create new MediaStream([audioTracks]) — that severs the track from the connection.
+      if (audioEl.srcObject !== stream) {
+        audioEl.srcObject = stream;
+        hasAttemptedPlayRef.current = false;
+        console.log(`[H-MEET] Audio srcObject assigned for remote participant: ${participant.name}`);
+        console.log(`[H-MEET] Audio tracks in stream: ${stream.getAudioTracks().length}`);
+        stream.getAudioTracks().forEach(t => {
+          console.log(`[H-MEET] Remote audio track: id=${t.id}, enabled=${t.enabled}, muted=${t.muted}, readyState=${t.readyState}`);
+        });
+      }
+
+      if (!hasAttemptedPlayRef.current) {
+        hasAttemptedPlayRef.current = true;
         const playPromise = audioEl.play();
         if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.warn('[ParticipantTile] Remote audio play prevented by autoplay policy:', e);
-            const unlockAudio = () => {
-              audioEl.play().catch(() => {});
-              window.removeEventListener('click', unlockAudio);
-              window.removeEventListener('keydown', unlockAudio);
-              window.removeEventListener('touchstart', unlockAudio);
-            };
-            window.addEventListener('click', unlockAudio, { once: true });
-            window.addEventListener('keydown', unlockAudio, { once: true });
-            window.addEventListener('touchstart', unlockAudio, { once: true });
-          });
+          playPromise
+            .then(() => {
+              console.log(`[H-MEET] Remote audio playback started for ${participant.name}`);
+            })
+            .catch(e => {
+              if (e.name === 'NotAllowedError') {
+                // Autoplay was blocked — set up interaction unlock
+                console.warn(`[H-MEET] Remote audio autoplay blocked for ${participant.name}. Waiting for user interaction.`);
+                const unlockAudio = () => {
+                  audioEl.play()
+                    .then(() => console.log(`[H-MEET] Remote audio unlocked for ${participant.name}`))
+                    .catch(() => {});
+                  window.removeEventListener('click', unlockAudio);
+                  window.removeEventListener('keydown', unlockAudio);
+                  window.removeEventListener('touchstart', unlockAudio);
+                };
+                window.addEventListener('click', unlockAudio, { once: true });
+                window.addEventListener('keydown', unlockAudio, { once: true });
+                window.addEventListener('touchstart', unlockAudio, { once: true });
+              } else if (e.name !== 'AbortError') {
+                console.error(`[H-MEET] Remote audio playback failed for ${participant.name}:`, e);
+              }
+            });
         }
-      } else {
-        audioEl.srcObject = null;
       }
+    } else {
+      audioEl.srcObject = null;
+      hasAttemptedPlayRef.current = false;
     }
+  }, [stream, isLocal, participant.name]);
+
+  // Re-attempt play when new audio tracks arrive in the stream
+  // (handles the case where ontrack fires after srcObject is set)
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (!audioEl || isLocal || !stream) return;
+
+    const handleTrackAdded = () => {
+      // If the audio element is paused and we have audio tracks, try to resume
+      if (audioEl.paused && stream.getAudioTracks().length > 0) {
+        audioEl.play().catch(() => {});
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackAdded);
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackAdded);
+    };
   }, [stream, isLocal]);
 
   // Real-time audio analyser on remote stream to detect speaking
@@ -83,7 +142,7 @@ export function ParticipantTile({
     }
 
     const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack || !participant.micEnabled) {
+    if (!audioTrack || !participant.micEnabled || audioTrack.readyState !== 'live') {
       setRemoteSpeaking(false);
       return;
     }
@@ -94,7 +153,8 @@ export function ParticipantTile({
       const ctx = new AudioCtx();
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
-      const source = ctx.createMediaStreamSource(new MediaStream([audioTrack]));
+      // Use the stream directly (not a copy) for the analyser source
+      const source = ctx.createMediaStreamSource(stream);
       source.connect(analyser);
 
       const data = new Uint8Array(analyser.frequencyBinCount);
@@ -120,6 +180,28 @@ export function ParticipantTile({
 
   const isActuallySpeaking = isLocal ? participant.isSpeaking : (participant.isSpeaking || remoteSpeaking);
 
+  // Map WebRTC connection state to display label
+  const connectionBadge = (() => {
+    if (isLocal) return null;
+    const state = participant.connectionState;
+    if (state === 'connecting') {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/20 backdrop-blur-md text-amber-300 border border-amber-500/30">
+          Connecting...
+        </span>
+      );
+    }
+    if (state === 'disconnected' || state === 'failed') {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/20 backdrop-blur-md text-red-300 border border-red-500/30">
+          Reconnecting...
+        </span>
+      );
+    }
+    // 'connected' and 'closed' — no badge (connected is normal, show nothing)
+    return null;
+  })();
+
   return (
     <div
       className={`relative w-full h-full min-h-[180px] bg-[#121217] rounded-2xl overflow-hidden border transition-all duration-200 select-none shadow-lg group ${
@@ -128,21 +210,31 @@ export function ParticipantTile({
           : 'border-white/10 hover:border-white/20'
       }`}
     >
-      {/* Dedicated Remote Audio Player */}
+      {/* Dedicated Remote Audio Player
+          - autoPlay: hint to browser to start playing as soon as srcObject is set
+          - playsInline: prevents fullscreen on iOS
+          - muted must NOT be set here — we need audio output
+          - volume is at default 1.0
+      */}
       {!isLocal && (
         <audio
           ref={audioRef}
           autoPlay
           playsInline
+          // NOTE: Do NOT add muted={true} here — that would silence remote audio
         />
       )}
 
-      {/* Video Stream Element */}
+      {/* Video Stream Element
+          Always muted to prevent audio feedback.
+          Audio is handled by the dedicated <audio> element above for remote participants.
+          For local preview, we don't need audio playback anyway.
+      */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
-        muted={true} // Audio is handled cleanly by audioRef for remote, local is muted to avoid feedback
+        muted={true}
         className={`w-full h-full object-cover ${!hasVideoStream ? 'opacity-0 absolute inset-0 -z-10' : 'relative z-0'} ${isLocal && !participant.isScreenSharing ? 'scale-x-[-1]' : ''}`}
       />
       
@@ -181,7 +273,7 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* Top Left: Status Badges (Host / Screen Sharing / Reconnecting) */}
+      {/* Top Left: Status Badges (Host / Screen Sharing / WebRTC connection state) */}
       <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
         {participant.isHost && (
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 backdrop-blur-md text-white border border-white/15">
@@ -196,17 +288,7 @@ export function ParticipantTile({
           </span>
         )}
 
-        {participant.connectionState === 'connecting' && (
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/20 backdrop-blur-md text-amber-300 border border-amber-500/30">
-            Connecting...
-          </span>
-        )}
-
-        {(participant.connectionState === 'disconnected' || participant.connectionState === 'failed') && (
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/20 backdrop-blur-md text-red-300 border border-red-500/30">
-            Reconnecting...
-          </span>
-        )}
+        {connectionBadge}
       </div>
 
       {/* Top Right: Pin Toggle Action */}

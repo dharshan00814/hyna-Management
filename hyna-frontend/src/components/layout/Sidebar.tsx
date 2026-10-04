@@ -61,10 +61,6 @@ const getNavItems = (prefix: string, role: string, isExec: boolean): NavItem[] =
     { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
   );
 
-  // 4. Files: STRICTLY for CEO, CTO, COO
-  if (isExec) {
-    items.push({ label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] });
-  }
 
   items.push(
     { label: 'Leave', icon: CalendarOff, path: `${prefix}/leave`, roles: ['admin', 'manager', 'member'] },

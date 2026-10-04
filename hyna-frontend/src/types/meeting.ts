@@ -20,6 +20,7 @@ export interface Meeting {
   type: MeetingType;
   meetingType: MeetingMediaType;
   meetingRoomId: string;
+  meetingCode?: string;
   isRecurring: boolean;
   meetingLink?: string;
   notes?: string;
@@ -101,6 +102,7 @@ export interface SignalingMessage {
 
 export interface ParticipantState {
   memberId: string;
+  socketId?: string;
   name: string;
   avatar: string;
   role?: string;
@@ -126,4 +128,9 @@ export interface UserDeviceSettings {
   selectedSpeakerId: string;
   preferredVideo: boolean;
   preferredAudio: boolean;
+}
+
+export interface MeetingSettings {
+  allowScreenShare: boolean;
+  muteOnEntry?: boolean;
 }

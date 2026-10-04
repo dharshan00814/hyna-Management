@@ -75,41 +75,59 @@ const socketToRoom = new Map();
 
 // Helper: Query Database Meeting Details
 async function getDbMeeting(roomId) {
-  if (!supabase) return null;
+  if (!supabase || !roomId) return null;
+  const cleanId = String(roomId).trim();
   try {
+    // 1. Search by meeting_room_id
+    const { data: byRoomId } = await supabase
+      .from('meetings')
+      .select('*')
+      .ilike('meeting_room_id', cleanId)
+      .maybeSingle();
+
+    if (byRoomId) return byRoomId;
+
+    // 2. Search by meeting_link
     const { data: byLink } = await supabase
       .from('meetings')
       .select('*')
-      .ilike('meeting_link', `%${roomId}%`)
+      .ilike('meeting_link', `%${cleanId}%`)
       .maybeSingle();
 
     if (byLink) return byLink;
 
+    // 3. Search by id
     const { data: byId } = await supabase
       .from('meetings')
       .select('*')
-      .eq('id', roomId)
+      .eq('id', cleanId)
       .maybeSingle();
 
     return byId || null;
   } catch (err) {
-    console.error(`[DB Error] getDbMeeting for ${roomId}:`, err.message);
+    console.error(`[DB Error] getDbMeeting for ${cleanId}:`, err.message);
     return null;
   }
 }
 
 // Helper: Update Meeting Status in Database
 async function updateDbMeetingStatus(roomId, status) {
-  if (!supabase) return;
+  if (!supabase || !roomId) return;
+  const cleanId = String(roomId).trim();
   try {
     const dbStatus = status === 'LIVE' ? 'ongoing' : status === 'ENDED' ? 'completed' : 'scheduled';
+    const now = new Date().toISOString();
+    const updates = { status: dbStatus, updated_at: now };
+    if (status === 'LIVE') updates.started_at = now;
+    if (status === 'ENDED') updates.ended_at = now;
+
     await supabase
       .from('meetings')
-      .update({ status: dbStatus, updated_at: new Date().toISOString() })
-      .or(`id.eq.${roomId},meeting_link.ilike.%${roomId}%`);
-    console.log(`[DB] Updated meeting ${roomId} status to: ${dbStatus}`);
+      .update(updates)
+      .or(`id.eq.${cleanId},meeting_room_id.ilike.${cleanId},meeting_link.ilike.%${cleanId}%`);
+    console.log(`[DB] Updated meeting ${cleanId} status to: ${dbStatus}`);
   } catch (err) {
-    console.error(`[DB Error] updateDbMeetingStatus for ${roomId}:`, err.message);
+    console.error(`[DB Error] updateDbMeetingStatus for ${cleanId}:`, err.message);
   }
 }
 
@@ -163,6 +181,7 @@ io.on('connection', (socket) => {
         roomId,
         hostId,
         status: 'WAITING',
+        allowScreenShare: true,
         participants: new Map(),
       };
       rooms.set(roomId, room);
@@ -215,6 +234,7 @@ io.on('connection', (socket) => {
       isHost,
       hostId: room.hostId,
       status: room.status,
+      allowScreenShare: room.allowScreenShare !== false,
       participants: existingParticipants,
       yourParticipantInfo: participantData,
     });
@@ -265,6 +285,10 @@ io.on('connection', (socket) => {
 
     const participant = room.participants.get(socket.id);
     if (participant) {
+      if (isScreenSharing && !participant.isHost && room.allowScreenShare === false) {
+        return socket.emit('error', { message: 'Screen sharing has been disabled by the meeting host.' });
+      }
+
       if (micEnabled !== undefined) participant.micEnabled = micEnabled;
       if (videoEnabled !== undefined) participant.videoEnabled = videoEnabled;
       if (isScreenSharing !== undefined) participant.isScreenSharing = isScreenSharing;
@@ -343,6 +367,56 @@ io.on('connection', (socket) => {
         console.log(`[Host Control] Host ${caller.name} muted ${targetParticipant.name}`);
       }
     }
+  });
+
+  // 8b. Host Control: Mute All Participants
+  socket.on('host-mute-all', () => {
+    const info = socketToRoom.get(socket.id);
+    if (!info) return;
+
+    const room = rooms.get(info.roomId);
+    if (!room) return;
+
+    const caller = room.participants.get(socket.id);
+    if (!caller || !caller.isHost) {
+      return socket.emit('error', { message: 'Only the meeting host can mute all participants.' });
+    }
+
+    for (const [pSocketId, p] of room.participants.entries()) {
+      if (!p.isHost && p.micEnabled) {
+        p.micEnabled = false;
+        io.to(pSocketId).emit('forced-mute', { by: caller.name });
+        io.to(info.roomId).emit('participant-media-changed', {
+          socketId: pSocketId,
+          userId: p.userId,
+          micEnabled: false,
+          videoEnabled: p.videoEnabled,
+          isScreenSharing: p.isScreenSharing,
+        });
+      }
+    }
+    console.log(`[Host Control] Host ${caller.name} muted all participants in ${info.roomId}`);
+  });
+
+  // 8c. Host Control: Toggle Screen Sharing Permission
+  socket.on('host-toggle-screenshare-permission', ({ allowed }) => {
+    const info = socketToRoom.get(socket.id);
+    if (!info) return;
+
+    const room = rooms.get(info.roomId);
+    if (!room) return;
+
+    const caller = room.participants.get(socket.id);
+    if (!caller || !caller.isHost) {
+      return socket.emit('error', { message: 'Only the meeting host can configure screen sharing permissions.' });
+    }
+
+    room.allowScreenShare = Boolean(allowed);
+    io.to(info.roomId).emit('screenshare-permission-changed', {
+      allowScreenShare: room.allowScreenShare,
+      by: caller.name,
+    });
+    console.log(`[Host Control] Host ${caller.name} set allowScreenShare to ${room.allowScreenShare} in ${info.roomId}`);
   });
 
   // 9. Host Control: Remove Participant

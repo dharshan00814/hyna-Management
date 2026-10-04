@@ -405,10 +405,32 @@ export function MeetingRoom() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Connection State Badge — driven by actual WebRTC/signaling state only */}
+          {overallConnectionState === 'connected' && (
+            <span className="hidden sm:flex px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </span>
+          )}
+
+          {overallConnectionState === 'connecting' && (
+            <span className="hidden sm:flex px-2.5 py-1 rounded-full text-xs font-medium bg-white/10 text-white/50 border border-white/10 items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" />
+              Connecting...
+            </span>
+          )}
+
           {overallConnectionState === 'reconnecting' && (
-            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 animate-pulse">
+            <span className="flex px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30 items-center gap-1.5 animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               Reconnecting...
+            </span>
+          )}
+
+          {overallConnectionState === 'disconnected' && (
+            <span className="flex px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/30 items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              Disconnected
             </span>
           )}
 
