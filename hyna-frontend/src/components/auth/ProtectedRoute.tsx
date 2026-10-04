@@ -32,7 +32,7 @@ export function ProtectedRoute({ allowedRoles, requireExecutiveLeadership, child
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!sessionStorage.getItem('phone_entered')) {
+  if (!sessionStorage.getItem('email_entered')) {
     return <Navigate to="/enter-phone" state={{ from: location }} replace />;
   }
 

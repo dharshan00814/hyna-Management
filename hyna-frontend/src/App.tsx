@@ -117,7 +117,7 @@ function App() {
               ) : isAuthenticated ? (
                 sessionStorage.getItem('otp_verified') === 'true' ? (
                   <Navigate to={`${rolePrefix}/dashboard`} replace />
-                ) : sessionStorage.getItem('phone_entered') === 'true' ? (
+                ) : sessionStorage.getItem('email_entered') ? (
                   <Navigate to="/otp" replace />
                 ) : (
                   <Navigate to="/enter-phone" replace />
@@ -135,7 +135,7 @@ function App() {
                 <Navigate to="/login" replace />
               ) : sessionStorage.getItem('otp_verified') === 'true' ? (
                 <Navigate to={`${rolePrefix}/dashboard`} replace />
-              ) : sessionStorage.getItem('phone_entered') === 'true' ? (
+              ) : sessionStorage.getItem('email_entered') ? (
                 <Navigate to="/otp" replace />
               ) : (
                 <PhoneNumberPage />
@@ -150,7 +150,7 @@ function App() {
                 <Navigate to="/login" replace />
               ) : sessionStorage.getItem('otp_verified') === 'true' ? (
                 <Navigate to={`${rolePrefix}/dashboard`} replace />
-              ) : sessionStorage.getItem('phone_entered') !== 'true' ? (
+              ) : !sessionStorage.getItem('email_entered') ? (
                 <Navigate to="/enter-phone" replace />
               ) : (
                 <OtpVerificationPage />
