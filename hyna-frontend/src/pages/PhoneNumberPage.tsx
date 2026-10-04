@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 import './OtpVerificationPage.css';
 
 export function PhoneNumberPage() {
@@ -7,6 +8,7 @@ export function PhoneNumberPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [fade, setFade] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   const cardRef = useRef<HTMLElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -97,17 +99,30 @@ export function PhoneNumberPage() {
     };
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length < 5 || busy) return;
     
     setBusy(true);
+    setErrorMsg('');
+
+    const { data, error } = await supabase.auth.signInWithOtp({
+      phone: phoneNumber
+    });
+
+    if (error) {
+      console.error(error.message);
+      setErrorMsg(error.message);
+      setBusy(false);
+      return;
+    }
+    
     setFade(true);
     
     setTimeout(() => {
-      sessionStorage.setItem('phone_entered', 'true');
+      sessionStorage.setItem('phone_entered', phoneNumber);
       navigate('/otp');
-    }, 400); // short delay to show button feedback
+    }, 400);
   };
 
   return (
@@ -121,7 +136,7 @@ export function PhoneNumberPage() {
           <div className="grab"></div>
           <div className="content">
             <h1 id="title" className={fade ? 'fade' : ''}>Enter phone number</h1>
-            <p className={`sub ${fade ? 'fade' : ''}`} id="sub">We will send a 4-digit code to verify your identity.</p>
+            <p className={`sub ${fade ? 'fade' : ''}`} id="sub">We will send a 6-digit code to verify your identity.</p>
             
             <div className={`zone ${fade ? 'fade' : ''}`} style={{ marginTop: '20px' }}>
               <form onSubmit={handleSubmit} style={{ width: '100%' }}>
@@ -130,12 +145,13 @@ export function PhoneNumberPage() {
                     ref={inputRef}
                     type="tel"
                     className="phone-input"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+919876543210"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     autoComplete="tel"
                   />
                 </div>
+                {errorMsg && <p style={{ color: 'var(--red)', fontSize: '13px', marginBottom: '10px' }}>{errorMsg}</p>}
                 <button type="submit" className="action-btn" disabled={phoneNumber.length < 5 || busy}>
                   {busy ? 'Sending...' : 'Send OTP'}
                 </button>
@@ -144,7 +160,7 @@ export function PhoneNumberPage() {
           </div>
         </section>
       </main>
-      <div className="hint">Enter a valid phone number to continue</div>
+      <div className="hint">Enter a valid phone number with country code</div>
     </div>
   );
 }
