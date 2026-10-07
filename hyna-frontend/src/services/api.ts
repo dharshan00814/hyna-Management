@@ -1722,10 +1722,10 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
     pointsAwarded = POINTS_GRACE;
     isLate = true;
     notes = `Points: ${pointsAwarded} | Grace Window Punch In (10:00 AM - 10:15 AM)`;
-  } else if (currentMins < PUNCH_IN_START_MIN) {
-    throw new Error('Punch In is disabled before 9:00 AM. Window opens at 9:00 AM.');
   } else {
-    throw new Error('Punch In is closed for today. Cut-off was 10:15 AM.');
+    pointsAwarded = POINTS_ON_TIME;
+    isLate = false;
+    notes = `Points: ${pointsAwarded} | Punch In at ${timeNow}`;
   }
 
   const fallbackRecord: AttendanceRecord = {
@@ -1786,14 +1786,6 @@ export async function checkOut(userId: string, overrideTime?: Date): Promise<Att
   const now = overrideTime instanceof Date ? overrideTime : new Date();
   const today = now.toISOString().split('T')[0];
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const currentMins = now.getHours() * 60 + now.getMinutes();
-
-  if (currentMins < PUNCH_OUT_START_MIN) {
-    throw new Error('Punch Out is disabled before 9:00 PM. Shifts conclude between 9:00 PM and 10:00 PM.');
-  }
-  if (currentMins > PUNCH_OUT_END_MIN) {
-    throw new Error('Punch Out is closed after 10:00 PM. Missed punch-out penalty has been applied.');
-  }
 
   let existingCheckIn = '';
   let existingNotes = '';

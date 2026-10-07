@@ -130,20 +130,11 @@ export function AttendancePage() {
       toast.error('User session not found.');
       return;
     }
-    const status = getPunchInStatus(effectiveTime);
-    if (!status.canPunchIn) {
-      toast.error(status.tooltip);
-      return;
-    }
     try {
       setIsPunching(true);
       const record = await checkIn(currentUser.id, effectiveTime);
       setAttendance(prev => [record, ...prev.filter(a => !(a.userId === currentUser.id && a.date === todayStr))]);
-      toast.success(
-        status.phase === 'on_time'
-          ? `Clocked in on-time at ${record.checkIn}! +10 Points earned! 🎯`
-          : `Clocked in during grace window at ${record.checkIn}! +5 Points earned! ⏱️`
-      );
+      toast.success(`Clocked in at ${record.checkIn}! 🎯`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to record check-in');
     } finally {
@@ -154,11 +145,6 @@ export function AttendancePage() {
   const handlePunchOut = async () => {
     if (!currentUser?.id) {
       toast.error('User session not found.');
-      return;
-    }
-    const status = getPunchOutStatus(effectiveTime, myTodayRecord?.checkIn);
-    if (!status.canPunchOut) {
-      toast.error(status.tooltip);
       return;
     }
     try {
