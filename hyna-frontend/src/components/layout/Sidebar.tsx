@@ -103,44 +103,43 @@ export function Sidebar() {
       {/* Sidebar - Desktop only */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-30 h-full flex flex-col border-r transition-all duration-200',
-          'bg-[var(--color-sidebar-bg)] border-[var(--color-sidebar-border)]',
+          'fixed top-0 left-0 z-30 h-full flex flex-col transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+          'bg-[var(--color-sidebar-bg)] border-r border-[var(--color-sidebar-border)]',
           // Desktop
           'hidden md:flex',
-          isCollapsed ? 'w-[68px]' : 'w-[260px]',
+          isCollapsed ? 'w-[74px]' : 'w-[270px]',
         )}
       >
         {/* Logo area */}
         <div className={cn(
-          'flex items-center h-16 border-b border-[var(--color-sidebar-border)] shrink-0',
-          isCollapsed ? 'justify-center px-2' : 'px-5',
+          'flex items-center h-20 shrink-0 px-5',
+          isCollapsed ? 'justify-center px-2' : 'justify-between',
         )}>
-          <div className="flex items-center gap-2.5 min-w-0">
-            <img src="/logo.png" alt="Hyna Studio Logo" className="w-8 h-8 object-contain shrink-0" />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-white dark:bg-[#181B26] shadow-xs border border-[var(--color-border)] flex items-center justify-center shrink-0">
+              <img src="/logo.png" alt="Hyna Studio Logo" className="w-6 h-6 object-contain" />
+            </div>
             {!isCollapsed && (
               <div className="min-w-0">
-                <h1 className="text-sm font-semibold truncate">Hyna Studio</h1>
-                <p className="text-[10px] text-[var(--color-muted-foreground)] leading-none">Management</p>
+                <h1 className="text-base font-bold tracking-tight text-[var(--color-foreground)] truncate">Hyna Studio</h1>
+                <p className="text-[11px] font-medium text-[var(--color-muted-foreground)] tracking-tight">Superpower Suite</p>
               </div>
             )}
           </div>
           {/* Collapse toggle - desktop */}
-          <button
-            onClick={toggle}
-            className={cn(
-              'hidden md:flex items-center justify-center w-6 h-6 rounded-md ml-auto',
-              'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]',
-              'hover:bg-[var(--color-muted)] transition-colors',
-              isCollapsed && 'ml-0',
-            )}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <ChevronLeft className={cn('w-4 h-4 transition-transform', isCollapsed && 'rotate-180')} />
-          </button>
+          {!isCollapsed && (
+            <button
+              onClick={toggle}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-white dark:hover:bg-[#181B26] border border-transparent hover:border-[var(--color-border)] shadow-2xs transition-all cursor-pointer"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+        {/* Navigation - Floating Pills */}
+        <nav className="flex-1 overflow-y-auto py-2 px-3.5 space-y-1">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
             return (
@@ -150,22 +149,43 @@ export function Sidebar() {
                 onClick={() => setMobileOpen(false)}
                 title={isCollapsed ? item.label : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg text-sm font-medium transition-colors',
-                  isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2.5',
+                  'flex items-center gap-3 rounded-2xl text-xs font-semibold tracking-tight transition-all duration-200 group relative',
+                  isCollapsed ? 'justify-center w-12 h-12 mx-auto' : 'px-4 py-3',
                   isActive
-                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                    : 'text-[var(--color-muted-foreground)] hover:text-blue-500 hover:bg-blue-500/10',
+                    ? 'bg-white dark:bg-[#151821] text-[var(--color-foreground)] shadow-xs border border-black/[0.04] dark:border-white/[0.08]'
+                    : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-white/60 dark:hover:bg-white/[0.04]',
                 )}
               >
-                <item.icon className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
-                {!isCollapsed && <span className="truncate">{item.label}</span>}
+                <item.icon className={cn(
+                  'shrink-0 transition-transform group-hover:scale-105',
+                  isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]',
+                  isActive ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)] group-hover:text-[var(--color-foreground)]'
+                )} />
+                {!isCollapsed && (
+                  <span className="truncate flex-1">{item.label}</span>
+                )}
               </NavLink>
             );
           })}
         </nav>
 
         {/* Bottom section */}
-        <div className="border-t border-[var(--color-sidebar-border)] p-3 space-y-1 shrink-0 pb-16 md:pb-3">
+        <div className="p-3.5 space-y-2 shrink-0 pb-6 border-t border-[var(--color-sidebar-border)]">
+          {/* Pro Pill Banner (Superpower Style from screenshot) */}
+          {!isCollapsed && (
+            <div className="p-3 rounded-2xl bg-white dark:bg-[#151821] border border-[var(--color-border)] shadow-2xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#D4F82C] text-[#11141A]">
+                  PRO
+                </span>
+                <span className="text-[11px] font-semibold text-[var(--color-foreground)] truncate">
+                  Studio Edition
+                </span>
+              </div>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            </div>
+          )}
+
           {bottomItems.map((item) => {
             const itemPath = `${prefix}${item.path}`;
             const isActive = location.pathname === itemPath;
@@ -176,31 +196,30 @@ export function Sidebar() {
                 onClick={() => setMobileOpen(false)}
                 title={isCollapsed ? item.label : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg text-sm font-medium transition-colors',
-                  isCollapsed ? 'justify-center w-11 h-11 mx-auto' : 'px-3 py-2.5',
+                  'flex items-center gap-3 rounded-2xl text-xs font-semibold tracking-tight transition-all duration-200 group',
+                  isCollapsed ? 'justify-center w-12 h-12 mx-auto' : 'px-4 py-2.5',
                   isActive
-                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                    : 'text-[var(--color-muted-foreground)] hover:text-blue-500 hover:bg-blue-500/10',
+                    ? 'bg-white dark:bg-[#151821] text-[var(--color-foreground)] shadow-xs border border-black/[0.04]'
+                    : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-white/60 dark:hover:bg-white/[0.04]',
                 )}
               >
                 <item.icon className={cn('shrink-0', isCollapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]')} />
-                {!isCollapsed && <span>{item.label}</span>}
+                {!isCollapsed && <span className="truncate">{item.label}</span>}
               </NavLink>
             );
           })}
 
-
           {/* User profile */}
           {currentUser && (
             <div className={cn(
-              'flex items-center gap-3 rounded-lg p-2 mt-2',
-              isCollapsed && 'justify-center p-0',
+              'flex items-center gap-3 rounded-2xl p-2 bg-white/80 dark:bg-[#151821]/80 border border-[var(--color-border)] shadow-2xs mt-2',
+              isCollapsed && 'justify-center p-1.5',
             )}>
               <Avatar name={currentUser.name} src={currentUser.avatar} size="sm" />
               {!isCollapsed && (
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{currentUser.name}</p>
-                  <p className="text-xs text-[var(--color-muted-foreground)] truncate">
+                  <p className="text-xs font-bold text-[var(--color-foreground)] truncate">{currentUser.name}</p>
+                  <p className="text-[10px] font-medium text-[var(--color-muted-foreground)] truncate">
                     {currentUser.designation || effectiveRole}
                   </p>
                 </div>
@@ -209,7 +228,6 @@ export function Sidebar() {
           )}
         </div>
       </aside>
-
     </>
   );
 }

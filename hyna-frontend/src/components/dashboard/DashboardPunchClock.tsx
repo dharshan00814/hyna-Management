@@ -236,25 +236,17 @@ export function DashboardPunchClock({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-primary/5 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all mb-6',
-        isClockedIn && 'border-emerald-500/30 bg-gradient-to-r from-card via-emerald-500/[0.04] to-emerald-500/10',
-        isClockedOut && 'border-blue-500/30 bg-gradient-to-r from-card via-blue-500/[0.04] to-blue-500/10',
+        'relative overflow-hidden rounded-[28px] border border-[var(--color-border)] bg-white dark:bg-[#151821] p-5 sm:p-6 shadow-xs hover:shadow-md transition-all mb-6',
+        isClockedIn && 'border-emerald-500/30 ring-1 ring-emerald-500/20',
+        isClockedOut && 'border-blue-500/30',
         className
       )}
     >
-      {/* Ambient decorative glow */}
-      {isClockedIn && (
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
-      )}
-      {isClockedOut && (
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-      )}
-
       {/* Simulation Active Indicator Banner */}
       {simulatedTime && (
-        <div className="mb-3 px-3 py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-700 dark:text-violet-300 text-xs flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Timer className="w-3.5 h-3.5 animate-spin" />
+        <div className="mb-4 px-4 py-2 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-700 dark:text-violet-300 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Timer className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
             <span className="font-semibold">
               Simulation Active: {formattedTime} ({formattedDate})
             </span>
@@ -268,33 +260,28 @@ export function DashboardPunchClock({
         </div>
       )}
 
-      {/* Main Responsive Grid Container:
-          - Mobile / Tablet (< xl): Stacks into 3 neatly aligned rows
-          - Desktop (xl+): 3 cleanly balanced horizontal columns
-      */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      {/* Main Responsive Grid Container */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
         
-        {/* ======================================================== */}
         {/* ROW 1 (Desktop: Left): Live Clock, Status Badge & Date */}
-        {/* ======================================================== */}
-        <div className="flex items-center gap-3.5 shrink-0">
+        <div className="flex items-center gap-4 shrink-0">
           {/* Status Icon */}
           <div
             className={cn(
-              'w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 border shadow-xs transition-colors',
+              'w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-2xs transition-colors',
               isClockedIn
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                 : isClockedOut
                 ? 'bg-blue-500/15 border-blue-500/30 text-blue-600 dark:text-blue-400'
-                : 'bg-primary/10 border-primary/20 text-primary'
+                : 'bg-[var(--color-muted)] border-[var(--color-border)] text-[var(--color-foreground)]'
             )}
           >
             {isClockedIn ? (
-              <Zap className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
+              <Zap className="w-5 h-5 animate-pulse text-emerald-600 dark:text-emerald-400" />
             ) : isClockedOut ? (
-              <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
+              <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             ) : (
-              <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Clock className="w-5 h-5" />
             )}
           </div>
 
@@ -307,14 +294,14 @@ export function DashboardPunchClock({
               <Badge
                 variant="outline"
                 className={cn(
-                  'text-[11px] font-semibold px-2 py-0.5 border flex items-center gap-1.5 shrink-0 whitespace-nowrap',
+                  'text-[11px] font-bold px-2.5 py-0.5 border flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full',
                   isClockedIn
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                     : isClockedOut
                     ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30'
                     : punchInStatus.canPunchIn
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                    : 'bg-muted text-muted-foreground border-border'
+                    ? 'bg-[#D4F82C] text-[#11141A] border-transparent font-bold'
+                    : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)] border-[var(--color-border)]'
                 )}
               >
                 <span
@@ -325,7 +312,7 @@ export function DashboardPunchClock({
                       : isClockedOut
                       ? 'bg-blue-500'
                       : punchInStatus.canPunchIn
-                      ? 'bg-emerald-500 animate-pulse'
+                      ? 'bg-black animate-pulse'
                       : 'bg-muted-foreground'
                   )}
                 />
@@ -336,19 +323,17 @@ export function DashboardPunchClock({
                   : punchInStatus.badgeText}
               </Badge>
             </div>
-            <p className="text-[11px] sm:text-xs text-[var(--color-muted-foreground)] mt-0.5 whitespace-nowrap truncate">
+            <p className="text-[11px] text-[var(--color-muted-foreground)] mt-0.5 whitespace-nowrap truncate font-medium">
               <span>{formattedDate}</span>
-              <span className="mx-1.5 opacity-60">•</span>
+              <span className="mx-1.5 opacity-40">•</span>
               <span>Shift: 9:00 AM – 10:00 PM</span>
             </p>
           </div>
         </div>
 
-        {/* ======================================================== */}
-        {/* ROW 2 (Desktop: Middle): 3-Column Metrics Matrix        */}
-        {/* ======================================================== */}
-        <div className="w-full xl:w-auto xl:min-w-[380px] 2xl:min-w-[430px] rounded-xl bg-background/70 dark:bg-background/40 border border-border/60 p-2 sm:p-2.5 shadow-xs">
-          <div className="grid grid-cols-3 divide-x divide-border/60 text-center items-center">
+        {/* ROW 2 (Desktop: Middle): 3-Column Metrics Matrix */}
+        <div className="w-full xl:w-auto xl:min-w-[380px] 2xl:min-w-[430px] rounded-2xl bg-[var(--color-muted)]/60 border border-[var(--color-border)]/60 p-2.5 shadow-2xs">
+          <div className="grid grid-cols-3 divide-x divide-[var(--color-border)] text-center items-center">
             {isClockedIn ? (
               <>
                 <div className="px-1.5 sm:px-3">

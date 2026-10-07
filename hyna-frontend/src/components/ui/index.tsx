@@ -3,6 +3,9 @@ import {
   TrendingUp, TrendingDown, Users, FolderKanban, CheckSquare, CalendarClock,
   Clock, Loader2, AlertCircle, Inbox, X, type LucideIcon,
 } from 'lucide-react';
+import { DotMatrixNumber } from './DotMatrixNumber';
+
+export { DotMatrixNumber };
 
 // ============================================================
 // StatCard
@@ -11,34 +14,70 @@ interface StatCardProps {
   label: string;
   value: string | number;
   change?: number;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   iconColor?: string;
   className?: string;
+  useDotMatrix?: boolean;
+  dotMatrixSize?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  badge?: string;
+  badgeVariant?: 'neon' | 'neutral' | 'emerald' | 'rose';
 }
 
-export function StatCard({ label, value, change, icon: Icon, iconColor = 'text-[var(--color-primary)]', className }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  change,
+  icon: Icon,
+  iconColor = 'text-[var(--color-primary)]',
+  className,
+  useDotMatrix = false,
+  dotMatrixSize = 'md',
+  badge,
+  badgeVariant = 'neon',
+}: StatCardProps) {
   return (
-    <div className={cn('card p-5 animate-slide-up transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-blue-500/10', className)}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-[var(--color-muted-foreground)] font-medium">{label}</p>
-          <p className="text-2xl sm:text-3xl font-semibold mt-1 tracking-tight">{value}</p>
+    <div className={cn('card p-5 sm:p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-md relative overflow-hidden group', className)}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <p className="text-xs sm:text-sm text-[var(--color-muted-foreground)] font-medium tracking-tight">{label}</p>
+            {badge && (
+              <span className={cn(
+                'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                badgeVariant === 'neon' ? 'bg-[#D4F82C] text-[#11141A]' :
+                badgeVariant === 'emerald' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
+                badgeVariant === 'rose' ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' :
+                'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+              )}>
+                {badge}
+              </span>
+            )}
+          </div>
+          {useDotMatrix && typeof value === 'number' || (typeof value === 'string' && /^[0-9:+%.-]+$/.test(value)) ? (
+            <div className="mt-2 text-[var(--color-foreground)]">
+              <DotMatrixNumber value={value} size={dotMatrixSize} />
+            </div>
+          ) : (
+            <p className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-foreground)] mt-1">{value}</p>
+          )}
         </div>
-        <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--color-muted)]', iconColor)}>
-          <Icon className="w-5 h-5" />
-        </div>
+        {Icon && (
+          <div className={cn('w-10 h-10 rounded-2xl flex items-center justify-center bg-[var(--color-muted)] shrink-0 transition-transform group-hover:scale-105', iconColor)}>
+            <Icon className="w-5 h-5" />
+          </div>
+        )}
       </div>
       {change !== undefined && (
-        <div className="flex items-center gap-1 mt-3">
+        <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[var(--color-border)]/50">
           {change >= 0 ? (
             <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
           ) : (
-            <TrendingDown className="w-3.5 h-3.5 text-[#FF0000]" />
+            <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
           )}
-          <span className={cn('text-xs font-medium', change >= 0 ? 'text-emerald-500' : 'text-[#FF0000]')}>
+          <span className={cn('text-xs font-semibold', change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
             {change >= 0 ? '+' : ''}{change}%
           </span>
-          <span className="text-xs text-[var(--color-muted-foreground)]">vs last month</span>
+          <span className="text-[11px] text-[var(--color-muted-foreground)]">vs last period</span>
         </div>
       )}
     </div>
@@ -218,30 +257,31 @@ export function ErrorState({ message = 'Something went wrong', onRetry }: ErrorS
 // Button
 // ============================================================
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'neon';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
 }
 
 export function Button({ variant = 'primary', size = 'md', isLoading, className, children, disabled, ...props }: ButtonProps) {
   const variants = {
-    primary: 'bg-[var(--color-primary)] text-white hover:opacity-90 shadow-sm',
-    secondary: 'bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-muted)]',
-    outline: 'border border-[var(--color-border)] bg-transparent hover:bg-[var(--color-muted)]',
-    ghost: 'bg-transparent hover:bg-[var(--color-muted)]',
-    destructive: 'bg-red-500 text-white hover:bg-red-600',
+    primary: 'bg-[#11141A] text-white hover:bg-black active:scale-[0.98] shadow-xs dark:bg-white dark:text-[#11141A] dark:hover:bg-slate-100',
+    secondary: 'bg-[var(--color-secondary)] text-[var(--color-secondary-foreground)] hover:bg-[var(--color-muted)] active:scale-[0.98]',
+    outline: 'border border-[var(--color-border)] bg-white dark:bg-[#151821] text-[var(--color-foreground)] hover:bg-[var(--color-muted)] active:scale-[0.98] shadow-xs',
+    ghost: 'bg-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)]',
+    destructive: 'bg-rose-600 text-white hover:bg-rose-700 active:scale-[0.98]',
+    neon: 'bg-[#D4F82C] text-[#11141A] font-bold hover:brightness-105 active:scale-[0.98] shadow-xs',
   };
 
   const sizes = {
-    sm: 'h-8 px-3 text-xs',
-    md: 'h-9 px-4 text-sm',
-    lg: 'h-11 px-6 text-sm',
+    sm: 'h-8 px-3.5 text-xs rounded-full',
+    md: 'h-10 px-5 text-sm rounded-full',
+    lg: 'h-12 px-7 text-base rounded-full',
   };
 
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex items-center justify-center gap-2 font-semibold tracking-tight transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer',
         variants[variant],
         sizes[size],
         className,
@@ -267,22 +307,20 @@ export function Input({ label, error, className, id, ...props }: InputProps) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
   return (
     <div className="space-y-1.5">
-      {label && <label htmlFor={inputId} className="text-sm font-medium">{label}</label>}
+      {label && <label htmlFor={inputId} className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider">{label}</label>}
       <input
         id={inputId}
         className={cn(
-          'w-full h-9 px-3 rounded-lg border border-[var(--color-input)] bg-transparent text-sm',
-          'placeholder:text-[var(--color-muted-foreground)]',
-          'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-1',
+          'w-full h-10 px-4 rounded-2xl border border-[var(--color-input)] bg-[var(--color-card)] text-sm text-[var(--color-foreground)]',
+          'placeholder:text-[var(--color-muted-foreground)]/70',
+          'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent transition-all',
           'disabled:opacity-50',
-          'dark:[color-scheme:dark]',
-          '[&::-webkit-calendar-picker-indicator]:dark:invert',
-          error && 'border-red-500 focus:ring-red-500',
+          error && 'border-rose-500 focus:ring-rose-500',
           className,
         )}
         {...props}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-rose-500">{error}</p>}
     </div>
   );
 }
@@ -299,20 +337,20 @@ export function Textarea({ label, error, className, id, ...props }: TextareaProp
   const textareaId = id || label?.toLowerCase().replace(/\s+/g, '-');
   return (
     <div className="space-y-1.5">
-      {label && <label htmlFor={textareaId} className="text-sm font-medium">{label}</label>}
+      {label && <label htmlFor={textareaId} className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider">{label}</label>}
       <textarea
         id={textareaId}
         className={cn(
-          'w-full px-3 py-2 rounded-lg border border-[var(--color-input)] bg-transparent text-sm',
-          'placeholder:text-[var(--color-muted-foreground)]',
-          'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-1',
+          'w-full px-4 py-3 rounded-2xl border border-[var(--color-input)] bg-[var(--color-card)] text-sm text-[var(--color-foreground)]',
+          'placeholder:text-[var(--color-muted-foreground)]/70',
+          'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent transition-all',
           'disabled:opacity-50 resize-none',
-          error && 'border-red-500 focus:ring-red-500',
+          error && 'border-rose-500 focus:ring-rose-500',
           className,
         )}
         {...props}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-rose-500">{error}</p>}
     </div>
   );
 }
@@ -336,14 +374,14 @@ export function Select({ label, options, error, className, id, onChange, ...prop
   const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
   return (
     <div className="space-y-1.5">
-      {label && <label htmlFor={selectId} className="text-sm font-medium">{label}</label>}
+      {label && <label htmlFor={selectId} className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider">{label}</label>}
       <select
         id={selectId}
         className={cn(
-          'w-full h-9 px-3 rounded-lg border border-[var(--color-input)] bg-[var(--color-background)] text-sm',
-          'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-1',
+          'w-full h-10 px-4 rounded-2xl border border-[var(--color-input)] bg-[var(--color-card)] text-sm text-[var(--color-foreground)]',
+          'focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:border-transparent transition-all',
           'disabled:opacity-50',
-          error && 'border-red-500 focus:ring-red-500',
+          error && 'border-rose-500 focus:ring-rose-500',
           className,
         )}
         onChange={(e) => onChange?.(e.target.value)}
@@ -353,7 +391,7 @@ export function Select({ label, options, error, className, id, onChange, ...prop
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-rose-500">{error}</p>}
     </div>
   );
 }
@@ -384,25 +422,25 @@ export function Modal({ isOpen, open, onClose, title, children, size = 'md', foo
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="fixed inset-0 bg-black/50 animate-fade-in" />
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-xs animate-fade-in" />
       <div
-        className={cn('relative w-full card rounded-xl shadow-xl animate-scale-in overflow-hidden', sizes[size])}
+        className={cn('relative w-full card rounded-[28px] shadow-2xl animate-scale-in overflow-hidden border border-[var(--color-border)]', sizes[size])}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="text-lg font-bold tracking-tight">{title}</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--color-muted)] transition-colors text-[var(--color-muted-foreground)]"
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--color-muted)] transition-colors text-[var(--color-muted-foreground)] cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="px-6 py-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+        <div className="px-6 py-5 max-h-[calc(100vh-200px)] overflow-y-auto">
           {children}
         </div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)]">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-muted)]/30">
             {footer}
           </div>
         )}
@@ -423,23 +461,23 @@ interface TabsProps {
 
 export function Tabs({ tabs, value, onChange, className }: TabsProps) {
   return (
-    <div className={cn('flex gap-1 p-1 rounded-lg bg-[var(--color-muted)]', className)}>
+    <div className={cn('flex gap-1.5 p-1.5 rounded-full bg-[var(--color-muted)] border border-[var(--color-border)]/60', className)}>
       {tabs.map(tab => (
         <button
           key={tab.value}
           onClick={() => onChange(tab.value)}
           className={cn(
-            'px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+            'px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer',
             value === tab.value
-              ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm'
+              ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-xs'
               : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]',
           )}
         >
           {tab.label}
           {tab.count !== undefined && (
             <span className={cn(
-              'ml-1.5 text-xs',
-              value === tab.value ? 'text-[var(--color-muted-foreground)]' : 'text-[var(--color-muted-foreground)]',
+              'ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]',
+              value === tab.value ? 'bg-[var(--color-muted)] text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]',
             )}>
               {tab.count}
             </span>
@@ -449,3 +487,5 @@ export function Tabs({ tabs, value, onChange, className }: TabsProps) {
     </div>
   );
 }
+
+

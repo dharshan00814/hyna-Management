@@ -9,77 +9,65 @@
 
 /* ---- CSS Custom Properties ---- */
 :root {
-  /* Semantic colors (Permanent Claymorphic Obsidian Dark Theme) */
-  --color-background: #0d0f15;
-  --color-foreground: #FFFFFF;
-  --color-card: #141620;
-  --color-card-foreground: #FFFFFF;
-  --color-popover: #141620;
-  --color-popover-foreground: #FFFFFF;
-  --color-primary: #2041F0;
+  /* Superpower Light Theme (Warm minimal soft grey + crisp white cards + neon accents) */
+  --color-background: #EBEDF1;
+  --color-foreground: #11141A;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #11141A;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #11141A;
+  --color-primary: #11141A;
   --color-primary-foreground: #FFFFFF;
-  --color-secondary: #0c102a;
-  --color-secondary-foreground: #FFFFFF;
-  --color-muted: #181b26;
-  --color-muted-foreground: #9da3b4;
-  --color-accent-bg: #181b26;
-  --color-accent-fg: #FFFFFF;
-  --color-destructive: #FF0000;
+  --color-secondary: #F2F4F8;
+  --color-secondary-foreground: #11141A;
+  --color-muted: #F1F3F7;
+  --color-muted-foreground: #717B8A;
+  --color-accent-bg: #D4F82C;
+  --color-accent-fg: #11141A;
+  --color-destructive: #EF4444;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-input: #10121a;
-  --color-ring: #7B8DF8;
-  --color-sidebar-bg: #0c0e14;
-  --color-sidebar-border: rgba(255, 255, 255, 0.07);
+  --color-border: rgba(0, 0, 0, 0.07);
+  --color-input: #E5E8EF;
+  --color-ring: #11141A;
+  --color-sidebar-bg: #EBEDF1;
+  --color-sidebar-border: rgba(0, 0, 0, 0.06);
   
-  /* Radii (Claymorphic smooth rounded curves) */
-  --radius: 0.75rem;
-  --radius-sm: 0.5rem;
-  --radius-lg: 1.25rem;
-  --radius-xl: 1.5rem;
+  /* Radii (Superpower soft organic pills & curves) */
+  --radius: 1rem;
+  --radius-sm: 0.75rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
   
-  /* Shadows */
-  --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.4);
-  --shadow: 0 4px 8px 0 rgb(0 0 0 / 0.5);
-  --shadow-md: 0 8px 16px -2px rgb(0 0 0 / 0.6);
-  --shadow-lg: 0 16px 32px -4px rgb(0 0 0 / 0.7);
+  /* Superpower Soft Ambient Shadows */
+  --shadow-sm: 0 2px 6px 0 rgba(0, 0, 0, 0.03);
+  --shadow: 0 6px 18px -2px rgba(0, 0, 0, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 12px 28px -4px rgba(0, 0, 0, 0.05), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 20px 40px -6px rgba(0, 0, 0, 0.06), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
 }
 
 .dark {
-  /* Semantic colors (New Design System) - Dark */
-  --color-background: #0d0f15;
-  --color-foreground: #FFFFFF;
-  --color-card: #141620;
-  --color-card-foreground: #FFFFFF;
-  --color-popover: #141620;
-  --color-popover-foreground: #FFFFFF;
-  --color-primary: #2041F0;
-  --color-primary-foreground: #FFFFFF;
-  --color-secondary: #0c102a;
-  --color-secondary-foreground: #FFFFFF;
-  --color-muted: #181b26;
-  --color-muted-foreground: #9da3b4;
-  --color-accent-bg: #181b26;
-  --color-accent-fg: #FFFFFF;
-  --color-destructive: #FF0000;
+  /* Matching Superpower Sleek Obsidian Dark */
+  --color-background: #0E1015;
+  --color-foreground: #F8FAFC;
+  --color-card: #151821;
+  --color-card-foreground: #F8FAFC;
+  --color-popover: #151821;
+  --color-popover-foreground: #F8FAFC;
+  --color-primary: #FFFFFF;
+  --color-primary-foreground: #0E1015;
+  --color-secondary: #1C202C;
+  --color-secondary-foreground: #F8FAFC;
+  --color-muted: #1A1E29;
+  --color-muted-foreground: #8B95A5;
+  --color-accent-bg: #D4F82C;
+  --color-accent-fg: #0E1015;
+  --color-destructive: #EF4444;
   --color-destructive-foreground: #FFFFFF;
   --color-border: rgba(255, 255, 255, 0.08);
-  --color-input: #10121a;
-  --color-ring: #7B8DF8;
-  --color-sidebar-bg: #0c0e14;
+  --color-input: #202534;
+  --color-ring: #D4F82C;
+  --color-sidebar-bg: #0E1015;
   --color-sidebar-border: rgba(255, 255, 255, 0.07);
-  
-  /* Radii */
-  --radius: 0.75rem;
-  --radius-sm: 0.5rem;
-  --radius-lg: 1.25rem;
-  --radius-xl: 1.5rem;
-  
-  /* Shadows */
-  --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.4);
-  --shadow: 0 4px 8px 0 rgb(0 0 0 / 0.5);
-  --shadow-md: 0 8px 16px -2px rgb(0 0 0 / 0.6);
-  --shadow-lg: 0 16px 32px -4px rgb(0 0 0 / 0.7);
 }
 
 /* ---- Base styles ---- */
@@ -90,6 +78,7 @@
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  background-color: var(--color-background);
 }
 
 body {
@@ -103,8 +92,8 @@ body {
 
 /* ---- Scrollbar ---- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -112,8 +101,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -147,7 +140,7 @@ body {
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -156,11 +149,11 @@ body {
   50% { opacity: 0.6; }
 }
 
-.animate-fade-in { animation: fade-in 0.2s ease-out; }
-.animate-slide-up { animation: slide-up 0.3s ease-out; }
-.animate-slide-down { animation: slide-down 0.3s ease-out; }
-.animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
-.animate-scale-in { animation: scale-in 0.2s ease-out; }
+.animate-fade-in { animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-up { animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-down { animation: slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-in-right { animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-scale-in { animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
 
 /* Staggered animation helper */
@@ -172,12 +165,12 @@ body {
 
 /* ---- Transition utilities ---- */
 .transition-default {
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ---- Page layout ---- */
 .page-container {
-  @apply px-4 py-6 sm:px-6 lg:px-8 max-w-[1600px] mx-auto;
+  @apply px-4 py-6 sm:px-8 lg:px-10 max-w-[1680px] mx-auto;
 }
 
 .page-header {
@@ -185,84 +178,85 @@ body {
 }
 
 .page-title {
-  @apply text-2xl sm:text-3xl font-semibold tracking-tight;
+  @apply text-2xl sm:text-4xl font-semibold tracking-tight text-[var(--color-foreground)];
 }
 
 .page-description {
-  @apply text-sm sm:text-base text-[var(--color-muted-foreground)] mt-1;
+  @apply text-sm sm:text-base text-[var(--color-muted-foreground)] mt-1 font-normal;
 }
 
-/* ---- Full Claymorphism Card & Surface System ---- */
-.card, [class*="bg-[var(--color-card)]"], .clay-card {
-  background: #141620;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
+/* ---- Superpower Minimal Pill Cards & Surfaces ---- */
+.card, [class*="bg-[var(--color-card)]"], .superpower-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
   box-shadow: 
-    inset 2.5px 2.5px 6px rgba(255, 255, 255, 0.08),
-    inset 1px 1px 2px rgba(255, 255, 255, 0.12),
-    inset -5px -5px 12px rgba(0, 0, 0, 0.75),
-    inset -2px -2px 4px rgba(0, 0, 0, 0.9),
-    0 16px 36px -8px rgba(0, 0, 0, 0.75),
-    0 4px 12px rgba(0, 0, 0, 0.45);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    0 10px 30px -4px rgba(0, 0, 0, 0.04),
+    0 2px 8px -2px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .card:hover, .card-hover:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.14);
   box-shadow: 
-    inset 2.5px 2.5px 7px rgba(255, 255, 255, 0.1),
-    inset 1px 1px 2px rgba(255, 255, 255, 0.15),
-    inset -5px -5px 12px rgba(0, 0, 0, 0.75),
-    0 22px 45px -8px rgba(0, 0, 0, 0.85),
-    0 6px 16px rgba(0, 0, 0, 0.5);
+    0 16px 36px -6px rgba(0, 0, 0, 0.06),
+    0 4px 12px -2px rgba(0, 0, 0, 0.03);
 }
 
-/* Clay Tiles & Sub-boxes */
-.clay-tile {
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 
-    inset 2px 2px 4px rgba(255, 255, 255, 0.08),
-    inset -3px -3px 6px rgba(0, 0, 0, 0.65),
-    0 6px 14px rgba(0, 0, 0, 0.35);
-  transition: all 0.2s ease;
-}
-
-/* Clay Inset / Sunken Slots */
-.clay-sunken {
-  background: #0d0f15;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  box-shadow: 
-    inset 3px 3px 6px rgba(0, 0, 0, 0.75),
-    inset -2px -2px 4px rgba(255, 255, 255, 0.04);
-}
-
-/* Clay 3D Buttons & Pills */
-.clay-btn {
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 
-    inset 2px 2px 4px rgba(255, 255, 255, 0.2),
-    inset -3px -3px 6px rgba(0, 0, 0, 0.6),
-    0 8px 18px -4px rgba(0, 0, 0, 0.45);
+/* Superpower Pill Tile */
+.superpower-pill {
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.clay-btn:hover {
-  transform: translateY(-1.5px);
-  filter: brightness(1.05);
-}
-.clay-btn:active {
-  transform: translateY(1px);
-  box-shadow: 
-    inset 3px 3px 6px rgba(0, 0, 0, 0.5),
-    inset -1px -1px 2px rgba(255, 255, 255, 0.15);
+
+.dark .superpower-pill {
+  background: #191D28;
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* ---- Badge variants ---- */
+/* Neon Chartreuse Accent Pill */
+.badge-neon, .bg-neon {
+  background-color: #D4F82C !important;
+  color: #11141A !important;
+  font-weight: 700 !important;
+}
+
+/* Superpower Mesh & Aura Hero Bento Gradients */
+.aura-green-amber {
+  background: radial-gradient(circle at 50% 18%, #F7C04A 0%, #44AD5E 48%, #1B6F39 100%);
+  color: #FFFFFF;
+  border-radius: 30px;
+  position: relative;
+  overflow: hidden;
+}
+
+.aura-orange-lilac {
+  background: radial-gradient(circle at 50% 32%, #FF7F50 0%, #FF9970 32%, #9DAAC9 85%, #8B9BBC 100%);
+  color: #FFFFFF;
+  border-radius: 30px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 3D Glass Orb Tokens */
+.glass-orb-green {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8) 0%, rgba(85, 208, 120, 0.85) 35%, rgba(27, 111, 57, 0.95) 85%);
+  box-shadow: 0 10px 24px rgba(40, 167, 69, 0.4), inset 0 2px 6px rgba(255, 255, 255, 0.8);
+  border-radius: 9999px;
+}
+
+.glass-orb-blue {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.85) 0%, rgba(98, 172, 255, 0.85) 35%, rgba(30, 84, 180, 0.95) 85%);
+  box-shadow: 0 10px 24px rgba(45, 125, 246, 0.4), inset 0 2px 6px rgba(255, 255, 255, 0.8);
+  border-radius: 9999px;
+}
+
+/* Badge variants */
 .badge {
-  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium tracking-tight;
 }
 
 /* ---- Mobile bottom nav ---- */

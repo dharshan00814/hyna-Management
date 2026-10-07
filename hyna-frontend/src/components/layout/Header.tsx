@@ -113,29 +113,29 @@ export function Header() {
 
 
   return (
-    <header className="sticky top-0 z-30 flex items-center h-16 px-4 sm:px-6 border-b border-[var(--color-border)] bg-[var(--color-background)]/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-30 flex items-center h-20 px-5 sm:px-8 border-b border-[var(--color-border)]/60 bg-[var(--color-background)]/90 backdrop-blur-md">
       {/* Mobile menu button */}
       <button
         onClick={toggleMobile}
-        className="flex md:hidden items-center justify-center w-9 h-9 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] mr-2 transition-colors cursor-pointer"
+        className="flex md:hidden items-center justify-center w-10 h-10 rounded-full text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-white dark:hover:bg-[#151821] shadow-2xs mr-2 transition-colors cursor-pointer border border-[var(--color-border)]"
         aria-label="Toggle menu"
       >
         <Menu className="w-5 h-5" />
       </button>
 
-      {/* Search bar */}
+      {/* Search bar - Floating Pill */}
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
         className={cn(
-          'hidden sm:flex items-center gap-2 h-9 px-3 rounded-lg border border-[var(--color-border)]',
-          'text-[var(--color-muted-foreground)] text-sm bg-[var(--color-muted)]/50',
-          'hover:bg-[var(--color-muted)] transition-colors cursor-pointer',
-          'w-64 lg:w-80',
+          'hidden sm:flex items-center gap-2.5 h-10 px-4 rounded-full border border-[var(--color-border)]',
+          'text-[var(--color-muted-foreground)] text-xs font-medium bg-white dark:bg-[#151821]',
+          'hover:border-black/20 hover:shadow-xs transition-all cursor-pointer',
+          'w-64 lg:w-80 shadow-2xs',
         )}
       >
-        <Search className="w-4 h-4 shrink-0" />
-        <span className="flex-1 text-left">Search Hyna Studio...</span>
-        <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-background)] border border-[var(--color-border)]">
+        <Search className="w-4 h-4 shrink-0 text-[var(--color-muted-foreground)]" />
+        <span className="flex-1 text-left">Search anything...</span>
+        <kbd className="hidden lg:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
           ⌘K
         </kbd>
       </button>
@@ -143,23 +143,23 @@ export function Header() {
       {/* Mobile search */}
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
-        className="flex sm:hidden items-center justify-center w-9 h-9 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors"
+        className="flex sm:hidden items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-[#151821] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors shadow-2xs"
         aria-label="Search"
       >
-        <Search className="w-5 h-5" />
+        <Search className="w-4 h-4" />
       </button>
 
       <div className="flex-1" />
 
-      {/* Role switcher (dev mode) */}
+      {/* Role Pill */}
       {currentUser && (
-        <div className="hidden sm:flex items-center gap-2 mr-2 px-2.5 py-1 rounded-lg bg-[var(--color-muted)] text-xs">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span className="font-medium text-[var(--color-foreground)]">{currentUser.designation || currentRole}</span>
+        <div className="hidden sm:flex items-center gap-2 mr-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-[#151821] border border-[var(--color-border)] text-xs font-semibold shadow-2xs">
+          <span className="w-2 h-2 rounded-full bg-[#D4F82C]" />
+          <span className="text-[var(--color-foreground)]">{currentUser.designation || currentRole}</span>
         </div>
       )}
 
-      {/* Attendance Quick Indicator */}
+      {/* Attendance Quick Indicator Pill */}
       {currentUser && (
         <button
           onClick={() => {
@@ -167,58 +167,55 @@ export function Header() {
             navigate(`${prefix}/attendance`);
           }}
           className={cn(
-            'hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold mr-2 transition-all border cursor-pointer',
+            'hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold mr-2.5 transition-all border shadow-2xs cursor-pointer',
             todayAttendance?.checkIn && !todayAttendance?.checkOut
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
               : todayAttendance?.checkOut
-              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
-              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+              ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 hover:bg-blue-500/20'
+              : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
           )}
           title="Open Attendance"
         >
           {todayAttendance?.checkIn && !todayAttendance?.checkOut ? (
             <>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>In: {todayAttendance.checkIn}</span>
+              <span>Shift: {todayAttendance.checkIn}</span>
             </>
           ) : todayAttendance?.checkOut ? (
             <>
               <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
-              <span>{todayAttendance.workingHours || 'Shift Done'}</span>
+              <span>{todayAttendance.workingHours || 'Shift Logged'}</span>
             </>
           ) : (
             <>
               <Clock className="w-3.5 h-3.5 text-amber-500" />
-              <span>Clock In</span>
+              <span>Punch In</span>
             </>
           )}
         </button>
       )}
 
-
-
-
-      {/* Notifications */}
+      {/* Notifications Floating Button */}
       <div ref={notifRef} className="relative">
         <button
           onClick={() => { setShowNotifications(!showNotifications); setShowProfile(false); }}
-          className="flex items-center justify-center w-9 h-9 rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-muted)] transition-colors relative"
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-[#151821] border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:shadow-xs transition-all shadow-2xs relative cursor-pointer"
           aria-label="Notifications"
         >
-          <Bell className="w-[18px] h-[18px]" />
+          <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500" />
           )}
         </button>
 
         {showNotifications && (
-          <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 card rounded-xl shadow-lg animate-scale-in overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-              <h3 className="text-sm font-semibold">Notifications</h3>
+          <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 card rounded-[26px] shadow-xl animate-scale-in overflow-hidden border border-[var(--color-border)]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+              <h3 className="text-sm font-bold">Notifications</h3>
               {unreadCount > 0 && (
                 <span 
                   onClick={handleMarkAllRead}
-                  className="text-xs text-[var(--color-primary)] font-medium cursor-pointer hover:underline"
+                  className="text-xs font-semibold text-[var(--color-primary)] hover:underline cursor-pointer"
                 >
                   Mark all read
                 </span>

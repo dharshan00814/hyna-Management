@@ -41,7 +41,7 @@ export function AppLayout() {
           "relative z-20 flex-1 flex flex-col min-w-0 h-full bg-[var(--color-background)]",
           // Desktop sizing and positioning
           "md:static md:transform-none md:scale-100 md:rounded-none md:shadow-none md:border-0",
-          isCollapsed ? "md:ml-[68px]" : "md:ml-[260px]",
+          isCollapsed ? "md:ml-[74px]" : "md:ml-[270px]",
           // Mobile 3D Zoom Card Animation
           "transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left",
           isMobileOpen && [
