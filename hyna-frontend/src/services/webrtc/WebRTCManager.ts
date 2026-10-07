@@ -281,13 +281,14 @@ export class WebRTCManager {
 
     console.log(`[H-MEET] Answer received from ${peerId}. signalingState=${pc.signalingState}`);
 
-    if (pc.signalingState === 'have-local-offer' && answer.type === 'answer') {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log(`[H-MEET] Remote description set from answer for ${peerId}`);
-      await this.processPendingCandidates(peerId);
-    } else {
-      console.warn(`[H-MEET] Ignored answer from ${peerId} (signalingState: ${pc.signalingState}, answerType: ${answer.type})`);
+    if (pc.signalingState !== "have-local-offer") {
+      console.warn(`[H-MEET] Ignoring stale answer; signalingState=${pc.signalingState}`);
+      return;
     }
+    
+    await pc.setRemoteDescription(answer);
+    console.log(`[H-MEET] Remote description set from answer for ${peerId}`);
+    await this.processPendingCandidates(peerId);
   }
 
   // Add an ICE candidate received from a remote peer

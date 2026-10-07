@@ -29,6 +29,7 @@ const LeavePage = lazy(() => import('./pages/leave/LeavePage').then(m => ({ defa
 const PayrollPage = lazy(() => import('./pages/payroll/PayrollPage').then(m => ({ default: m.PayrollPage })));
 const AnnouncementsPage = lazy(() => import('./pages/announcements/AnnouncementsPage').then(m => ({ default: m.AnnouncementsPage })));
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const InternshipDashboard = lazy(() => import('./pages/internship/InternshipDashboard').then(m => ({ default: m.InternshipDashboard })));
 
 const AdminActivityPage = lazy(() => import('./pages/activity').then(m => ({ default: m.AdminActivityPage })));
 const ManagerActivityPage = lazy(() => import('./pages/activity').then(m => ({ default: m.ManagerActivityPage })));
@@ -170,6 +171,7 @@ function App() {
               <Route path="/admin/leave" element={<LeavePage />} />
               <Route path="/admin/payroll" element={<PayrollPage />} />
               <Route path="/admin/announcements" element={<AnnouncementsPage />} />
+              <Route path="/admin/internship" element={<InternshipDashboard />} />
               <Route path="/admin/settings" element={<SettingsPage />} />
               <Route path="/admin/settings/integrations" element={<ConnectIntegrationsPage />} />
               <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
@@ -189,6 +191,7 @@ function App() {
               <Route path="/manager/leave" element={<LeavePage />} />
               <Route path="/manager/payroll" element={<PayrollPage />} />
               <Route path="/manager/announcements" element={<AnnouncementsPage />} />
+              <Route path="/manager/internship" element={<InternshipDashboard />} />
               <Route path="/manager/settings" element={<SettingsPage />} />
               <Route path="/manager/settings/integrations" element={<ConnectIntegrationsPage />} />
               <Route path="/manager/privacy/tracking" element={<PrivacyTrackingPage />} />

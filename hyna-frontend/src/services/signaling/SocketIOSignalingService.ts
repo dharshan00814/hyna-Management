@@ -56,16 +56,15 @@ export class SocketIOSignalingService {
 
   constructor(callbacks: SocketIOSignalingCallbacks, serverUrlOverride?: string) {
     this.callbacks = callbacks;
-    const envUrl = import.meta.env.VITE_WEBRTC_SERVER_URL;
+    const envUrl = import.meta.env.VITE_SIGNALING_SERVER_URL;
     if (serverUrlOverride) {
       this.serverUrl = serverUrlOverride;
     } else if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
       this.serverUrl = envUrl.trim();
-    } else if (typeof window !== 'undefined') {
-      this.serverUrl = `${window.location.protocol}//${window.location.hostname}:5050`;
     } else {
-      this.serverUrl = 'http://localhost:5050';
+      this.serverUrl = 'https://hyna-webrtc-server.onrender.com';
     }
+    console.log(`[H-MEET] Signaling URL: ${this.serverUrl}`);
   }
 
   public async connect({
@@ -104,20 +103,20 @@ export class SocketIOSignalingService {
       }, 10000);
 
       try {
+        console.log(`[H-MEET] Connecting to signaling server...`);
         const socket = io(this.serverUrl, {
-          path: '/socket.io/',
-          transports: ['websocket', 'polling'],
+          transports: ["websocket", "polling"],
+          withCredentials: true,
+          timeout: 10000,
           reconnection: true,
           reconnectionAttempts: 10,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
-          timeout: 10000,
+          reconnectionDelay: 1000
         });
 
         this.socket = socket;
 
         socket.on('connect', () => {
-          console.log('[H-MEET] Signaling server connected. Socket ID:', socket.id);
+          console.log('[H-MEET] Socket.IO connected. Socket ID:', socket.id);
           this.callbacks.onSignalingConnectionStateChange('connected');
 
           // Join the room upon every (re)connect
@@ -194,14 +193,14 @@ export class SocketIOSignalingService {
         socket.on('connect_error', (err) => {
           // Do NOT reject here — Socket.IO will retry automatically.
           // Do NOT change overallConnectionState here — that must only be driven by WebRTC state.
-          console.warn('[H-MEET] Signaling connect_error (will retry):', err.message);
+          console.warn('[H-MEET] Socket.IO connect_error:', err.message);
           this.callbacks.onSignalingConnectionStateChange('reconnecting');
           // If we've never successfully joined a room yet, this counts as a fatal initial failure
           // only after the outer timeout fires.
         });
 
         socket.on('disconnect', (reason) => {
-          console.log('[H-MEET] Signaling disconnected:', reason);
+          console.log('[H-MEET] Socket.IO disconnected:', reason);
           // Do NOT propagate 'disconnected' to the overall meeting connection state —
           // that state must only reflect WebRTC peer connection state.
           this.callbacks.onSignalingConnectionStateChange('disconnected');

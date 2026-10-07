@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderKanban, CheckSquare, Users, CalendarClock,
   Video, BarChart3, MessageCircle, FolderOpen, Settings, ChevronLeft,
   CalendarOff, Megaphone, X, Hexagon, Activity, ShieldCheck, Radio, Laptop,
-  CreditCard
+  CreditCard, GraduationCap
 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import { useSidebarStore, useAuthStore, isExecutiveLeadership } from '@/stores';
@@ -59,6 +59,7 @@ const getNavItems = (prefix: string, role: string, isExec: boolean): NavItem[] =
     { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
     { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
     { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Internship', icon: GraduationCap, path: `${prefix}/internship`, roles: ['admin', 'manager'] },
   );
 
 

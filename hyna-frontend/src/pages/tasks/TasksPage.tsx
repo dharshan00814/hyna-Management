@@ -73,14 +73,14 @@ export function TasksPage() {
         getUsers(),
         getModules(),
       ]);
-      setTasks(fetchedTasks);
-      setProjects(fetchedProjects);
-      setUsers(fetchedUsers);
-      setModules(fetchedModules);
+      setTasks(fetchedTasks || []);
+      setProjects(fetchedProjects || []);
+      setUsers(fetchedUsers || []);
+      setModules(fetchedModules || []);
 
-      if (fetchedProjects.length > 0) {
+      if (fetchedProjects && fetchedProjects.length > 0) {
         const firstProj = fetchedProjects[0];
-        const firstProjMods = fetchedModules.filter(m => m.projectId === firstProj.id);
+        const firstProjMods = (fetchedModules || []).filter(m => m.projectId === firstProj.id);
         const soloMemberId = firstProj.projectType === 'solo' ? (firstProj.managerId || firstProj.memberIds?.[0]) : '';
         const firstModAssignee = firstProjMods[0]?.assigneeIds?.[0];
 
@@ -233,7 +233,7 @@ export function TasksPage() {
     : tasks.filter(t => t.assigneeId === currentUser?.id);
 
   const filtered = allTasks.filter(t => {
-    const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (t.title || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchesPriority = priorityFilter === 'all' || t.priority === priorityFilter;
     const matchesProject = projectFilter === 'all' || t.projectId === projectFilter;
@@ -718,7 +718,7 @@ export function TasksPage() {
                 if (!selectedProject) return null;
                 // Get all users associated with the project
                 const projectMembers = users.filter(u => 
-                  selectedProject.memberIds.includes(u.id) || 
+                  (selectedProject.memberIds || []).includes(u.id) || 
                   selectedProject.managerId === u.id || 
                   selectedProject.leadId === u.id
                 );

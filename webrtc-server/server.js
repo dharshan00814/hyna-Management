@@ -5,15 +5,13 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
-const rawClientUrl = process.env.CLIENT_URL || '*';
-const clientOrigins = rawClientUrl === '*'
-  ? '*'
-  : rawClientUrl.split(',').map(url => url.trim().replace(/\/+$/, ''));
+const rawClientUrl = process.env.CLIENT_URL || 'https://hyna-management.onrender.com';
+const clientOrigins = rawClientUrl.split(',').map(url => url.trim().replace(/\/+$/, ''));
 
 const app = express();
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || clientOrigins === '*') return callback(null, true);
+    if (!origin) return callback(null, true);
     const normalized = origin.replace(/\/+$/, '');
     if (Array.isArray(clientOrigins) && clientOrigins.includes(normalized)) {
       return callback(null, true);
@@ -26,7 +24,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-const PORT = process.env.PORT || 5050;
+const PORT = Number(process.env.PORT) || 10000;
 const HOST = process.env.HOST || '0.0.0.0';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
@@ -46,10 +44,8 @@ app.get('/', (req, res) => {
 // Production Health Endpoint
 app.get('/health', (req, res) => {
   res.json({
-    status: 'healthy',
-    uptime: process.uptime(),
-    activeRooms: rooms.size,
-    timestamp: new Date().toISOString(),
+    status: 'ok',
+    service: 'Hyna WebRTC Signaling Server',
   });
 });
 
@@ -60,7 +56,7 @@ const io = new Server(server, {
   cors: {
     origin: clientOrigins,
     methods: ['GET', 'POST'],
-    credentials: clientOrigins !== '*',
+    credentials: true,
   },
   transports: ['polling', 'websocket'],
   pingTimeout: 30000,
@@ -524,10 +520,10 @@ server.keepAliveTimeout = 120000; // 120 seconds (greater than Render proxy's 90
 server.headersTimeout = 125000;   // 125 seconds (must be > keepAliveTimeout)
 
 if (!process.env.VERCEL) {
-  server.listen(PORT, HOST, () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`=======================================================`);
-    console.log(`🚀 WebRTC & Meeting Signaling Server running on ${HOST}:${PORT}`);
-    console.log(`📡 Health Check: http://${HOST}:${PORT}/health`);
+    console.log(`🚀 WebRTC & Meeting Signaling Server running on 0.0.0.0:${PORT}`);
+    console.log(`📡 Health Check: http://0.0.0.0:${PORT}/health`);
     console.log(`=======================================================`);
   });
 }

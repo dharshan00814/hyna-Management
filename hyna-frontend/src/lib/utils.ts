@@ -6,8 +6,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(dateStr: string): string {
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
   const date = parseISO(dateStr);
+  if (isNaN(date.getTime())) return '—';
   if (isToday(date)) return 'Today';
   if (isTomorrow(date)) return 'Tomorrow';
   if (isYesterday(date)) return 'Yesterday';
@@ -39,13 +41,18 @@ export function formatTime(timeStr: string | null | undefined): string {
   return `${h}:${String(minutes).padStart(2, '0')} ${period}`;
 }
 
-export function formatDateTime(dateStr: string): string {
+export function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
   const date = parseISO(dateStr);
+  if (isNaN(date.getTime())) return '—';
   return format(date, 'MMM d, yyyy • h:mm a');
 }
 
-export function formatRelativeTime(dateStr: string): string {
-  return formatDistanceToNow(parseISO(dateStr), { addSuffix: true });
+export function formatRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  const date = parseISO(dateStr);
+  if (isNaN(date.getTime())) return '—';
+  return formatDistanceToNow(date, { addSuffix: true });
 }
 
 export function formatFileSize(bytes: number): string {
