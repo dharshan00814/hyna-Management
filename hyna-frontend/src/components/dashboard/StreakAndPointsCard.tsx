@@ -72,18 +72,10 @@ export function StreakAndPointsCard({
 
   // Quick Punch Handlers
   const handleQuickPunchIn = async () => {
-    if (!punchInStatus.canPunchIn) {
-      toast.error(punchInStatus.tooltip);
-      return;
-    }
     try {
       setIsPunching(true);
       const record = await checkIn(userId, effectiveTime);
-      toast.success(
-        punchInStatus.phase === 'on_time'
-          ? `🎉 Punched in on-time at ${record.checkIn}! +10 Points earned.`
-          : `⏱️ Punched in during grace window at ${record.checkIn}! +5 Points earned.`
-      );
+      toast.success(`🎉 Punched in at ${record.checkIn}!`);
       if (onAttendanceUpdated) onAttendanceUpdated();
     } catch (err: any) {
       toast.error(err?.message || 'Check-in failed');
@@ -93,14 +85,10 @@ export function StreakAndPointsCard({
   };
 
   const handleQuickPunchOut = async () => {
-    if (!punchOutStatus.canPunchOut) {
-      toast.error(punchOutStatus.tooltip);
-      return;
-    }
     try {
       setIsPunching(true);
       const record = await checkOut(userId, effectiveTime);
-      toast.success(`🎉 Clocked out at ${record.checkOut}! Full points preserved.`);
+      toast.success(`🎉 Clocked out at ${record.checkOut}!`);
       if (onAttendanceUpdated) onAttendanceUpdated();
     } catch (err: any) {
       toast.error(err?.message || 'Check-out failed');
@@ -446,17 +434,13 @@ export function StreakAndPointsCard({
           {isClockedIn ? (
             <Button
               size="sm"
-              variant={punchOutStatus.canPunchOut ? 'destructive' : 'outline'}
-              disabled={!punchOutStatus.canPunchOut || isPunching}
+              variant="destructive"
+              disabled={isPunching}
               onClick={handleQuickPunchOut}
-              className={cn(
-                'text-xs font-semibold gap-1.5 shadow-xs',
-                !punchOutStatus.canPunchOut && 'opacity-60 cursor-not-allowed'
-              )}
-              title={punchOutStatus.tooltip}
+              className="text-xs font-semibold gap-1.5 shadow-xs"
             >
               <LogOut className="w-3.5 h-3.5" />
-              {isPunching ? 'Clocking Out...' : punchOutStatus.canPunchOut ? 'Punch Out Now' : 'Punch Out (9–10 PM)'}
+              {isPunching ? 'Clocking Out...' : 'Punch Out'}
             </Button>
           ) : isClockedOut ? (
             <Button
@@ -472,16 +456,12 @@ export function StreakAndPointsCard({
             <Button
               size="sm"
               variant="primary"
-              disabled={!punchInStatus.canPunchIn || isPunching}
+              disabled={isPunching}
               onClick={handleQuickPunchIn}
-              className={cn(
-                'text-xs font-semibold gap-1.5 shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white',
-                !punchInStatus.canPunchIn && 'opacity-60 cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted'
-              )}
-              title={punchInStatus.tooltip}
+              className="text-xs font-semibold gap-1.5 shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <LogIn className="w-3.5 h-3.5" />
-              {isPunching ? 'Recording...' : punchInStatus.canPunchIn ? `Punch In (${punchInStatus.expectedPoints} Pts)` : punchInStatus.label}
+              {isPunching ? 'Recording...' : 'Punch In'}
             </Button>
           )}
 
