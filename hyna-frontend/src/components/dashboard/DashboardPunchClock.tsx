@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Button, Badge } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, isExecutiveLeadership } from '@/stores';
 import { checkIn, checkOut, getUserAttendance } from '@/services/api';
 import { toast } from 'sonner';
 import type { AttendanceRecord } from '@/types';
@@ -51,6 +51,12 @@ export function DashboardPunchClock({
   const { currentUser, effectiveRole } = useAuthStore();
   const userId = currentUser?.id || '';
   const rolePrefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';
+
+  // Do not render punch clock for executive leadership (CEO, CTO, COO, Executive dept)
+  const isExec = isExecutiveLeadership(currentUser) || currentUser?.department === 'Executive';
+  if (isExec) {
+    return null;
+  }
 
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
