@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Search, Menu, ChevronDown, Clock, CheckCircle2 } from 'lucide-react';
 import { cn, getInitials, getAvatarColor, formatRelativeTime } from '@/lib/utils';
-import { useAuthStore, useSidebarStore } from '@/stores';
+import { useAuthStore, useSidebarStore, isExecutiveLeadership } from '@/stores';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getTodayAttendance } from '@/services/api';
 import { Avatar } from '@/components/ui';
 import type { UserRole, Notification, AttendanceRecord } from '@/types';
@@ -18,6 +18,8 @@ export function Header() {
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  const isExec = isExecutiveLeadership(currentUser) || currentUser?.department === 'Executive';
 
   useEffect(() => {
     let isMounted = true;
@@ -159,8 +161,8 @@ export function Header() {
         </div>
       )}
 
-      {/* Attendance Quick Indicator Pill */}
-      {currentUser && (
+      {/* Attendance Quick Indicator Pill (non-executives only) */}
+      {currentUser && !isExec && (
         <button
           onClick={() => {
             const prefix = effectiveRole === 'member' ? '/member' : effectiveRole === 'manager' ? '/manager' : '/admin';

@@ -118,12 +118,14 @@ export function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left column */}
         <div className="lg:col-span-2 flex flex-col gap-6">
-          {/* Daily Streaks & Attendance Points (Above Project Overview) */}
-          <StreakAndPointsCard
-            userId={currentUser?.id || ''}
-            attendanceRecords={attendance}
-            onAttendanceUpdated={loadDashboardData}
-          />
+          {/* Daily Streaks & Attendance Points (Above Project Overview - Non-executives only) */}
+          {!isExecutiveLeadership(currentUser) && currentUser?.department !== 'Executive' && (
+            <StreakAndPointsCard
+              userId={currentUser?.id || ''}
+              attendanceRecords={attendance}
+              onAttendanceUpdated={loadDashboardData}
+            />
+          )}
 
           {/* Project overview */}
           <div className="card p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
