@@ -532,10 +532,18 @@ export const useAuthStore = create<AuthState>()(
 
       initializeAuth: async () => {
         try {
+          const currentState = get();
           set({ isLoading: true });
+
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
           if (sessionError || !session?.user) {
+            // Preserve the persisted fallback demo session if it exists
+            if (currentState.isAuthenticated && currentState.currentUser?.id?.startsWith('usr_')) {
+              set({ isLoading: false });
+              return;
+            }
+
             set({
               currentUser: null,
               currentRole: 'member',
@@ -551,7 +559,7 @@ export const useAuthStore = create<AuthState>()(
             .from('profiles')
             .select('*')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
           if (profile) {
             const user = mapDatabaseProfile(profile);
@@ -569,7 +577,7 @@ export const useAuthStore = create<AuthState>()(
               .from('users')
               .select('*')
               .eq('id', userId)
-              .single();
+              .maybeSingle();
 
             if (fallbackUser) {
               const user = mapDatabaseProfile(fallbackUser);
@@ -582,24 +590,57 @@ export const useAuthStore = create<AuthState>()(
                 isLoading: false,
               });
             } else {
+              // If profile doesn't exist but we have a valid session and persisted user, 
+              // keep the persisted user instead of logging them out!
+              if (currentState.isAuthenticated && currentState.currentUser?.id === userId) {
+                set({ isLoading: false });
+                return;
+              }
+
+              // Otherwise create a temporary local profile from session data
+              const meta = session.user.user_metadata || {};
+              const user: User = {
+                id: userId,
+                employeeId: '',
+                name: meta.name || session.user.email?.split('@')[0] || 'Team Member',
+                email: session.user.email || '',
+                avatar: '',
+                role: (meta.role as UserRole) || 'member',
+                department: meta.department || 'Engineering',
+                designation: meta.designation || 'Software Engineer',
+                phone: '',
+                joinDate: new Date().toISOString().split('T')[0],
+                status: 'active',
+                activeProjects: 0,
+                lastActive: new Date().toISOString(),
+                bio: '',
+                skills: [],
+              };
+              const role = computeEffectiveRole(user);
               set({
-                currentUser: null,
-                currentRole: 'member',
-                effectiveRole: 'member',
-                isAuthenticated: false,
+                currentUser: user,
+                currentRole: user.role,
+                effectiveRole: role,
+                isAuthenticated: true,
                 isLoading: false,
               });
             }
           }
         } catch (err) {
           console.error('Error initializing auth:', err);
-          set({
-            currentUser: null,
-            currentRole: 'member',
-            effectiveRole: 'member',
-            isAuthenticated: false,
-            isLoading: false,
-          });
+          // Don't nuke the session on network error if they were already authenticated
+          const currentState = get();
+          if (currentState.isAuthenticated) {
+            set({ isLoading: false });
+          } else {
+            set({
+              currentUser: null,
+              currentRole: 'member',
+              effectiveRole: 'member',
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          }
         }
       },
     }),
