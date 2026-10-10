@@ -57,11 +57,13 @@ export class WebRTCManager {
 
       // Attach local tracks to all active peer connections
       this.peerConnections.forEach((pc, peerId) => {
-        const senders = pc.getSenders();
         stream.getTracks().forEach(track => {
-          const existingSender = senders.find(s => s.track?.kind === track.kind);
-          if (existingSender) {
-            existingSender.replaceTrack(track).catch(err => {
+          const transceivers = pc.getTransceivers();
+          const existingTransceiver = transceivers.find(t => t.receiver.track.kind === track.kind);
+          
+          if (existingTransceiver) {
+            existingTransceiver.direction = 'sendrecv';
+            existingTransceiver.sender.replaceTrack(track).catch(err => {
               this.callbacks.onError(err, `replaceTrack for ${peerId}`);
             });
           } else {
@@ -103,12 +105,24 @@ export class WebRTCManager {
     pc = new RTCPeerConnection(this.rtcConfig);
     this.peerConnections.set(peerId, pc);
 
+    // Pre-create transceivers to guarantee consistent m-line order (Audio then Video)
+    // This fixes "order of m-lines in subsequent offer doesn't match" errors during renegotiation
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+    pc.addTransceiver('video', { direction: 'recvonly' });
+
     // Add local tracks to new peer connection
     const currentStream = this.screenStream || this.localStream;
     if (currentStream) {
       currentStream.getTracks().forEach(track => {
         try {
-          pc!.addTrack(track, currentStream);
+          const transceivers = pc!.getTransceivers();
+          const transceiver = transceivers.find(t => t.receiver.track.kind === track.kind);
+          if (transceiver) {
+            transceiver.direction = 'sendrecv';
+            transceiver.sender.replaceTrack(track);
+          } else {
+            pc!.addTrack(track, currentStream);
+          }
           console.log(`[H-MEET] Added local ${track.kind} track (enabled=${track.enabled}) to new peer ${peerId}`);
         } catch (e) {
           console.warn(`[H-MEET] Failed to add track for peer ${peerId}:`, e);
@@ -228,9 +242,7 @@ export class WebRTCManager {
     const pc = this.getOrCreatePeerConnection(peerId);
     console.log(`[H-MEET] Offer created for ${peerId} (iceRestart=${iceRestart})`);
     const offer = await pc.createOffer({
-      iceRestart,
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
+      iceRestart
     });
     await pc.setLocalDescription(offer);
     return offer;
