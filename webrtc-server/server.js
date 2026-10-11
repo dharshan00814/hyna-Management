@@ -5,19 +5,28 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
-const rawClientUrl = process.env.CLIENT_URL || 'https://hyna-management.onrender.com';
+const rawClientUrl = process.env.CLIENT_URL || 'https://hyna-management.onrender.com,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173';
 const clientOrigins = rawClientUrl.split(',').map(url => url.trim().replace(/\/+$/, ''));
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  const normalized = origin.replace(/\/+$/, '');
+  if (clientOrigins.includes(normalized)) return true;
+  // Local development origins
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) return true;
+  // Render production frontend
+  if (/^https:\/\/hyna-[a-z0-9-]+\.onrender\.com$/.test(normalized)) return true;
+  return false;
+}
 
 const app = express();
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const normalized = origin.replace(/\/+$/, '');
-    if (Array.isArray(clientOrigins) && clientOrigins.includes(normalized)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     console.warn(`[Express CORS Blocked] Origin: ${origin}. Allowed:`, clientOrigins);
-    return callback(null, false);
+    return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -52,8 +61,15 @@ app.get('/health', (req, res) => {
 const server = http.createServer(app);
 
 const io = new Server(server, {
+  path: '/socket.io/',
   cors: {
-    origin: clientOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      console.warn(`[Socket.IO CORS Blocked] Origin: ${origin}. Allowed:`, clientOrigins);
+      return callback(new Error('CORS not allowed'), false);
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },

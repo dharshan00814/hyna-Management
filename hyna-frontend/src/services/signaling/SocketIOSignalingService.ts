@@ -56,15 +56,19 @@ export class SocketIOSignalingService {
 
   constructor(callbacks: SocketIOSignalingCallbacks, serverUrlOverride?: string) {
     this.callbacks = callbacks;
-    const envUrl = import.meta.env.VITE_SIGNALING_SERVER_URL;
-    if (serverUrlOverride) {
-      this.serverUrl = serverUrlOverride;
+    const envUrl =
+      import.meta.env.VITE_SIGNALING_SERVER_URL ||
+      import.meta.env.VITE_SOCKET_URL ||
+      import.meta.env.VITE_SFU_SERVER_URL;
+
+    if (serverUrlOverride && typeof serverUrlOverride === 'string' && serverUrlOverride.trim()) {
+      this.serverUrl = serverUrlOverride.trim();
     } else if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
       this.serverUrl = envUrl.trim();
     } else {
-      this.serverUrl = 'https://hyna-webrtc-server.onrender.com';
+      this.serverUrl = 'https://hyna-backend.onrender.com';
     }
-    console.log(`[H-MEET] Signaling URL: ${this.serverUrl}`);
+    console.log(`[H-MEET] Signaling URL resolved to: ${this.serverUrl}`);
   }
 
   public async connect({
@@ -103,20 +107,27 @@ export class SocketIOSignalingService {
       }, 10000);
 
       try {
-        console.log(`[H-MEET] Connecting to signaling server...`);
+        console.log(`[H-MEET] Connecting to signaling server at ${this.serverUrl}...`);
         const socket = io(this.serverUrl, {
+          path: '/socket.io/',
           transports: ["websocket", "polling"],
           withCredentials: true,
           timeout: 10000,
           reconnection: true,
           reconnectionAttempts: 10,
-          reconnectionDelay: 1000
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
         });
 
         this.socket = socket;
 
+        // Transport upgrade tracking
+        socket.io.engine.on('upgrade', (transport: any) => {
+          console.log('[H-MEET] Socket.IO transport upgraded to:', transport?.name || 'unknown');
+        });
+
         socket.on('connect', () => {
-          console.log('[H-MEET] Socket.IO connected. Socket ID:', socket.id);
+          console.log('[H-MEET] Socket.IO connected. Socket ID:', socket.id, 'Transport:', socket.io.engine.transport.name);
           this.callbacks.onSignalingConnectionStateChange('connected');
 
           // Join the room upon every (re)connect
@@ -190,24 +201,14 @@ export class SocketIOSignalingService {
           this.callbacks.onScreenSharePermissionChanged(data);
         });
 
-        socket.on('connect_error', (err) => {
-          // Do NOT reject here — Socket.IO will retry automatically.
-          // Do NOT change overallConnectionState here — that must only be driven by WebRTC state.
-          console.warn('[H-MEET] Socket.IO connect_error:', err.message);
+        socket.io.on('reconnect_attempt', (attempt) => {
+          console.log(`[H-MEET] Socket.IO reconnecting (attempt #${attempt})...`);
           this.callbacks.onSignalingConnectionStateChange('reconnecting');
-          // If we've never successfully joined a room yet, this counts as a fatal initial failure
-          // only after the outer timeout fires.
         });
 
-        socket.on('disconnect', (reason) => {
-          console.log('[H-MEET] Socket.IO disconnected:', reason);
-          // Do NOT propagate 'disconnected' to the overall meeting connection state —
-          // that state must only reflect WebRTC peer connection state.
-          this.callbacks.onSignalingConnectionStateChange('disconnected');
-        });
-
-        socket.on('reconnect', (attempt) => {
-          console.log('[H-MEET] Signaling reconnected on attempt', attempt);
+        socket.io.on('reconnect', (attempt) => {
+          console.log(`[H-MEET] Socket.IO reconnected successfully on attempt #${attempt}`);
+          this.callbacks.onSignalingConnectionStateChange('connected');
           // Re-join the room so we appear to others again
           socket.emit('join-room', {
             roomId,
@@ -217,8 +218,32 @@ export class SocketIOSignalingService {
           });
         });
 
+        socket.io.on('reconnect_error', (err) => {
+          console.warn('[H-MEET] Socket.IO reconnect error:', err?.message || err);
+        });
+
+        socket.io.on('reconnect_failed', () => {
+          console.error('[H-MEET] Socket.IO reconnection failed after max attempts');
+          this.callbacks.onSignalingConnectionStateChange('disconnected');
+        });
+
+        socket.on('connect_error', (err) => {
+          // Do NOT reject here — Socket.IO will retry automatically.
+          console.warn('[H-MEET] Socket.IO connect_error:', {
+            message: err.message,
+            serverUrl: this.serverUrl,
+            description: (err as any)?.description,
+          });
+          this.callbacks.onSignalingConnectionStateChange('reconnecting');
+        });
+
+        socket.on('disconnect', (reason) => {
+          console.log('[H-MEET] Socket.IO disconnected:', reason);
+          this.callbacks.onSignalingConnectionStateChange('disconnected');
+        });
+
         socket.on('error', (err) => {
-          console.error('[H-MEET] Signaling server error:', err);
+          console.error('[H-MEET] Signaling server error event:', err);
           this.callbacks.onError(err);
         });
 

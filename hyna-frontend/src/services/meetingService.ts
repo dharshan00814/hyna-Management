@@ -26,8 +26,15 @@ export function generateMeetingCode(): string {
   return result;
 }
 
+// Helper: Generate secure formatted room ID (room-xxxx-xxxx-xxxx)
 export function generateMeetingRoomId(): string {
-  return generateMeetingCode();
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = 'room-';
+  for (let i = 0; i < 12; i++) {
+    if (i === 4 || i === 8) result += '-';
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 // Clean and extract meeting code from raw input (URLs, paths, or code)

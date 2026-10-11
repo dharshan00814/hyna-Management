@@ -39,10 +39,12 @@ const DELETED_MEETINGS_KEY = 'hyna_deleted_meetings';
 
 export function getDeletedMeetingIds(): Set<string> {
   try {
-    const raw = localStorage.getItem(DELETED_MEETINGS_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr);
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(DELETED_MEETINGS_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
     }
   } catch {}
   return new Set();
@@ -53,7 +55,9 @@ export function recordDeletedMeetingId(id: string, roomId?: string) {
   if (id) set.add(id);
   if (roomId) set.add(roomId);
   try {
-    localStorage.setItem(DELETED_MEETINGS_KEY, JSON.stringify(Array.from(set)));
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      localStorage.setItem(DELETED_MEETINGS_KEY, JSON.stringify(Array.from(set)));
+    }
   } catch {}
 }
 
@@ -67,18 +71,20 @@ export function isPurgedMeeting(m: { id?: string; meetingRoomId?: string; title?
 
 function initMeetingsCache(): Meeting[] {
   try {
-    const stored = localStorage.getItem('hyna_meetings_cache');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        // Filter out removed default meetings, user-deleted meetings, and blacklisted titles
-        const filtered = parsed.filter((m: Meeting) => !isPurgedMeeting(m));
-        try {
-          localStorage.setItem('hyna_meetings_cache', JSON.stringify(filtered));
-        } catch {
-          // Ignore
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('hyna_meetings_cache');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          // Filter out removed default meetings, user-deleted meetings, and blacklisted titles
+          const filtered = parsed.filter((m: Meeting) => !isPurgedMeeting(m));
+          try {
+            localStorage.setItem('hyna_meetings_cache', JSON.stringify(filtered));
+          } catch {
+            // Ignore
+          }
+          return filtered;
         }
-        return filtered;
       }
     }
   } catch (e) {
@@ -92,7 +98,9 @@ let meetingsCache: Meeting[] = initMeetingsCache();
 function persistMeetingsCache(meetings: Meeting[]) {
   meetingsCache = meetings;
   try {
-    localStorage.setItem('hyna_meetings_cache', JSON.stringify(meetings));
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      localStorage.setItem('hyna_meetings_cache', JSON.stringify(meetings));
+    }
   } catch (e) {
     // Ignore storage quota errors
   }
@@ -247,7 +255,7 @@ function mapAttendance(row: any): AttendanceRecord {
     status: row.status,
     checkIn: row.check_in,
     checkOut: row.check_out,
-    workingHours: row.working_hours,
+    workingHours: row.working_hours || (row.check_in && row.check_out ? calculateDuration(row.check_in, row.check_out).formatted : undefined),
     notes: row.notes,
     points: row.points !== undefined && row.points !== null ? Number(row.points) : undefined,
   };
@@ -1598,45 +1606,108 @@ export async function deleteMeeting(id: string): Promise<boolean> {
 // ============================================================
 // ATTENDANCE API
 // ============================================================
+
+// Helper: Get local date in YYYY-MM-DD format (avoids UTC timezone shift issues)
+export function getTodayLocalDateString(d: Date = new Date()): string {
+  const date = d instanceof Date && !isNaN(d.getTime()) ? d : new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Helper: Normalize any incoming date string to YYYY-MM-DD
+export function normalizeAttendanceDate(dateStr?: string | null): string | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return null;
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return getTodayLocalDateString(parsed);
+  }
+  return null;
+}
+
 export async function getAttendance(userId?: string, date?: string): Promise<AttendanceRecord[]> {
   try {
-    let query = supabase.from('attendance_records').select('*').order('date', { ascending: false });
-    if (userId) query = query.eq('user_id', userId);
-    if (date) query = query.eq('date', date);
+    let query = supabase
+      .from('attendance_records')
+      .select('id, user_id, date, check_in, check_out, status, hours_worked, working_hours, notes, created_at, updated_at')
+      .order('date', { ascending: false });
+
+    if (userId && typeof userId === 'string' && isValidUuid(userId.trim())) {
+      query = query.eq('user_id', userId.trim());
+    }
+
+    const cleanDate = date ? normalizeAttendanceDate(date) : null;
+    if (cleanDate) {
+      query = query.eq('date', cleanDate);
+    }
 
     const { data, error } = await query;
     if (error) {
-      console.error('Error fetching attendance from Supabase:', error);
+      console.error('[Attendance] Supabase query error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       return [];
     }
     return (data || []).map(mapAttendance);
-  } catch (err) {
-    console.error('Error in getAttendance:', err);
+  } catch (err: any) {
+    console.error('[Attendance] Unexpected error in getAttendance:', err?.message || err);
     return [];
   }
 }
 
 export async function getUserAttendance(userId: string): Promise<AttendanceRecord[]> {
-  if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .select('*')
-    .eq('user_id', userId)
-    .order('date', { ascending: false });
+  if (!isSupabaseConfigured() || !userId || !isValidUuid(userId)) return [];
+  try {
+    const { data, error } = await supabase
+      .from('attendance_records')
+      .select('id, user_id, date, check_in, check_out, status, hours_worked, working_hours, notes, created_at, updated_at')
+      .eq('user_id', userId.trim())
+      .order('date', { ascending: false });
 
-  if (error) return [];
-  return (data || []).map(mapAttendance);
+    if (error) {
+      console.error('[Attendance] Supabase getUserAttendance error:', {
+        code: error.code,
+        message: error.message,
+      });
+      return [];
+    }
+    return (data || []).map(mapAttendance);
+  } catch (err: any) {
+    console.error('[Attendance] Unexpected error in getUserAttendance:', err?.message || err);
+    return [];
+  }
 }
 
 export async function getDateAttendance(date: string): Promise<AttendanceRecord[]> {
-  if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .select('*')
-    .eq('date', date);
+  if (!isSupabaseConfigured() || !date) return [];
+  const cleanDate = normalizeAttendanceDate(date);
+  if (!cleanDate) return [];
+  try {
+    const { data, error } = await supabase
+      .from('attendance_records')
+      .select('id, user_id, date, check_in, check_out, status, hours_worked, working_hours, notes, created_at, updated_at')
+      .eq('date', cleanDate);
 
-  if (error) return [];
-  return (data || []).map(mapAttendance);
+    if (error) {
+      console.error('[Attendance] Supabase getDateAttendance error:', {
+        code: error.code,
+        message: error.message,
+      });
+      return [];
+    }
+    return (data || []).map(mapAttendance);
+  } catch (err: any) {
+    console.error('[Attendance] Unexpected error in getDateAttendance:', err?.message || err);
+    return [];
+  }
 }
 
 function calculateDuration(checkInStr?: string, checkOutStr?: string): { formatted: string; numeric: number } {
@@ -1669,23 +1740,35 @@ function calculateDuration(checkInStr?: string, checkOutStr?: string): { formatt
 }
 
 export async function getTodayAttendance(userId: string): Promise<AttendanceRecord | null> {
-  if (!userId) return null;
-  const today = new Date().toISOString().split('T')[0];
-  const { data, error } = await supabase
-    .from('attendance_records')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle();
+  if (!userId || !isValidUuid(userId)) return null;
+  const today = getTodayLocalDateString();
+  try {
+    const { data, error } = await supabase
+      .from('attendance_records')
+      .select('id, user_id, date, check_in, check_out, status, hours_worked, working_hours, notes, created_at, updated_at')
+      .eq('user_id', userId.trim())
+      .eq('date', today)
+      .maybeSingle();
 
-  if (error || !data) return null;
-  return mapAttendance(data);
+    if (error) {
+      console.warn('[Attendance] Supabase getTodayAttendance error:', {
+        code: error.code,
+        message: error.message,
+      });
+      return null;
+    }
+    if (!data) return null;
+    return mapAttendance(data);
+  } catch (err: any) {
+    console.error('[Attendance] Unexpected error in getTodayAttendance:', err?.message || err);
+    return null;
+  }
 }
 
 export async function checkIn(userId: string, overrideTime?: Date): Promise<AttendanceRecord> {
-  if (!userId) throw new Error('User ID is required to check in.');
+  if (!userId || !isValidUuid(userId)) throw new Error('Valid User ID is required to check in.');
   const now = overrideTime instanceof Date ? overrideTime : new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = getTodayLocalDateString(now);
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -1719,7 +1802,8 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
   };
 
   try {
-    const payload: any = {
+    // Only send columns that actually exist in public.attendance_records schema
+    const payload = {
       user_id: userId,
       date: today,
       status: isLate ? 'late' : 'present',
@@ -1728,22 +1812,17 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
       notes,
     };
 
-    let res = await supabase
+    const res = await supabase
       .from('attendance_records')
-      .upsert({ ...payload, points: pointsAwarded }, { onConflict: 'user_id,date' })
-      .select()
+      .upsert(payload, { onConflict: 'user_id,date' })
+      .select('id, user_id, date, check_in, check_out, status, hours_worked, working_hours, notes, created_at, updated_at')
       .single();
 
-    if (res.error && (res.error.message?.includes('points') || res.error.code === '42703')) {
-      res = await supabase
-        .from('attendance_records')
-        .upsert(payload, { onConflict: 'user_id,date' })
-        .select()
-        .single();
-    }
-
     if (res.error) {
-      console.warn('Supabase check-in rejected (using local session fallback):', res.error);
+      console.warn('[Attendance] Supabase check-in error:', {
+        code: res.error.code,
+        message: res.error.message,
+      });
       return fallbackRecord;
     }
 
@@ -1753,17 +1832,19 @@ export async function checkIn(userId: string, overrideTime?: Date): Promise<Atte
       checkInTime: timeNow,
     }).catch(console.error);
 
-    return mapAttendance(res.data);
-  } catch (err) {
-    console.warn('Check-in network error (using local session fallback):', err);
+    const mapped = mapAttendance(res.data);
+    mapped.points = pointsAwarded;
+    return mapped;
+  } catch (err: any) {
+    console.warn('[Attendance] Check-in network/runtime error:', err?.message || err);
     return fallbackRecord;
   }
 }
 
 export async function checkOut(userId: string, overrideTime?: Date): Promise<AttendanceRecord> {
-  if (!userId) throw new Error('User ID is required to check out.');
+  if (!userId || !isValidUuid(userId)) throw new Error('Valid User ID is required to check out.');
   const now = overrideTime instanceof Date ? overrideTime : new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = getTodayLocalDateString(now);
   const timeNow = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   let existingCheckIn = '';
@@ -1771,14 +1852,20 @@ export async function checkOut(userId: string, overrideTime?: Date): Promise<Att
   let basePoints = POINTS_ON_TIME;
 
   try {
-    const { data: existing } = await supabase
+    // Only query verified columns in attendance_records (points does not exist in schema)
+    const { data: existing, error: fetchErr } = await supabase
       .from('attendance_records')
-      .select('check_in, points, notes')
+      .select('check_in, notes, hours_worked, working_hours')
       .eq('user_id', userId)
       .eq('date', today)
       .maybeSingle();
 
-    if (existing) {
+    if (fetchErr) {
+      console.warn('[Attendance] Error fetching existing record during checkout:', {
+        code: fetchErr.code,
+        message: fetchErr.message,
+      });
+    } else if (existing) {
       existingCheckIn = existing.check_in || '';
       existingNotes = existing.notes || '';
       const inMins = parseTimeToMinutes(existingCheckIn);
@@ -1786,8 +1873,8 @@ export async function checkOut(userId: string, overrideTime?: Date): Promise<Att
         basePoints = POINTS_GRACE;
       }
     }
-  } catch (e) {
-    // ignore
+  } catch (e: any) {
+    console.warn('[Attendance] Error looking up today record:', e?.message || e);
   }
 
   const { formatted, numeric } = calculateDuration(existingCheckIn, timeNow);
@@ -1806,32 +1893,27 @@ export async function checkOut(userId: string, overrideTime?: Date): Promise<Att
   };
 
   try {
-    const updatePayload: any = {
+    // Only update verified columns present in schema
+    const updatePayload = {
       check_out: timeNow,
       hours_worked: numeric,
+      working_hours: formatted,
       notes,
     };
 
-    let res = await supabase
+    const res = await supabase
       .from('attendance_records')
-      .update({ ...updatePayload, points: finalPoints })
+      .update(updatePayload)
       .eq('user_id', userId)
       .eq('date', today)
-      .select()
+      .select('id, user_id, date, check_in, check_out, status, hours_worked, working_hours, notes, created_at, updated_at')
       .single();
 
-    if (res.error && (res.error.message?.includes('points') || res.error.code === '42703')) {
-      res = await supabase
-        .from('attendance_records')
-        .update(updatePayload)
-        .eq('user_id', userId)
-        .eq('date', today)
-        .select()
-        .single();
-    }
-
     if (res.error) {
-      console.warn('Supabase check-out rejected (using local session fallback):', res.error);
+      console.warn('[Attendance] Supabase check-out error:', {
+        code: res.error.code,
+        message: res.error.message,
+      });
       return fallbackRecord;
     }
     const result = mapAttendance(res.data);
@@ -1842,14 +1924,14 @@ export async function checkOut(userId: string, overrideTime?: Date): Promise<Att
     if (err.message && (err.message.includes('Punch Out is disabled') || err.message.includes('Punch Out is closed'))) {
       throw err;
     }
-    console.warn('Check-out network error (using local session fallback):', err);
+    console.warn('[Attendance] Check-out error:', err?.message || err);
     return fallbackRecord;
   }
 }
 
 export async function resetTodayAttendance(userId: string): Promise<boolean> {
-  if (!userId) return false;
-  const today = new Date().toISOString().split('T')[0];
+  if (!userId || !isValidUuid(userId)) return false;
+  const today = getTodayLocalDateString();
   try {
     const { error: delError } = await supabase
       .from('attendance_records')
@@ -1858,8 +1940,11 @@ export async function resetTodayAttendance(userId: string): Promise<boolean> {
       .eq('date', today);
 
     if (delError) {
-      console.warn('Supabase delete error (attempting nullify update):', delError);
-      await supabase
+      console.warn('[Attendance] Delete failed, attempting record reset update:', {
+        code: delError.code,
+        message: delError.message,
+      });
+      const { error: updateErr } = await supabase
         .from('attendance_records')
         .update({
           check_in: null,
@@ -1868,14 +1953,21 @@ export async function resetTodayAttendance(userId: string): Promise<boolean> {
           hours_worked: 0,
           status: 'present',
           notes: 'Reset by user',
-          points: 0,
         })
         .eq('user_id', userId)
         .eq('date', today);
+
+      if (updateErr) {
+        console.error('[Attendance] Reset update failed:', {
+          code: updateErr.code,
+          message: updateErr.message,
+        });
+        return false;
+      }
     }
     return true;
-  } catch (err) {
-    console.error('Error resetting today attendance:', err);
+  } catch (err: any) {
+    console.error('[Attendance] Error resetting today attendance:', err?.message || err);
     return false;
   }
 }
