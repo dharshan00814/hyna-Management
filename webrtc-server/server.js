@@ -10,15 +10,15 @@ const clientOrigins = rawClientUrl.split(',').map(url => url.trim().replace(/\/+
 
 function isAllowedOrigin(origin) {
   if (!origin) return true;
-  if (clientOrigins.includes('*')) return true;
-  const normalized = origin.replace(/\/+$/, '');
-  if (clientOrigins.includes(normalized)) return true;
+  if (clientOrigins.includes('*') || rawClientUrl === '*') return true;
+  const normalized = origin.replace(/\/+$/, '').toLowerCase();
+  if (clientOrigins.some(u => u.toLowerCase() === normalized)) return true;
   // Local development origins
   if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) return true;
-  // Render production frontend
-  if (/^https:\/\/hyna-[a-z0-9-]+\.onrender\.com$/.test(normalized)) return true;
-  // Vercel production frontend
-  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(normalized)) return true;
+  // Render production frontends
+  if (/^https:\/\/([a-z0-9-]+\.)*onrender\.com$/i.test(normalized)) return true;
+  // Vercel production frontend & preview deployments
+  if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i.test(normalized)) return true;
   return false;
 }
 
@@ -59,6 +59,15 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'Hyna WebRTC Signaling Server',
   });
+});
+
+// Graceful Express Error Handling (prevents unhandled crash on CORS)
+app.use((err, req, res, next) => {
+  if (err && err.message && err.message.toLowerCase().includes('cors')) {
+    return res.status(403).json({ error: 'CORS forbidden', message: 'Origin not allowed' });
+  }
+  console.error('[Express Server Error]', err);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 const server = http.createServer(app);

@@ -40,6 +40,7 @@ const LiveDeveloperActivityPage = lazy(() => import('./pages/activity').then(m =
 const MyDeveloperActivityPage = lazy(() => import('./pages/activity').then(m => ({ default: m.MyDeveloperActivityPage })));
 
 const MeetingRoom = lazy(() => import('./pages/meetings/MeetingRoom').then(m => ({ default: m.MeetingRoom })));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 
 const PageLoadingFallback = () => (
   <div className="min-h-[400px] w-full flex flex-col items-center justify-center text-white/70">
@@ -144,11 +145,6 @@ function App() {
               <Route path="/manager/activity" element={<ManagerActivityPage />} />
               <Route path="/member/activity" element={<MemberActivityPage />} />
 
-              {/* Files */}
-              <Route path="/admin/files" element={<FilesPage />} />
-              <Route path="/manager/files" element={<FilesPage />} />
-              <Route path="/member/files" element={<FilesPage />} />
-
               {/* Privacy & Security Tracking */}
               <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
               <Route path="/admin/privacy/tracking" element={<PrivacyTrackingPage />} />
@@ -157,7 +153,6 @@ function App() {
             </Route>
 
             {/* Executive / Admin Only Routes */}
-
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/projects" element={<ProjectsPage />} />
@@ -168,6 +163,7 @@ function App() {
               <Route path="/admin/meetings/:id" element={<MeetingDetailPage />} />
               <Route path="/admin/reports" element={<ReportsPage />} />
               <Route path="/admin/messages" element={<MessagesPage />} />
+              <Route path="/admin/files" element={<FilesPage />} />
               <Route path="/admin/leave" element={<LeavePage />} />
               <Route path="/admin/payroll" element={<PayrollPage />} />
               <Route path="/admin/announcements" element={<AnnouncementsPage />} />
@@ -188,6 +184,7 @@ function App() {
               <Route path="/manager/meetings/:id" element={<MeetingDetailPage />} />
               <Route path="/manager/reports" element={<ReportsPage />} />
               <Route path="/manager/messages" element={<MessagesPage />} />
+              <Route path="/manager/files" element={<FilesPage />} />
               <Route path="/manager/leave" element={<LeavePage />} />
               <Route path="/manager/payroll" element={<PayrollPage />} />
               <Route path="/manager/announcements" element={<AnnouncementsPage />} />
@@ -208,6 +205,7 @@ function App() {
               <Route path="/member/meetings/:id" element={<MeetingDetailPage />} />
               <Route path="/member/reports" element={<ReportsPage />} />
               <Route path="/member/messages" element={<MessagesPage />} />
+              <Route path="/member/files" element={<FilesPage />} />
               <Route path="/member/leave" element={<LeavePage />} />
               <Route path="/member/payroll" element={<PayrollPage />} />
               <Route path="/member/settings" element={<SettingsPage />} />
@@ -215,13 +213,20 @@ function App() {
               <Route path="/member/privacy/tracking" element={<PrivacyTrackingPage />} />
             </Route>
 
-            {/* Direct Accessible Shared Routes */}
+            {/* Direct Accessible Shared Routes & Aliases */}
+            <Route path="/dashboard" element={<Navigate to={`${rolePrefix}/dashboard`} replace />} />
+            <Route path="/projects" element={<Navigate to={`${rolePrefix}/projects`} replace />} />
+            <Route path="/tasks" element={<Navigate to={`${rolePrefix}/tasks`} replace />} />
+            <Route path="/messages" element={<Navigate to={`${rolePrefix}/messages`} replace />} />
+            <Route path="/files" element={<FilesPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/meetings" element={<MeetingsPage />} />
             <Route path="/meetings/:id" element={<MeetingDetailPage />} />
             <Route path="/payroll" element={<PayrollPage />} />
+            <Route path="/reports" element={<Navigate to={`${rolePrefix}/reports`} replace />} />
+            <Route path="/leave" element={<Navigate to={`${rolePrefix}/leave`} replace />} />
+            <Route path="/settings" element={<Navigate to={`${rolePrefix}/settings`} replace />} />
             <Route path="/settings/integrations" element={<ConnectIntegrationsPage />} />
-
             <Route path="/privacy/tracking" element={<PrivacyTrackingPage />} />
           </Route>
 
@@ -230,7 +235,8 @@ function App() {
 
           {/* Dynamic Fallback / Root Redirect */}
           <Route path="/" element={<Navigate to={`${rolePrefix}/dashboard`} replace />} />
-          <Route path="*" element={<Navigate to={`${rolePrefix}/dashboard`} replace />} />
+          {/* Dedicated 404 Catch-All Page */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
       <Toaster position="top-right" richColors closeButton />
