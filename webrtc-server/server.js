@@ -10,12 +10,15 @@ const clientOrigins = rawClientUrl.split(',').map(url => url.trim().replace(/\/+
 
 function isAllowedOrigin(origin) {
   if (!origin) return true;
+  if (clientOrigins.includes('*')) return true;
   const normalized = origin.replace(/\/+$/, '');
   if (clientOrigins.includes(normalized)) return true;
   // Local development origins
   if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) return true;
   // Render production frontend
   if (/^https:\/\/hyna-[a-z0-9-]+\.onrender\.com$/.test(normalized)) return true;
+  // Vercel production frontend
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(normalized)) return true;
   return false;
 }
 

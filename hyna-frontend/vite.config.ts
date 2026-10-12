@@ -94,11 +94,17 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: ['https://hyna-management-1.onrender.com'],
+    allowedHosts: [
+      'hyna-management-1.onrender.com',
+      'hyna-management.onrender.com',
+    ],
   },
   preview: {
     port: 5173,
     host: true,
-    allowedHosts: ['https://hyna-management-1.onrender.com'],
+    allowedHosts: [
+      'hyna-management-1.onrender.com',
+      'hyna-management.onrender.com',
+    ],
   },
 });
