@@ -59,6 +59,7 @@ const getNavItems = (prefix: string, role: string, isExec: boolean): NavItem[] =
     { label: 'Meetings', icon: Video, path: `${prefix}/meetings`, roles: ['admin', 'manager', 'member'] },
     { label: 'Reports', icon: BarChart3, path: `${prefix}/reports`, roles: ['admin', 'manager', 'member'] },
     { label: 'Messages', icon: MessageCircle, path: `${prefix}/messages`, roles: ['admin', 'manager', 'member'] },
+    { label: 'Files', icon: FolderOpen, path: `${prefix}/files`, roles: ['admin', 'manager', 'member'] },
     { label: 'Internship', icon: GraduationCap, path: `${prefix}/internship`, roles: ['admin', 'manager'] },
   );
 
